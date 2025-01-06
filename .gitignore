@@ -1,0 +1,17 @@
+# Node.js dependencies
+node_modules/
+
+# Compiled output
+dist/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# Optional lock file (zostaw, jeśli nie chcesz go ignorować)
+package-lock.json
