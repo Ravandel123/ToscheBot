@@ -29,6 +29,13 @@ its own domain module with its own data models.
 > implemented* — entities, catalogs, concrete values, and which parts are real vs
 > placeholder. Keep it in sync with the code whenever the RPG model changes.
 
+> **`RPG/`** (repo root) is the **Phase 7 ruleset design project** — a sibling workspace
+> with its own `CLAUDE.md`, `Ruleset.md` and `Propositions.md`, where the real game rules
+> (d100 roll-under, roles + learn-by-doing skills, Wounds, Stress→Madness…) are designed
+> with the owner *before* any mechanics are coded here (D14). Its decisions (R1+, P-forks)
+> govern what will replace this bot's placeholder attributes/skills/combat. Read it before
+> touching anything RPG-mechanical; keep ids/conventions aligned both ways.
+
 ## Working agreement with the owner (Ravandel)
 
 - The owner communicates in **Polish**; reply in Polish. All code, comments, docs, and
@@ -143,6 +150,7 @@ match these.
 | D16 | **Smackdown has two tiers.** `/smackdown sparring` = the existing for-fun brawl: **no approval, any active character, pure-random**. It keeps Elo *for now* but Elo will be **removed from sparring later**. A future serious fight (`/smackdown duel`) requires an **approved** character, uses HP/attributes, and **costs AP**. | Players enjoy the silly sparring; keep it. Real stakes belong to the approval-gated, RPG-driven fight. |
 | D17 | **Long, interactive, multi-step activities are durable** (turn-based duel, multi-room exploration…). An `ActivitySession` doc (Mongo) holds the per-step `state` AND is the cross-restart "this character is busy" lock; components are **stateless** (keyed by `sessionId`); each step is an **optimistic, step-guarded** atomic update (`{_id, step:N} → $inc step`), making it idempotent against double-clicks and crash-replay; idle sessions are reaped by a **TTL index** on `expiresAt`. **AP policy (default, tunable):** charged at start; clean cancel refunds; **timeout/abandon forfeits** (so a TTL delete needs no side effect). Short, auto-resolved actions stay atomic-commit (D5 rule 1 unchanged for them). | A restart/crash/abandon mid-activity must not corrupt state or strand a player. Persisting **per step** (not just at the end) makes activities resumable + crash-safe, reusing the stateless-component + DB-state pattern already proven by the character panel / comic browser. Seam built (`game/activity/`, `models/activitySession.ts`, `activitySessionService.ts`); first consumer is the serious duel / 6C travel. |
 | D18 | **Locks are keyed per character** (`CharacterLockManager`), not per Discord user, and deferred queues **drain before the lock is released**. | Characters are what the writes target (resources/AP/ELO), and NPCs (`ownerId: null`, 6C) have no user id to lock. "One user, one live activity" is already enforced by the active-character switch guard. Draining before release means a deferred op can never interleave with the next holder's critical section — the invariant Phase 7 activities can rely on. |
+| D19 | **One currency (`deltradaCoins`) until the economy layer exists.** The lore's regional per-race currencies (amber drops, pearl flakes, obsidian chips…) are reserved for the exchange/trade system being designed in `RPG/` (its P17) and get appended to the catalog when that ships. | Six parallel wallets with no economy were pure bookkeeping. The D10 asymmetry decides the direction: appending a currency later is one catalog line; removing one after players hold balances is a migration. |
 
 ## Target architecture
 
@@ -486,6 +494,46 @@ Rules:
 - Mixed responsibilities (commands doing DB access directly, modules importing each
   other in a web).
 
+## Idea backlog — to CONSIDER, not commitments
+
+Proposals from the 2026-07-02 design review. **None of these is decided.** Each needs an
+explicit owner "yes" before any work starts; when accepted, move it into the roadmap (and
+the decision log if it sets a rule); when rejected, delete it here with a one-line why.
+Several overlap the `RPG/` design project — coordinate there instead of deciding twice.
+
+- **Ambient events** — rare, hard-throttled random encounters hooked into normal chat
+  (a scuffle, a find, a Tosch challenge; reuses the ambient-AI seam + `silentChannels`).
+  Rationale: on a ~10-person server the game must play *where people already are*; "go
+  to the game channel" loops die. The single highest-leverage retention idea here.
+- **Weekly co-op server event ("Defense of Deltrada")** — cron builds a threat during the
+  week, weekend battle, everyone contributes actions (atomic `$inc` into an event doc);
+  co-op vs environment beats PvP at this player count (no simultaneous presence needed).
+  Also the natural **rate-limited AP sink** that keeps uncapped AP (D15) harmless.
+  *(Overlaps `RPG/` P-arena "Trial/PvE" — same muscle, design once.)*
+- **Titles/achievements** — an earned `titles[]` list displayed beside the self-chosen
+  epithet ("the Carp-Slayer", "Punching Bag of Deltrada"). Social visibility is the best
+  reward currency on a friends server and costs zero balance work. Pairs with the planned
+  sparring-Elo removal (D16): rework the leaderboard to W/L + streaks + funny stats.
+- **Tosch as a game actor** — feed game events (duel results, arena outcomes) and approved
+  character bios into the AI persona so Tosch comments on and "knows" the cast; later,
+  NPC dialogue with location context. AI stays flavor-only, never outcomes (`RPG/` R6).
+- **Tavern gambling** — a dice game vs the house in the Sunken Tankard (canon has
+  *Mearog* — see `RPG/` §11); small self-running coin sink, a reason to travel, and a
+  simpler first `canCharacterAct` consumer than the duel.
+- **Locations = activity tables** — treat as a 6C design constraint: travel is only worth
+  building if each location has its own things to do (tavern = gambling/rest, plaza =
+  market/gossip, spire = duels, river = its own fishing table). Otherwise `travel` is a
+  button that renames a string.
+- **Weekly DB backup job** — Atlas M0 has **no backups**; a cron dumping the collections
+  to JSON and posting the file to an owner-only channel insures the whole game state for
+  an hour of work. Cheap enough to just do early.
+- **Seasons / "campaigns"** — optional 2–3-month themed arcs with their own leaderboards;
+  winners keep permanent titles. Fights the "everyone is maxed, nothing to want" endgame
+  of small servers — but resets can also demotivate casuals. Genuinely undecided; revisit
+  once the RPG loop exists.
+- **CI (GitHub Actions)** — run `build` + `lint` + `test` on push once the repo has a
+  remote; replaces the manual pre-deploy gate (already noted as "move to CI eventually").
+
 ## Roadmap & status
 
 **Current state (2026-07-02):** the core runtime, fun/admin command layer, AI persona and
@@ -551,8 +599,10 @@ placeholder.
             `canCharacterAct` exists but **nothing gates on it yet** (sparring is ungated — D16).
       - [ ] **6C** — locations graph + NPC seeding + NPC-movement cron + `travel` (first
             `canCharacterAct` consumer). NPC = `Character` with `ownerId: null`.
-- [ ] **Phase 7 — RPG ruleset** (attributes/skills/combat numbers) — design with owner *before*
-      coding; unblocks serious `/smackdown duel`, max-HP-from-attributes.
+- [ ] **Phase 7 — RPG ruleset** — being **designed in `RPG/`** (d100 roll-under, roles +
+      learn-by-doing skills, Wounds, Stress; see `RPG/Ruleset.md` + its decision log/forks).
+      Code nothing until the relevant fork locks (D14); shipping it replaces the placeholder
+      attributes/skills/combat and unblocks the serious `/smackdown duel`.
 - [ ] **Phase 8 — pen-and-paper RP module** (separate `rp/` domain — D9).
 
 When a phase lands, tick it here and note any decisions that changed. Detailed per-change

@@ -65,7 +65,7 @@ Created on first contact by `accountService.getOrCreate`, which also creates a s
 | `actionPoints` | {current, totalEarned} | ✅ rule / 🟡 rate | **no cap** (D15) |
 | `attributes` | 9 × number | 🟡 | placeholder, all 10 |
 | `skills` | 6 × {level,progress} | 🟡 | placeholder, level 1 |
-| `currencies` | 6 × number | ✅ per-character | start 0 |
+| `currencies` | 1 × number | ✅ per-character | `deltradaCoins`, start 0 (D19) |
 
 ### SmackdownRecord — `db/models/smackdownRecord.ts` ✅
 Keyed by `Character._id`. `{ characterName, eloRating (default 1000), wins, losses }`.
@@ -93,8 +93,10 @@ General: `cooking, fishing, swimming`. Weapon: `melee, ranged, unarmed`. Each `{
 progress:0}`.
 
 ### Currencies — `game/data/currencies.ts` ✅ (per-character)
-`amberDrops, pearlFlakes, obsidianChips, silverCoins, goldCoins, deltradaCoins` — start 0,
-clamped `>= 0`.
+**One currency: `deltradaCoins`** — starts 0, clamped `>= 0`. The lore's regional per-race
+currencies (amber drops, pearl flakes, obsidian chips…) return **with** the exchange/trade
+economy layer (`RPG/` P17), not before — D19: append a currency when it means something;
+never park six empty wallets.
 
 ### Races — `game/data/races.ts` ✅
 `canid, ermehn, felis, lutren, polcan, tamian, vulpin` (flavour only; no racial mechanics).
