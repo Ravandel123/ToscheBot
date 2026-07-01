@@ -13,5 +13,13 @@ dist/
 # TypeScript
 *.tsbuildinfo
 
-# Optional lock file (zostaw, jeśli nie chcesz go ignorować)
-package-lock.json
+# package-lock.json IS committed (reproducible installs on Sparkedhost) — not ignored.
+
+# Reference-only legacy bot (never imported; contains a burned-but-real MongoDB
+# credential in bot.js — must never enter git history).
+OldBot/
+
+TODO.md
+
+# Personal, beginner-friendly guide (Polish) — not for GitHub
+PRZEWODNIK.md

@@ -1,28 +1,36 @@
 {
-   "name": "Tosche",
+   "name": "tosche",
    "description": "Everyone's favorite BtWD general.",
    "version": "0.0.1",
-   "main": "dist/bot.js",
+   "private": true,
+   "main": "dist/index.js",
+   "type": "module",
    "scripts": {
-      "build": "tsc",
-      "start": "node dist/bot.js",
-      "dev": "ts-node-dev --respawn src/bot.ts"
+      "dev": "tsx watch src/index.ts",
+      "build": "tsc --noEmit",
+      "start": "tsx src/index.ts",
+      "lint": "eslint .",
+      "test": "vitest run",
+      "test:watch": "vitest",
+      "deploy": "tsx src/scripts/deploy-commands.ts"
    },
    "dependencies": {
-      "discord.js": "^14.16.0",
-      "dotenv": "^16.4.5",
-      "mongoose": "^6.12.8",
-      "node-cron": "^1.2.1",
-      "openai": "^4.47.1",
-      "uuid": "^8.3.2"
+      "discord.js": "^14.26.4",
+      "mongoose": "^9.7.0",
+      "node-cron": "^4.2.1",
+      "openai": "^6.42.0",
+      "tsx": "^4.22.4"
    },
    "devDependencies": {
-      "@types/node": "^18.0.0",
-      "ts-node": "^10.9.2",
-      "ts-node-dev": "^2.0.0",
-      "typescript": "^5.7.2"
+      "@eslint/js": "^10.0.1",
+      "@types/node": "^22.0.0",
+      "eslint": "^10.4.1",
+      "globals": "^17.6.0",
+      "typescript": "^6.0.3",
+      "typescript-eslint": "^8.61.0",
+      "vitest": "^4.1.9"
    },
    "engines": {
-      "node": ">=18.0.0"
+      "node": ">=22.14.0"
    }
 }
