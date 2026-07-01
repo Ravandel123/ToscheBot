@@ -12,7 +12,8 @@ Legend:
   placeholder values as balance.
 - ⬜ **planned** — not built yet.
 
-_Last updated: 2026-06-15 (Phase 6B: character lifecycle + approval commands landed)._
+_Last updated: 2026-07-02 (post-review hardening: guarded approval transitions,
+per-character lock rename, side-effect-free `/profile` lookups)._
 
 ---
 
@@ -123,6 +124,10 @@ location MAY carry a `channelId`. Not Discord channels by default.
   `rejected` + `rejectionReason`). The verdict repaints the petition message and is DM'd to
   the player (best-effort). Rejected characters are editable + resubmittable (the panel shows
   the rejection reason); approved ones are sealed (`canEdit` false).
+- All three transitions are **status-guarded atomic updates** (`submitForApproval`:
+  draft|rejected→pending; `approve`/`reject`: pending→…) returning `false` on a stale
+  request — so a leftover decree message's buttons can't approve a character that was
+  since decided or re-edited (they answer "no longer pending" instead).
 - `game/character/rules.ts → canCharacterAct(character, apCost)` gates *character actions*:
   requires `approved && health > 0 && actionPoints.current >= apCost`. **Viewing** (`/profile`,
   inventory) never uses this gate; a 0-HP character can be active and inspected, just can't
@@ -151,8 +156,9 @@ customIds and the state is the DB draft, so it survives restarts (no collector; 
 ### Active-character switching — ✅ service + command
 `/character switch` → `accountService.setActiveCharacter(userId, username, characterId,
 locks)`: only your own character; blocked if the current OR target character is locked
-(mid-fight/activity, via `PlayerLockManager.isLocked`). 0-HP / unapproved characters *can*
-be activated.
+(mid-fight/activity, via `CharacterLockManager.isLocked`). 0-HP / unapproved characters *can*
+be activated. This switch guard is also what enforces "one user, one activity at a time" —
+the locks themselves are per **character** (see CLAUDE.md "Concurrency model").
 
 ### Hourly regen — ✅
 `jobs/resourceRegen.ts` → `characterService.regenAll(excludeIds)` bulk-updates all
@@ -200,10 +206,13 @@ Future `/smackdown duel`: requires **approved** characters, uses real HP/attribu
 
 ## Services (where state changes)
 
-- `accountService` — getOrCreate, getActiveCharacter, setActiveCharacter.
-- `characterService` — get, getOwned, countOwned, create, createStarter, updateIdentity,
-  setRace, submitForApproval, approve, reject, applyResourceDeltas (clamp [0,max]),
-  applyCurrencyDeltas (clamp ≥0), spendActionPoints (atomic), setLocation, regenAll/regen.
+- `accountService` — getOrCreate (race-safe starter claim), getActiveCharacter,
+  peekActiveCharacter (read-only — viewing someone must not create their account),
+  setActiveCharacter.
+- `characterService` — get, getOwned, countOwned, create, createStarter, remove,
+  updateIdentity, setRace, submitForApproval/approve/reject (status-guarded, return
+  false on a stale transition), applyResourceDeltas (clamp [0,max]), applyCurrencyDeltas
+  (clamp ≥0), spendActionPoints (atomic), setLocation, regenAll/regen.
 - `smackdownService` — getOrCreate, recordResult (Elo), getLeaderboard.
 - `activitySessionService` — create, getActiveForParticipant, advance (step-guarded),
   complete, abandon. The durability layer for long activities (D17) — see below.

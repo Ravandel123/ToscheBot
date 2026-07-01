@@ -87,7 +87,7 @@ match these.
   methods last. `client.ts` and `core/locks.ts` are the reference examples.
 - **Prefer plain object literals over classes** for stateless modules — DB services
   (`export const characterService = { ... }`), the AI service, etc. Reserve `class` for
-  things that actually hold runtime state across calls (`ToscheClient`, `PlayerLockManager`,
+  things that actually hold runtime state across calls (`ToscheClient`, `CharacterLockManager`,
   `CooldownManager`).
 - **Guard clauses**: early-return with a braceless single-line `if` (`if (!ok) return;`),
   one per validation step, no `else` after a `return`. Reserve `{ }` blocks for bodies with
@@ -129,9 +129,9 @@ match these.
 | D2 | All other commands are **text commands with the single prefix `h!`** (fun, utility, admin). | Prefix commands have no registration limits and take freeform args — right for a growing pile of troll commands. |
 | D3 | **No separate admin prefix or AdminCommand class.** Admin commands are normal prefix commands carrying `ownerOnly: true`. The old `m!` prefix is retired. | Permission is a property of a command, not a taxonomy. One parser, no name-collision rules, trivial to add `requiredPermissions` later. |
 | D4 | **Composition over inheritance** for commands: plain typed objects implementing an interface, loaded from files. The empty `Command`/`SlashCommand`/`PrefixCommand` class hierarchy is deleted. | Class hierarchies added nothing; options like `ownerOnly`, `cooldown`, `category` cover all variation. |
-| D5 | Concurrency: **per-player async locks + per-player deferred-operation queues** (see "Concurrency model"). Chosen over a single global action queue. | A global queue serializes the whole server behind one slow fight. Per-player locks confine blocking to participants. |
+| D5 | Concurrency: **per-character async locks + per-character deferred-operation queues** (see "Concurrency model"). Chosen over a single global action queue. | A global queue serializes the whole server behind one slow fight. Per-character locks confine blocking to participants. |
 | D6 | DB writes prefer **atomic clamped deltas** (`$inc` via aggregation-pipeline update with min/max clamping) over read-modify-write. | Removes most conflicts outright; cron regen and combat results compose instead of overwriting each other. |
-| D7 | Cron jobs must be **idempotent and bulk-first**: one `updateMany` for unlocked players, per-player deferred ops for locked ones. | Free-tier friendly (few round trips), safe on restart/replay. |
+| D7 | Cron jobs must be **idempotent and bulk-first**: one `updateMany` for unlocked characters, per-character deferred ops for locked ones. | Free-tier friendly (few round trips), safe on restart/replay. |
 | D8 | AI persona (OpenAI, Tosch-styled replies) behind an `ai/` seam (interface), optional via `OPENAI_API_KEY`. **Done (Phase 5).** | Core bot and game first; keep the bot runnable with AI absent. |
 | D9 | Future pen-and-paper RPG is a **separate domain module** (`rp/`), own models, not sharing server-RPG profiles. No dedicated prefix reserved; it will likely use a `/rp` slash group or session channels. | Owner confirmed it's unrelated to the server game. |
 | D10 | **Static game content lives in code** as typed data modules (fish, items, word lists...); the DB stores only **instances/state** referencing content by a **stable string id** (see "Content vs state"). | Content is owner-authored and ships with deploys; code gives type-checked ids, git history, and zero free-tier storage/round-trip cost. |
@@ -142,6 +142,7 @@ match these.
 | D15 | **Action Points: no cap.** They accumulate indefinitely via an hourly `$inc` (a week away → a week's worth to spend in a day; no forced daily login — this is for fun). Serious actions (later) cost AP via a single atomic `spendActionPoints` (clamp `>= 0`). | Owner prefers no cap for now; revisit only if hoarding becomes a balance problem (cap is then a one-line clamp in the regen pipeline). |
 | D16 | **Smackdown has two tiers.** `/smackdown sparring` = the existing for-fun brawl: **no approval, any active character, pure-random**. It keeps Elo *for now* but Elo will be **removed from sparring later**. A future serious fight (`/smackdown duel`) requires an **approved** character, uses HP/attributes, and **costs AP**. | Players enjoy the silly sparring; keep it. Real stakes belong to the approval-gated, RPG-driven fight. |
 | D17 | **Long, interactive, multi-step activities are durable** (turn-based duel, multi-room exploration…). An `ActivitySession` doc (Mongo) holds the per-step `state` AND is the cross-restart "this character is busy" lock; components are **stateless** (keyed by `sessionId`); each step is an **optimistic, step-guarded** atomic update (`{_id, step:N} → $inc step`), making it idempotent against double-clicks and crash-replay; idle sessions are reaped by a **TTL index** on `expiresAt`. **AP policy (default, tunable):** charged at start; clean cancel refunds; **timeout/abandon forfeits** (so a TTL delete needs no side effect). Short, auto-resolved actions stay atomic-commit (D5 rule 1 unchanged for them). | A restart/crash/abandon mid-activity must not corrupt state or strand a player. Persisting **per step** (not just at the end) makes activities resumable + crash-safe, reusing the stateless-component + DB-state pattern already proven by the character panel / comic browser. Seam built (`game/activity/`, `models/activitySession.ts`, `activitySessionService.ts`); first consumer is the serious duel / 6C travel. |
+| D18 | **Locks are keyed per character** (`CharacterLockManager`), not per Discord user, and deferred queues **drain before the lock is released**. | Characters are what the writes target (resources/AP/ELO), and NPCs (`ownerId: null`, 6C) have no user id to lock. "One user, one live activity" is already enforced by the active-character switch guard. Draining before release means a deferred op can never interleave with the next holder's critical section — the invariant Phase 7 activities can rely on. |
 
 ## Target architecture
 
@@ -152,7 +153,7 @@ src/
   client.ts             ToscheClient extends Client: command registries, lock manager
   core/
     loader.ts           discovers & loads commands/events/jobs from folders
-    locks.ts            PlayerLockManager (locks + deferred queues)
+    locks.ts            CharacterLockManager (locks + deferred queues)
     scheduler.ts        registers cron jobs from jobs/
     cooldowns.ts        per-command per-user cooldowns
   commands/
@@ -211,10 +212,15 @@ interface SlashCommand {
    category: 'game';
    ownerOnly?: boolean;
    cooldownSeconds?: number;         // default: none (slash); prefix commands default to 1 s
-   execute(interaction: ChatInputCommandInteraction): Promise<void>;
-   autocomplete?(interaction: AutocompleteInteraction): Promise<void>;
+   execute(client: ToscheClient, interaction: ChatInputCommandInteraction): Promise<void>;
+   autocomplete?(client: ToscheClient, interaction: AutocompleteInteraction): Promise<void>;
 }
 ```
+
+Slash commands (like events and jobs) get the `ToscheClient` injected as the first
+argument. Prefix commands stay **message-first** on purpose — almost none need the client,
+so the rare one that does (`h!help`) uses `botClient(message)` from `lib/discord.ts` (the
+single documented widening cast) instead of every command carrying a dead parameter.
 
 `messageCreate` routing: ignore bots → guild check (single guild only) → if content
 starts with `h!` resolve & run prefix command (ownerOnly → permissions → cooldown) →
@@ -258,7 +264,9 @@ Grow small, cohesive, typed `lib/` modules on demand instead:
   replacement for the old 2D-array frequency lists).
 - `lib/text.ts` — pure `string → string` flavor helpers (`bold`, `capitalize`, ...).
 - `lib/discord.ts` — `chunkMessage` / `replyChunked` (the > 2000-char splitter that
-  OldBot's naive `.send()` lacked), member/channel resolvers as needed.
+  OldBot's naive `.send()` lacked — the AI persona replies through it too),
+  `botClient(message)` (the one documented `message.client` cast), member/channel
+  resolvers as needed.
 - `lib/grammar.ts` — a tiny Tracery-style `expand(grammar)`: composes *varied* sentences
   from interchangeable parts. Grammars are plain data (`symbol → rules`), so they're
   reusable, combinable (merge with spread), and accept a runtime symbol injected per call.
@@ -310,16 +318,23 @@ Problem: long interactive actions (turn-based combat, multi-step activities) mus
 corrupted by concurrent writes (hourly regen cron, other commands targeting the player),
 and a player must not run two activities at once.
 
-Solution — `PlayerLockManager` in `core/locks.ts`:
+Solution — `CharacterLockManager` in `core/locks.ts`. Locks are keyed by
+**`Character._id`**, not by Discord user id (D18): resources/AP/ELO live on characters,
+NPCs (`ownerId: null`) must be lockable too (6C movement), and
+`ActivitySession.participantIds` are character ids. "One user, one activity at a time"
+is enforced separately, by the active-character switch guard
+(`accountService.setActiveCharacter` refuses while either character is locked).
 
-- `runExclusive(userIds: string[], fn)` — acquires locks for all listed players
-  (**always sorted by userId** to prevent deadlocks), runs `fn`, releases, then drains
-  deferred queues.
-- `isLocked(userId)` / `lockedIds()` — used by cron jobs to split bulk vs deferred work.
-- `deferOrRun(userId, op: () => Promise<void>)` — if the player is unlocked, run `op`
-  immediately; if locked, push it onto that player's FIFO deferred queue. The queue is
-  drained right after the lock is released. Deferred ops must be small, self-contained
-  async functions performing atomic DB writes.
+- `runExclusive(characterIds: string[], fn)` — acquires locks for all listed characters
+  (**always sorted by character id** to prevent deadlocks), runs `fn`, drains each
+  character's deferred queue, then releases. Draining happens **before** release, so a
+  deferred op can never interleave with the next holder's critical section.
+- `isLocked(characterId)` / `lockedIds()` — used by cron jobs to split bulk vs deferred work.
+- `deferOrRun(characterId, op: () => Promise<void>)` — if the character is unlocked, run
+  `op` immediately; if locked, push it onto that character's FIFO deferred queue (drained
+  by the current holder just before it releases — see above). Deferred ops must be small,
+  self-contained async functions performing atomic DB writes, and must never call
+  `runExclusive` themselves.
 
 Rules:
 
@@ -332,8 +347,8 @@ Rules:
    needed if expressed as a clamped delta (D6). Use locks only for read-modify-write
    sequences or "must not interleave with an activity" semantics.
 3. **Cron jobs**: bulk `updateMany` excluding `lockedIds()`, then `deferOrRun` an
-   equivalent single-player op for each locked player. Nothing is lost; regen lands
-   right after the fight ends.
+   equivalent single-character op for each locked character. Nothing is lost; regen
+   lands right after the fight ends — and always before the next lock holder starts.
 4. Locks are **in-memory only** (single process, single guild). They do not survive
    restarts — that's fine for short actions (rule 1) and intentional for long ones: a crash
    auto-releases the in-memory lock so a player is never stranded "busy forever"; the durable
@@ -462,7 +477,7 @@ Rules:
 **Anti-patterns in OldBot — do not reproduce:**
 
 - Busy-wait "transaction" loop (`cdWaitForAvailableTransaction` polling every 5 s) and
-  the `MemberData.collector/transactionOpen` task system → replaced by `PlayerLockManager`.
+  the `MemberData.collector/transactionOpen` task system → replaced by `CharacterLockManager`.
 - Global `fightInProgress` boolean (one fight at a time server-wide).
 - Hardcoded ids and channel names in code (`'553933942193913856'`, `'smackdown-spire'`)
   → ids go to `.env` / config, channel references to a config map.
@@ -473,12 +488,15 @@ Rules:
 
 ## Roadmap & status
 
-**Current state (2026-06-30):** the core runtime, fun/admin command layer, AI persona and
+**Current state (2026-07-02):** the core runtime, fun/admin command layer, AI persona and
 moderation are live; the server-RPG is mid-build — the Account/Character *structure* exists
-(6A/6B) but *mechanics* are blocked on the Phase 7 ruleset (D14). **149 tests, build + lint
-green.** The owner has smoke-tested `/profile` and `/smackdown` live; the bot has not yet been
-run end-to-end against a live Atlas cluster (needs `.env` + `npm run deploy`). See
-`RPG_SYSTEM.md` for the concrete game model and what is still placeholder.
+(6A/6B) but *mechanics* are blocked on the Phase 7 ruleset (D14). A full architecture review
+hardened the seams (D18 lock keying + drain-before-release, status-guarded approval
+transitions, side-effect-free `/profile` lookups, word-boundary moderation matching).
+**153 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
+live; the bot has not yet been run end-to-end against a live Atlas cluster (needs `.env` +
+`npm run deploy`). See `RPG_SYSTEM.md` for the concrete game model and what is still
+placeholder.
 
 **What works today:**
 
@@ -503,7 +521,7 @@ run end-to-end against a live Atlas cluster (needs `.env` + `npm run deploy`). S
   positives), so a deletion is never a mystery.
 - **Jobs** — `resource-regen` (hourly, lock-aware bulk-first per D7).
 - **Component handlers** — `character` (creation panel + approval petition), `comic` (browser).
-- **Infra** — `PlayerLockManager` (`client.locks`), component-handler router
+- **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
   (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables.
 
 - [x] **Phase 0 — toolchain**: NodeNext, tsx (dev + prod), deps upgraded, `uuid`/`openai`/
@@ -513,7 +531,7 @@ run end-to-end against a live Atlas cluster (needs `.env` + `npm run deploy`). S
       shutdown, `deploy-commands.ts`.
 - [x] **Phase 2 — data layer**: DB connect, content catalogs, Character model + characterService
       (atomic-pipeline delta/regen), `/profile`, hourly `resource-regen` cron.
-- [~] **Phase 3 — concurrency**: PlayerLockManager + deferred queues done & tested
+- [~] **Phase 3 — concurrency**: CharacterLockManager + deferred queues done & tested
       (`client.locks`), regen job lock-aware, `/smackdown sparring` is the first `runExclusive`
       consumer. *Remaining:* a genuinely interactive turn-based duel on buttons (D17 seam built).
 - [x] **Phase 4 — port fun & admin commands + events** from OldBot. The command list above + the
