@@ -2,6 +2,7 @@ import { Message } from 'discord.js';
 import type { ToscheClient } from '../client.js';
 import { settings } from '../settings.js';
 import { chance } from '../lib/random.js';
+import { replyChunked } from '../lib/discord.js';
 import { log } from '../lib/log.js';
 import { PERSONA_PROMPT } from './persona.js';
 import type { AiMessage } from './aiService.js';
@@ -41,8 +42,10 @@ export async function maybeRespondWithAi(client: ToscheClient, message: Message)
       const history = await buildHistory(message);
       const reply = await client.ai.respond([{ role: 'system', content: PERSONA_PROMPT }, ...history]);
 
+      // The persona asks for short replies, but the model can overshoot the
+      // 2000-char message limit — split instead of erroring.
       if (reply)
-         await message.reply(reply);
+         await replyChunked(message, reply);
    } catch (error) {
       log.error('AI response failed:', error);
    }

@@ -2,6 +2,7 @@ import { SlashCommandBuilder, MessageFlags, type SendableChannels } from 'discor
 import { SlashCommand } from '../../../types/commands.js';
 import { settings } from '../../../settings.js';
 import { accountService } from '../../../db/services/accountService.js';
+import { characterService } from '../../../db/services/characterService.js';
 import { smackdownService } from '../../../db/services/smackdownService.js';
 import { combatStatsFromCharacter } from '../../../game/combat/stats.js';
 import { simulateFight, type RoundEvent } from '../../../game/combat/engine.js';
@@ -83,9 +84,21 @@ export default {
 
       // Lock both *characters* for the whole match (first real runExclusive consumer).
       await client.locks.runExclusive([c1._id, c2._id], async () => {
-         const f1 = { id: c1._id, stats: combatStatsFromCharacter(c1) };
-         const f2 = { id: c2._id, stats: combatStatsFromCharacter(c2) };
-         const names = { [c1._id]: f1.stats.name, [c2._id]: f2.stats.name };
+         // The pre-lock reads were validation only. This fight may have queued
+         // behind another one, so re-read the authoritative docs under the lock.
+         const [fighter1, fighter2] = await Promise.all([
+            characterService.get(c1._id),
+            characterService.get(c2._id),
+         ]);
+
+         if (!fighter1 || !fighter2) {
+            await interaction.followUp({ content: 'One of the fighters vanished before the bell.', flags: MessageFlags.Ephemeral });
+            return;
+         }
+
+         const f1 = { id: fighter1._id, stats: combatStatsFromCharacter(fighter1) };
+         const f2 = { id: fighter2._id, stats: combatStatsFromCharacter(fighter2) };
+         const names = { [f1.id]: f1.stats.name, [f2.id]: f2.stats.name };
 
          // Sparring is a fantasy match: it computes a winner + Elo, it does NOT
          // persist HP. The whole fight is decided in memory up front, then

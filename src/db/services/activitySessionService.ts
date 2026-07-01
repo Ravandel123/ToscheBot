@@ -19,8 +19,8 @@ export const activitySessionService = {
          expiresAt: nextExpiry(ttlMs),
       };
 
-      await ActivitySession.create(session);
-      return (await this.get(session._id))!;
+      const created = await ActivitySession.create(session);
+      return created.toObject();
    },
 
    async get(id: string): Promise<ActivitySessionDoc | null> {

@@ -52,13 +52,19 @@ export const characterService = {
          ...defaultCharacterStats(),
       };
 
-      await Character.create(character);
-      return (await this.get(character._id))!;
+      const created = await Character.create(character);
+      return created.toObject();
    },
 
    /** The auto-created first character handed to every new account (draft, unnamed-ish). */
    async createStarter(ownerId: string, name: string): Promise<CharacterDoc> {
       return this.create(ownerId, { name });
+   },
+
+   /** Deletes a character outright. Currently only used to discard a starter
+    *  that lost the first-contact race (see accountService.getOrCreate). */
+   async remove(characterId: string): Promise<void> {
+      await Character.deleteOne({ _id: characterId });
    },
 
    /** Updates editable identity fields. Callers gate with `canEdit` first. */
@@ -81,28 +87,36 @@ export const characterService = {
       await Character.updateOne({ _id: characterId }, { $set: { 'identity.race': race } });
    },
 
+   // The three status transitions are guarded on the CURRENT status (not just
+   // the id): a decree message's buttons can outlive the verdict, and a stale
+   // Approve click must not bless a character that was since rejected/edited.
+   // Each returns false when the guard failed — the transition did not happen.
+
    /** draft|rejected → pending. Clears any prior rejection reason. */
-   async submitForApproval(characterId: string): Promise<void> {
-      await Character.updateOne(
-         { _id: characterId },
+   async submitForApproval(characterId: string): Promise<boolean> {
+      const result = await Character.updateOne(
+         { _id: characterId, approvalStatus: { $in: ['draft', 'rejected'] } },
          { $set: { approvalStatus: 'pending' }, $unset: { rejectionReason: '' } },
       );
+      return result.modifiedCount > 0;
    },
 
    /** pending → approved (the Imperator's verdict). Clears any prior rejection reason. */
-   async approve(characterId: string): Promise<void> {
-      await Character.updateOne(
-         { _id: characterId },
+   async approve(characterId: string): Promise<boolean> {
+      const result = await Character.updateOne(
+         { _id: characterId, approvalStatus: 'pending' },
          { $set: { approvalStatus: 'approved' }, $unset: { rejectionReason: '' } },
       );
+      return result.modifiedCount > 0;
    },
 
    /** pending → rejected, recording why (shown back to the player; editable + resubmittable). */
-   async reject(characterId: string, reason: string): Promise<void> {
-      await Character.updateOne(
-         { _id: characterId },
+   async reject(characterId: string, reason: string): Promise<boolean> {
+      const result = await Character.updateOne(
+         { _id: characterId, approvalStatus: 'pending' },
          { $set: { approvalStatus: 'rejected', rejectionReason: reason } },
       );
+      return result.modifiedCount > 0;
    },
 
    /** Adjusts resources, clamping each to [0, max] atomically. */

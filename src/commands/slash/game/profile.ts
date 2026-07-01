@@ -47,7 +47,17 @@ export default {
    category: 'game',
    async execute(_client, interaction) {
       const target = interaction.options.getUser('user') ?? interaction.user;
-      const character = await accountService.getActiveCharacter(target.id, target.displayName);
+
+      if (target.bot) {
+         await interaction.reply('Machines do not enlist. They serve, yes-yes.');
+         return;
+      }
+
+      // Viewing yourself onboards you (account + starter draft); viewing someone
+      // else is a pure read — a lookup must not create documents for the target.
+      const character = target.id === interaction.user.id
+         ? await accountService.getActiveCharacter(target.id, target.displayName)
+         : await accountService.peekActiveCharacter(target.id);
 
       if (!character) {
          await interaction.reply(`${target.displayName} has no active character.`);

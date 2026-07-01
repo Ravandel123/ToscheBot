@@ -146,7 +146,14 @@ async function handlePanelSubmit(interaction: ButtonInteraction, characterId: st
    }
 
    await channel.send({ embeds: [buildDecreeEmbed(character)], components: [buildDecreeButtons(characterId)] });
-   await characterService.submitForApproval(characterId);
+
+   // Guarded transition: a double-click races here — the loser posted a
+   // duplicate decree (its buttons will report "no longer pending" when used).
+   if (!await characterService.submitForApproval(characterId)) {
+      await interaction.reply({ content: 'That petition was already filed.', ...ephemeral });
+      return;
+   }
+
    await interaction.update(buildCharacterPanel({ ...character, approvalStatus: 'pending' }));
 }
 
@@ -165,7 +172,14 @@ async function handleApprove(client: ToscheClient, interaction: ButtonInteractio
       return;
    }
 
-   await characterService.approve(characterId);
+   // Guarded: this decree may be stale (petition already decided, or the
+   // character was rejected and re-edited since). Never approve those.
+   if (!await characterService.approve(characterId)) {
+      await interaction.update({ components: [] });
+      await interaction.followUp({ content: 'That petition is no longer pending — it was already decided or has changed since.', ...ephemeral });
+      return;
+   }
+
    const decided: CharacterDoc = { ...character, approvalStatus: 'approved' };
    await interaction.update({ embeds: [buildDecidedDecree(decided, 'approved', interaction.user.id)], components: [] });
    await notifyPlayer(client, character, 'approved');
@@ -194,7 +208,11 @@ async function handleRejectReason(client: ToscheClient, interaction: ModalSubmit
       return;
    }
 
-   await characterService.reject(characterId, reason);
+   if (!await characterService.reject(characterId, reason)) {
+      await interaction.reply({ content: 'That petition is no longer pending — it was already decided or has changed since.', ...ephemeral });
+      return;
+   }
+
    const decided: CharacterDoc = { ...character, approvalStatus: 'rejected', rejectionReason: reason };
 
    await editDecreeMessage(interaction, messageId, decided, reason);

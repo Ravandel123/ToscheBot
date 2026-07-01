@@ -24,4 +24,19 @@ describe('findBannedWord', () => {
    it('catches a banned domain', () => {
       expect(findBannedWord('check furaffinity.net/whatever')?.term).toBe('furaffinity.net');
    });
+
+   it('does not fire mid-word (the Scunthorpe problem)', () => {
+      expect(findBannedWord('Scunthorpe is a lovely town', ['cunt'])).toBeNull();
+   });
+
+   it('still matches stem entries into inflected words', () => {
+      const match = findBannedWord('o kurwa', ['kurw']);
+      expect(match?.matchedText).toBe('kurw');
+      expect(match?.viaCollapsed).toBe(false);
+   });
+
+   it('requires the collapsed match to start at a word boundary of the original', () => {
+      expect(findBannedWord('bad ick everywhere', ['dick'])).toBeNull(); // "…d ick" fuses mid-word — innocent
+      expect(findBannedWord('d.i.c.k', ['dick'])?.viaCollapsed).toBe(true); // real evasion still caught
+   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PlayerLockManager } from './locks.js';
+import { CharacterLockManager } from './locks.js';
 
 /** A promise plus its resolver, to control when a critical section finishes. */
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -13,9 +13,9 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 /** Lets pending microtasks/timers settle. */
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe('PlayerLockManager', () => {
-   it('serializes runs that touch the same player', async () => {
-      const lock = new PlayerLockManager();
+describe('CharacterLockManager', () => {
+   it('serializes runs that touch the same character', async () => {
+      const lock = new CharacterLockManager();
       const order: string[] = [];
       const gate = deferred();
 
@@ -36,8 +36,8 @@ describe('PlayerLockManager', () => {
       expect(order).toEqual(['1-start', '1-end', '2-start']);
    });
 
-   it('lets runs for different players proceed concurrently', async () => {
-      const lock = new PlayerLockManager();
+   it('lets runs for different characters proceed concurrently', async () => {
+      const lock = new CharacterLockManager();
       const order: string[] = [];
       const gate = deferred();
 
@@ -57,7 +57,7 @@ describe('PlayerLockManager', () => {
    });
 
    it('reports lock state and clears it after the run', async () => {
-      const lock = new PlayerLockManager();
+      const lock = new CharacterLockManager();
       const gate = deferred();
 
       const run = lock.runExclusive(['x'], async () => {
@@ -73,8 +73,8 @@ describe('PlayerLockManager', () => {
       expect(lock.isLocked('x')).toBe(false);
    });
 
-   it('cannot deadlock when two runs request the same players in crossed order', async () => {
-      const lock = new PlayerLockManager();
+   it('cannot deadlock when two runs request the same characters in crossed order', async () => {
+      const lock = new CharacterLockManager();
       const order: string[] = [];
       const gate = deferred();
 
@@ -94,8 +94,8 @@ describe('PlayerLockManager', () => {
       expect(order).toEqual(['p1', 'p2']);
    });
 
-   it('runs a deferred op immediately when the player is free', async () => {
-      const lock = new PlayerLockManager();
+   it('runs a deferred op immediately when the character is free', async () => {
+      const lock = new CharacterLockManager();
       let ran = false;
 
       await lock.deferOrRun('y', async () => {
@@ -106,7 +106,7 @@ describe('PlayerLockManager', () => {
    });
 
    it('queues a deferred op while locked and drains it FIFO after release', async () => {
-      const lock = new PlayerLockManager();
+      const lock = new CharacterLockManager();
       const events: string[] = [];
       const gate = deferred();
 
@@ -131,8 +131,40 @@ describe('PlayerLockManager', () => {
       expect(events).toEqual(['fn-start', 'fn-end', 'deferred-1', 'deferred-2']);
    });
 
+   it('completes deferred ops before a queued runExclusive enters', async () => {
+      const lock = new CharacterLockManager();
+      const events: string[] = [];
+      const fnGate = deferred();
+      const opGate = deferred();
+
+      const run1 = lock.runExclusive(['c'], async () => {
+         await fnGate.promise;
+      });
+      await flush();
+
+      // Queue a slow deferred op AND a second holder while run1 still holds 'c'.
+      await lock.deferOrRun('c', async () => {
+         events.push('op-start');
+         await opGate.promise;
+         events.push('op-end');
+      });
+      const run2 = lock.runExclusive(['c'], async () => {
+         events.push('fn2');
+      });
+
+      fnGate.resolve();
+      await flush();
+      // The invariant under test: the deferred op must fully finish before the
+      // next holder's critical section starts — no interleaving.
+      expect(events).toEqual(['op-start']);
+
+      opGate.resolve();
+      await Promise.all([run1, run2]);
+      expect(events).toEqual(['op-start', 'op-end', 'fn2']);
+   });
+
    it('releases locks even when fn throws', async () => {
-      const lock = new PlayerLockManager();
+      const lock = new CharacterLockManager();
 
       await expect(
          lock.runExclusive(['e'], () => Promise.reject(new Error('boom'))),

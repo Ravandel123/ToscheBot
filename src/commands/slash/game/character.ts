@@ -148,7 +148,14 @@ async function submitCharacter(interaction: ChatInputCommandInteraction): Promis
    }
 
    await channel.send({ embeds: [buildDecreeEmbed(character)], components: [buildDecreeButtons(character._id)] });
-   await characterService.submitForApproval(character._id);
+
+   // Guarded transition: a concurrent submit (panel + slash) races here — the
+   // loser posted a duplicate decree, whose buttons will report "no longer
+   // pending" once the real one is decided.
+   if (!await characterService.submitForApproval(character._id)) {
+      await interaction.reply({ content: 'That petition was already filed.', ...ephemeral });
+      return;
+   }
 
    await interaction.reply({
       content: `📜 **${character.identity.name}** has been submitted to the Imperator. You'll be told the verdict.`,

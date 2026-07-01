@@ -2,7 +2,7 @@ import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import path from 'node:path';
 import { loadDefaultExports } from './core/loader.js';
 import { CooldownManager } from './core/cooldowns.js';
-import { PlayerLockManager } from './core/locks.js';
+import { CharacterLockManager } from './core/locks.js';
 import { validateJobs } from './core/scheduler.js';
 import { createAiService, type AiService } from './ai/aiService.js';
 import { PrefixCommand, SlashCommand } from './types/commands.js';
@@ -17,7 +17,7 @@ export class ToscheClient extends Client {
    // Button/select/modal handlers, keyed by customId namespace (see types/interactions.ts).
    readonly componentHandlers = new Collection<string, ComponentHandler>();
    readonly cooldowns = new CooldownManager();
-   readonly locks = new PlayerLockManager();
+   readonly locks = new CharacterLockManager();
    readonly ai: AiService = createAiService();
    // Started by the clientReady event, so jobs never fire on a half-ready client.
    jobs: CronJob[] = [];

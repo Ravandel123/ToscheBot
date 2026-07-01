@@ -1,6 +1,18 @@
 import { Guild, GuildBasedChannel, Message } from 'discord.js';
+import type { ToscheClient } from '../client.js';
 
 export const MAX_MESSAGE_LENGTH = 2000;
+
+/**
+ * The bot's client, typed. Prefix commands are deliberately message-first
+ * (`execute(message, args)` — most never need the client), so the rare one
+ * that does (e.g. `h!help` reading the registries) goes through this single
+ * widening cast instead of casting inline. Safe: this app only ever
+ * constructs one client, and it's a ToscheClient.
+ */
+export function botClient(message: Message): ToscheClient {
+   return message.client as ToscheClient;
+}
 
 /**
  * Finds a guild channel by id or by name. A reference that is all digits (17–20

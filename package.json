@@ -3,7 +3,6 @@
    "description": "Everyone's favorite BtWD general.",
    "version": "0.0.1",
    "private": true,
-   "main": "dist/index.js",
    "type": "module",
    "scripts": {
       "dev": "tsx watch src/index.ts",

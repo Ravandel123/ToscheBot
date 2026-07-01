@@ -18,8 +18,10 @@ export const settings = {
    },
 
    moderation: {
-      // Messages containing any of these (case-insensitive, also matched after
-      // stripping spaces/punctuation) are deleted and reported to #espionage.
+      // Messages containing any of these are deleted and reported to #espionage.
+      // Case-insensitive; a hit must START at a word boundary but may run into a
+      // longer word — so entries can be stems ('kurw' catches "kurwa"/"kurwy").
+      // Evasion (spacing/punctuation/links) is caught by a collapsed second pass.
       // The owner is exempt.
       bannedWords: [
          'cunt',

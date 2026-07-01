@@ -1,7 +1,7 @@
 import { Account, type AccountDoc } from '../models/account.js';
 import { characterService } from './characterService.js';
 import type { CharacterDoc } from '../models/character.js';
-import type { PlayerLockManager } from '../../core/locks.js';
+import type { CharacterLockManager } from '../../core/locks.js';
 
 export type SwitchResult =
    | { ok: true }
@@ -20,10 +20,21 @@ export const accountService = {
       if (account.activeCharacterId)
          return account;
 
-      // First contact: give the account a starter draft character.
+      // First contact: give the account a starter draft character. The
+      // null-guarded claim keeps two concurrent first contacts from attaching
+      // two starters — the loser discards its orphan and takes the winner's.
       const starter = await characterService.createStarter(userId, username);
-      await Account.updateOne({ _id: userId }, { $set: { activeCharacterId: starter._id } });
-      return { ...account, activeCharacterId: starter._id };
+      const claimed = await Account.findOneAndUpdate(
+         { _id: userId, activeCharacterId: null },
+         { $set: { activeCharacterId: starter._id } },
+         { new: true },
+      ).lean<AccountDoc>();
+
+      if (claimed)
+         return claimed;
+
+      await characterService.remove(starter._id);
+      return (await Account.findById(userId).lean<AccountDoc>())!;
    },
 
    /** The character the user is currently controlling (auto-creates on first contact). */
@@ -32,13 +43,20 @@ export const accountService = {
       return account.activeCharacterId ? characterService.get(account.activeCharacterId) : null;
    },
 
+   /** Read-only sibling of `getActiveCharacter` for viewing OTHER people
+    *  (`/profile`): never creates an account/starter as a side effect. */
+   async peekActiveCharacter(userId: string): Promise<CharacterDoc | null> {
+      const account = await Account.findById(userId).lean<AccountDoc>();
+      return account?.activeCharacterId ? characterService.get(account.activeCharacterId) : null;
+   },
+
    /**
     * Switches the active character, enforcing the restrictions (D13): you may
     * only activate your own character, and neither the current nor the target
     * character may be locked (mid-fight/activity). A 0-HP or unapproved
     * character CAN be made active (just can't act).
     */
-   async setActiveCharacter(userId: string, username: string, characterId: string, locks: PlayerLockManager): Promise<SwitchResult> {
+   async setActiveCharacter(userId: string, username: string, characterId: string, locks: CharacterLockManager): Promise<SwitchResult> {
       const target = await characterService.get(characterId);
       if (!target || target.ownerId !== userId)
          return { ok: false, reason: 'not-owned' };

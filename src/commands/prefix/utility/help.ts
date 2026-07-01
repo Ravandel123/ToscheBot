@@ -1,7 +1,8 @@
-import { EmbedBuilder, type Message } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 import { PrefixCommand, PrefixCategory } from '../../../types/commands.js';
 import type { ToscheClient } from '../../../client.js';
 import { config } from '../../../config.js';
+import { botClient } from '../../../lib/discord.js';
 
 const IMPERIAL_GOLD = 0xc0a062;
 
@@ -89,8 +90,8 @@ export default {
    description: 'Lists my commands, or explains one of them.',
    usage: 'help [command]',
    category: 'utility',
-   async execute(message: Message, args) {
-      const client = message.client as ToscheClient;
+   async execute(message, args) {
+      const client = botClient(message);
       const isOwner = message.author.id === config.ownerId;
 
       const query = args[0]?.toLowerCase();

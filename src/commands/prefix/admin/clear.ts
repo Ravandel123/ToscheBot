@@ -19,7 +19,9 @@ export default {
       if (!message.inGuild())
          return;
 
-      // `true` skips messages older than 14 days (Discord won't bulk-delete those).
+      // Remove the invoking message first, so it doesn't eat into the requested
+      // count. `true` skips messages older than 14 days (Discord won't bulk-delete those).
+      await message.delete().catch(() => undefined);
       const deleted = await message.channel.bulkDelete(amount, true);
       await reportAdminAction(message.guild, `<@${message.author.id}> cleared **${deleted.size}** messages in <#${message.channelId}>.`);
    },

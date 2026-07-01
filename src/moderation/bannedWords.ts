@@ -31,27 +31,46 @@ function collapseWithMap(content: string): { collapsed: string; map: number[] } 
    return { collapsed, map };
 }
 
+// A match must START at a word boundary in the original text ('cunt' must not
+// fire inside "Scunthorpe"). The END is deliberately unanchored: several list
+// entries are stems that must catch inflections ('kurw' → "kurwa", "kurwy").
+const isWordChar = (char: string | undefined): boolean => !!char && /[a-z0-9]/i.test(char);
+
+function findLiteralIndex(lower: string, term: string): number {
+   for (let index = lower.indexOf(term); index >= 0; index = lower.indexOf(term, index + 1)) {
+      if (!isWordChar(lower[index - 1]))
+         return index;
+   }
+
+   return -1;
+}
+
 /**
  * Finds the first banned term in `content`, or null. Checks the literal lowercased
  * text first, then a punctuation/space-stripped version (so `f u c k`, `f.u.c.k`,
- * and a term hidden inside a link are caught). The stripped pass can cause
- * substring false positives (e.g. a URL collapsing to contain a banned word) —
- * which is exactly why the result carries *where* and *how* it matched, so the
+ * and a term hidden inside a link are caught). Both passes require the hit to
+ * start at a word boundary of the *original* text; the stripped pass can still
+ * cause false positives (words fused across removed punctuation) — which is
+ * exactly why the result carries *where* and *how* it matched, so the
  * #espionage report can explain the removal.
+ *
+ * `terms` defaults to the live settings list; tests inject their own.
  */
-export function findBannedWord(content: string): BannedMatch | null {
+export function findBannedWord(content: string, terms: readonly string[] = settings.moderation.bannedWords): BannedMatch | null {
    const lower = content.toLowerCase();
    const { collapsed, map } = collapseWithMap(content);
 
-   for (const term of settings.moderation.bannedWords) {
-      const literal = lower.indexOf(term);
+   for (const term of terms) {
+      const literal = findLiteralIndex(lower, term);
       if (literal >= 0)
          return { term, matchedText: content.slice(literal, literal + term.length), index: literal, viaCollapsed: false };
 
       const collapsedTerm = stripped(term);
-      const ci = collapsed.indexOf(collapsedTerm);
-      if (ci >= 0) {
+      for (let ci = collapsed.indexOf(collapsedTerm); ci >= 0; ci = collapsed.indexOf(collapsedTerm, ci + 1)) {
          const start = map[ci];
+         if (isWordChar(content[start - 1]))
+            continue; // fused mid-word in the original ("bad ick") — not a hit
+
          const end = map[ci + collapsedTerm.length - 1];
          return { term, matchedText: content.slice(start, end + 1), index: start, viaCollapsed: true };
       }

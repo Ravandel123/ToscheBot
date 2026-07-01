@@ -35,6 +35,12 @@ export async function loadDefaultExports<T>(rootDir: string): Promise<T[]> {
       if (!entry.isFile() || !isLoadableFile(entry.name))
          continue;
 
+      // `_`-prefixed DIRECTORIES are loader-invisible too, so a colocated
+      // helper folder can't leak normally-named files into the registry.
+      const relativeDir = path.relative(rootDir, entry.parentPath);
+      if (relativeDir.split(path.sep).some((segment) => segment.startsWith('_')))
+         continue;
+
       const filePath = path.join(entry.parentPath, entry.name);
       const module: unknown = await import(pathToFileURL(filePath).href);
 
