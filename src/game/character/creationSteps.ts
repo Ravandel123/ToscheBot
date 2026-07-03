@@ -1,4 +1,5 @@
 import { GENDER_CHOICES, NAME_MIN_LENGTH } from './identity.js';
+import { CREATION_ATTRIBUTE_POINTS, allocationFrom, isAllocationComplete, pointsSpent } from './attributes.js';
 import { RACES } from '../data/races.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
@@ -49,9 +50,20 @@ export const CREATION_STEPS: readonly CreationStep[] = [
       id: 'gender',
       title: 'Gender',
       kind: 'select',
-      required: false,
+      required: true,
       isComplete: (c) => GENDER_CHOICES.some((g) => g.value === c.identity.gender),
       summary: (c) => GENDER_CHOICES.find((g) => g.value === c.identity.gender)?.label ?? '—',
+   },
+   {
+      // The creation point-buy (D25): distribute CREATION_ATTRIBUTE_POINTS on
+      // top of the racial base, max MAX_POINTS_PER_ATTRIBUTE on any one
+      // attribute. Done only when every point is spent.
+      id: 'attributes',
+      title: 'Attributes',
+      kind: 'select',
+      required: true,
+      isComplete: (c) => isAllocationComplete(allocationFrom(c.attributeAllocation)),
+      summary: (c) => `${pointsSpent(allocationFrom(c.attributeAllocation))}/${CREATION_ATTRIBUTE_POINTS} points assigned`,
    },
 ];
 

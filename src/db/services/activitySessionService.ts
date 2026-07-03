@@ -52,7 +52,7 @@ export const activitySessionService = {
       return ActivitySession.findOneAndUpdate(
          { _id: id, step: expectedStep, status: 'active' },
          { $set: { state, expiresAt: nextExpiry(ttlMs) }, $inc: { step: 1 } },
-         { new: true },
+         { returnDocument: 'after' },
       ).lean<ActivitySessionDoc>();
    },
 

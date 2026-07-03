@@ -3,7 +3,9 @@ import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { ATTRIBUTES, type AttributeKey } from '../../game/data/attributes.js';
 import { SKILLS, type SkillKey } from '../../game/data/skills.js';
 import { CURRENCIES, type CurrencyKey } from '../../game/data/currencies.js';
+import { TRAITS, type TraitKey } from '../../game/data/traits.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
+import { effectiveAttributes, emptyAllocation, type AttributeAllocation } from '../../game/character/attributes.js';
 import type { RaceId } from '../../game/data/races.js';
 
 // A Character is the in-game entity (player-controlled OR NPC). Replaces the old
@@ -41,8 +43,18 @@ export interface CharacterDoc {
    resources: Record<ResourceKey, ResourceState>;
    // Action points have NO cap (D15): they accumulate via the hourly regen $inc.
    actionPoints: { current: number; totalEarned: number };
-   // PLACEHOLDERS pending the RPG ruleset (D14) — modelled, but no mechanics yet.
+   // Effective attributes = racial base + creation allocation. Stored (not
+   // derived on read) and recomputed by characterService whenever race or
+   // allocation changes — checks/combat read this map directly.
    attributes: Record<AttributeKey, number>;
+   // The creation point-buy (D25): how many of the CREATION_ATTRIBUTE_POINTS
+   // landed on each attribute. Kept separate from `attributes` so a race change
+   // mid-wizard rebases cleanly instead of corrupting the player's spend.
+   attributeAllocation: AttributeAllocation;
+   // Deed traits (courage, cowardice…), grown by choices in encounters. Rising
+   // meters from 0; nothing gates on them yet (Phase 7).
+   traits: Record<TraitKey, number>;
+   // PLACEHOLDER pending the RPG ruleset (D14) — modelled, but no mechanics yet.
    skills: Record<SkillKey, SkillState>;
    // Currencies are per-character (D12).
    currencies: Record<CurrencyKey, number>;
@@ -74,22 +86,28 @@ const characterSchema = new Schema({
       totalEarned: { type: Number, required: true, default: 0 },
    },
    attributes: fromKeys(Object.keys(ATTRIBUTES), { type: Number, required: true }),
+   attributeAllocation: fromKeys(Object.keys(ATTRIBUTES), { type: Number, required: true, default: 0 }),
+   traits: fromKeys(Object.keys(TRAITS), { type: Number, required: true, default: 0 }),
    skills: fromKeys(Object.keys(SKILLS), { level: { type: Number, required: true }, progress: { type: Number, required: true } }),
    currencies: fromKeys(Object.keys(CURRENCIES), { type: Number, required: true }),
 }, { timestamps: true, minimize: false });
 
 export const Character = model('Character', characterSchema) as unknown as Model<CharacterDoc>;
 
-/** Catalog-derived stat block for a fresh character (identity/owner set by the caller). */
-export function defaultCharacterStats(): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'skills' | 'currencies'> {
+/** Catalog-derived stat block for a fresh character (identity/owner set by the caller).
+ *  Attributes start at the racial base with an untouched allocation — the wizard's
+ *  point-buy step (and any later race change) recomputes them via the service. */
+export function defaultCharacterStats(race: RaceId | null = null): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'attributeAllocation' | 'traits' | 'skills' | 'currencies'> {
    return {
       resources: Object.fromEntries(
          Object.entries(RESOURCES).map(([key, def]) => [key, { current: def.defaultMax, max: def.defaultMax }]),
       ) as Record<ResourceKey, ResourceState>,
       actionPoints: { current: 0, totalEarned: 0 },
-      attributes: Object.fromEntries(
-         Object.entries(ATTRIBUTES).map(([key, def]) => [key, def.default]),
-      ) as Record<AttributeKey, number>,
+      attributes: effectiveAttributes(race, emptyAllocation()),
+      attributeAllocation: emptyAllocation(),
+      traits: Object.fromEntries(
+         Object.keys(TRAITS).map((key) => [key, 0]),
+      ) as Record<TraitKey, number>,
       skills: Object.fromEntries(
          Object.keys(SKILLS).map((key) => [key, { level: 1, progress: 0 }]),
       ) as Record<SkillKey, SkillState>,

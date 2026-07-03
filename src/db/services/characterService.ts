@@ -4,11 +4,15 @@ import { Character, defaultCharacterStats, type CharacterDoc, type CharacterIden
 import { activitySessionService } from './activitySessionService.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
+import { baseAttributes, effectiveAttributes, type AttributeAllocation } from '../../game/character/attributes.js';
+import { ATTRIBUTE_KEYS } from '../../game/data/attributes.js';
 import type { CurrencyKey } from '../../game/data/currencies.js';
+import type { TraitKey } from '../../game/data/traits.js';
 import type { RaceId } from '../../game/data/races.js';
 
 export type ResourceDeltas = Partial<Record<ResourceKey, number>>;
 export type CurrencyDeltas = Partial<Record<CurrencyKey, number>>;
+export type TraitDeltas = Partial<Record<TraitKey, number>>;
 
 // The identity fields a player may set/change (status/owner/location are managed
 // by the service, not the player).
@@ -16,10 +20,13 @@ export type EditableIdentity = Partial<Pick<CharacterIdentity, 'name' | 'epithet
 export type NewCharacterIdentity = EditableIdentity & { name: string; race?: RaceId | null };
 
 // Same atomic aggregation-pipeline pattern as before (D6): every write clamps
-// server-side in one round trip.
+// server-side in one round trip. Mongoose 9 only accepts a pipeline array when
+// the call opts in — every consumer must pass PIPELINE in its options.
 function setStage(fields: Record<string, unknown>): PipelineStage[] {
    return [{ $set: fields }];
 }
+
+const PIPELINE = { updatePipeline: true } as const;
 
 export const characterService = {
    async get(characterId: string): Promise<CharacterDoc | null> {
@@ -50,22 +57,11 @@ export const characterService = {
             avatarUrl: identity.avatarUrl ?? '',
          },
          locationId: STARTING_LOCATION,
-         ...defaultCharacterStats(),
+         ...defaultCharacterStats(identity.race ?? null),
       };
 
       const created = await Character.create(character);
       return created.toObject();
-   },
-
-   /** The auto-created first character handed to every new account (draft, unnamed-ish). */
-   async createStarter(ownerId: string, name: string): Promise<CharacterDoc> {
-      return this.create(ownerId, { name });
-   },
-
-   /** Deletes a character outright. Currently only used to discard a starter
-    *  that lost the first-contact race (see accountService.getOrCreate). */
-   async remove(characterId: string): Promise<void> {
-      await Character.deleteOne({ _id: characterId });
    },
 
    /** Updates editable identity fields. Callers gate with `canEdit` first. */
@@ -80,12 +76,46 @@ export const characterService = {
       if (Object.keys(set).length === 0)
          return this.get(characterId);
 
-      return Character.findOneAndUpdate({ _id: characterId }, { $set: set }, { new: true }).lean<CharacterDoc>();
+      return Character.findOneAndUpdate({ _id: characterId }, { $set: set }, { returnDocument: 'after' }).lean<CharacterDoc>();
    },
 
-   /** Sets the character's race (a separate step from the identity modal — modals can't host a select). */
+   /** Sets the character's race and rebases effective attributes on the new
+    *  racial base in the same atomic write (allocation is preserved — the
+    *  pipeline reads it from the doc itself). */
    async setRace(characterId: string, race: RaceId): Promise<void> {
-      await Character.updateOne({ _id: characterId }, { $set: { 'identity.race': race } });
+      const base = baseAttributes(race);
+      const fields: Record<string, unknown> = { 'identity.race': race };
+
+      for (const key of ATTRIBUTE_KEYS)
+         fields[`attributes.${key}`] = { $add: [base[key], { $ifNull: [`$attributeAllocation.${key}`, 0] }] };
+
+      await Character.updateOne({ _id: characterId }, setStage(fields), PIPELINE);
+   },
+
+   /** Persists a creation point-buy state (validated by the caller via
+    *  game/character/attributes.ts) and the effective attributes it implies. */
+   async setAttributeAllocation(characterId: string, race: RaceId | null, allocation: AttributeAllocation): Promise<void> {
+      await Character.updateOne(
+         { _id: characterId },
+         { $set: { attributeAllocation: allocation, attributes: effectiveAttributes(race, allocation) } },
+      );
+   },
+
+   /** Adds signed deed-trait deltas, clamping each to >= 0 atomically. */
+   async applyTraitDeltas(characterId: string, deltas: TraitDeltas): Promise<void> {
+      const fields: Record<string, unknown> = {};
+
+      for (const [key, delta] of Object.entries(deltas)) {
+         if (!delta)
+            continue;
+
+         fields[`traits.${key}`] = { $max: [0, { $add: [{ $ifNull: [`$traits.${key}`, 0] }, delta] }] };
+      }
+
+      if (Object.keys(fields).length === 0)
+         return;
+
+      await Character.updateOne({ _id: characterId }, setStage(fields), PIPELINE);
    },
 
    // The three status transitions are guarded on the CURRENT status (not just
@@ -136,7 +166,7 @@ export const characterService = {
       if (Object.keys(fields).length === 0)
          return this.get(characterId);
 
-      return Character.findOneAndUpdate({ _id: characterId }, setStage(fields), { new: true }).lean<CharacterDoc>();
+      return Character.findOneAndUpdate({ _id: characterId }, setStage(fields), { returnDocument: 'after', ...PIPELINE }).lean<CharacterDoc>();
    },
 
    /** Adds signed currency deltas, clamping each to >= 0 atomically. */
@@ -153,7 +183,7 @@ export const characterService = {
       if (Object.keys(fields).length === 0)
          return this.get(characterId);
 
-      return Character.findOneAndUpdate({ _id: characterId }, setStage(fields), { new: true }).lean<CharacterDoc>();
+      return Character.findOneAndUpdate({ _id: characterId }, setStage(fields), { returnDocument: 'after', ...PIPELINE }).lean<CharacterDoc>();
    },
 
    /**
@@ -184,7 +214,7 @@ export const characterService = {
    async regenAll(excludeIds: string[] = []): Promise<number> {
       const fields = regenFields('full');
       const filter = excludeIds.length > 0 ? { _id: { $nin: excludeIds } } : {};
-      const result = await Character.updateMany(filter, setStage(fields));
+      const result = await Character.updateMany(filter, setStage(fields), PIPELINE);
       return result.modifiedCount;
    },
 
@@ -196,7 +226,7 @@ export const characterService = {
       if (ids.length === 0)
          return 0;
 
-      const result = await Character.updateMany({ _id: { $in: ids } }, setStage(regenFields('busy')));
+      const result = await Character.updateMany({ _id: { $in: ids } }, setStage(regenFields('busy')), PIPELINE);
       return result.modifiedCount;
    },
 
@@ -205,7 +235,7 @@ export const characterService = {
     *  in-memory lock releases, but a durable session may still be running. */
    async regen(characterId: string): Promise<void> {
       const session = await activitySessionService.getActiveForParticipant(characterId);
-      await Character.updateOne({ _id: characterId }, setStage(regenFields(session ? 'busy' : 'full')));
+      await Character.updateOne({ _id: characterId }, setStage(regenFields(session ? 'busy' : 'full')), PIPELINE);
    },
 };
 

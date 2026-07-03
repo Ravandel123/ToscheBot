@@ -10,6 +10,7 @@ import { resolveGuildChannel } from '../../../lib/discord.js';
 import { buildIdentityModal } from '../../components/_characterModals.js';
 import { buildCharacterPanel } from '../../components/_characterPanel.js';
 import { buildDecreeButtons, buildDecreeEmbed } from '../../components/_characterDecree.js';
+import { buildCharacterSheet } from './_characterSheet.js';
 import type { ApprovalStatus, CharacterDoc } from '../../../db/models/character.js';
 import type { ToscheClient } from '../../../client.js';
 
@@ -29,6 +30,14 @@ export default {
       .setDescription('Create and manage your characters.')
       .addSubcommand((sub) => sub.setName('create').setDescription('Create a character — opens the creation panel.'))
       .addSubcommand((sub) => sub.setName('edit').setDescription('Open the panel to edit your active character (race, details, submit).'))
+      .addSubcommand((sub) =>
+         sub
+            .setName('view')
+            .setDescription("Show a player's active character sheet.")
+            .addUserOption((option) =>
+               option.setName('user').setDescription('Whose character to show (defaults to you).'),
+            ),
+      )
       .addSubcommand((sub) =>
          sub
             .setName('race')
@@ -52,6 +61,7 @@ export default {
       switch (interaction.options.getSubcommand()) {
          case 'create': return createCharacter(interaction);
          case 'edit': return editCharacter(interaction);
+         case 'view': return viewCharacter(interaction);
          case 'race': return setRace(interaction);
          case 'submit': return submitCharacter(interaction);
          case 'list': return listCharacters(interaction);
@@ -88,6 +98,28 @@ async function createCharacter(interaction: ChatInputCommandInteraction): Promis
    // Name is required up front (the schema needs it); the rest of creation —
    // race, submit — happens on the panel the modal-submit lands you on.
    await interaction.showModal(buildIdentityModal({ customId: 'character:create', title: 'Create a character' }));
+}
+
+/** The public character sheet (pre-D27 `/profile`). Viewing yourself onboards
+ *  you; viewing someone else is a pure read (no documents created for them). */
+async function viewCharacter(interaction: ChatInputCommandInteraction): Promise<void> {
+   const target = interaction.options.getUser('user') ?? interaction.user;
+
+   if (target.bot) {
+      await interaction.reply('Machines do not enlist. They serve, yes-yes.');
+      return;
+   }
+
+   const character = target.id === interaction.user.id
+      ? await accountService.getActiveCharacter(target.id, target.displayName)
+      : await accountService.peekActiveCharacter(target.id);
+
+   if (!character) {
+      await interaction.reply(`${target.displayName} has no active character.`);
+      return;
+   }
+
+   await interaction.reply({ embeds: [buildCharacterSheet(character)] });
 }
 
 async function editCharacter(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -132,7 +164,7 @@ async function submitCharacter(interaction: ChatInputCommandInteraction): Promis
    const check = canSubmit(character);
    if (!check.ok) {
       const reason = check.reason === 'incomplete'
-         ? 'Give it at least a name (2+ characters) and a race (`/character race`) before submitting.'
+         ? 'Finish every required step first — name, race, gender and attributes (`/character edit`).'
          : notEditableMessage(character.approvalStatus);
       await interaction.reply({ content: reason, ...ephemeral });
       return;

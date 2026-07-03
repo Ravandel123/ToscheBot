@@ -145,7 +145,7 @@ match these.
 | D11 | **Production runs TypeScript directly via tsx** (`npm run start`); no build step on the host, no `dist/` in git. Type checking (`npm run build`) and lint are a local pre-deploy gate. | Sparkedhost has no build pipeline (host staff confirmed TS runners are fine); dev/prod use the identical runner, eliminating stale-build bugs. Compiling to `dist/` remains available if hosting ever changes. |
 | D12 | **Account ↔ Character split** (built in 6A): `Account` = one Discord user (settings, owns characters, `activeCharacterId`); `Character` = the game entity (identity, resources, action points, location, stats), player-owned or **NPC** (`ownerId: null`). **Currencies and Smackdown ELO live per character**, not per account. | A user controls one character at a time and can switch; NPCs are characters with no owner. Replaced the old single `Profile` (keyed by user id) with `Character` (uuid-keyed) + a thin `Account`. |
 | D13 | **Characters have an approval lifecycle**: `draft → pending → approved/rejected`. An unapproved character exists (the account is real) but **cannot take character-actions** (serious combat, travel...). Approval requests go to an **owner-only thematic channel** (`settings.channels.imperialDecrees`), not DMs. | Stops low-effort names ("abc"); the owner vets that each character is a real, fitting persona before it can act/appear on ladders. |
-| D14 | **`attributes` and `skills` are placeholders pending a dedicated RPG-system design.** Do NOT build stat/combat *mechanics* (point-buy at creation, max-HP-from-attributes recompute, damage formulas) until the ruleset is designed with the owner. The Account/Character *structure* is fine to build; the *numbers/rules* are not. | Owner's explicit call (2026-06-15): "we can't program the system before the RPG system is ready." Structure ≠ mechanics. |
+| D14 | **`attributes` and `skills` are placeholders pending a dedicated RPG-system design.** Do NOT build stat/combat *mechanics* (max-HP-from-attributes recompute, damage formulas, progression) until the ruleset is designed with the owner. The Account/Character *structure* is fine to build; the *numbers/rules* are not. **Narrowed by D25/D26 (owner, 2026-07-03):** the attribute set, racial bases, the creation point-buy and the d100 check engine are now real; combat math, derived maxes, skill growth and balance numbers still wait for `RPG/`. | Owner's explicit call (2026-06-15): "we can't program the system before the RPG system is ready." Structure ≠ mechanics. |
 | D15 | **Action Points: no cap.** They accumulate indefinitely via an hourly `$inc` (a week away → a week's worth to spend in a day; no forced daily login — this is for fun). Serious actions (later) cost AP via a single atomic `spendActionPoints` (clamp `>= 0`). | Owner prefers no cap for now; revisit only if hoarding becomes a balance problem (cap is then a one-line clamp in the regen pipeline). |
 | D16 | **Smackdown has two tiers.** `/smackdown sparring` = the existing for-fun brawl: **no approval, any active character, pure-random**. It keeps Elo *for now* but Elo will be **removed from sparring later**. A future serious fight (`/smackdown duel`) requires an **approved** character, uses HP/attributes, and **costs AP**. | Players enjoy the silly sparring; keep it. Real stakes belong to the approval-gated, RPG-driven fight. |
 | D17 | **Long, interactive, multi-step activities are durable** (turn-based duel, multi-room exploration…). An `ActivitySession` doc (Mongo) holds the per-step `state` AND is the cross-restart "this character is busy" lock; components are **stateless** (keyed by `sessionId`); each step is an **optimistic, step-guarded** atomic update (`{_id, step:N} → $inc step`), making it idempotent against double-clicks and crash-replay; idle sessions are reaped by a **TTL index** on `expiresAt`. **AP policy (default, tunable):** charged at start; clean cancel refunds; **timeout/abandon forfeits** (so a TTL delete needs no side effect). Short, auto-resolved actions stay atomic-commit (D5 rule 1 unchanged for them). | A restart/crash/abandon mid-activity must not corrupt state or strand a player. Persisting **per step** (not just at the end) makes activities resumable + crash-safe, reusing the stateless-component + DB-state pattern already proven by the character panel / comic browser. Seam built (`game/activity/`, `models/activitySession.ts`, `activitySessionService.ts`); first consumer is the serious duel / 6C travel. |
@@ -156,6 +156,9 @@ match these.
 | D22 | **Durable activities dispatch through a handler registry.** `ActivitySession.type → ActivityHandler { render(session), onAction(…) }` (`commands/components/_activities/registry.ts`, fail-fast on duplicates); the generic `activity` component namespace routes `activity:<action>:<sessionId>` — the router checks session liveness (incl. lazy expiry) and that the clicker **owns** a participant character; handlers own the step logic. **Busy = has an active session**: the switch guard treats it like a lock (cross-restart), and a gated command run while busy **re-enters** (re-renders the current step) instead of erroring. Reference consumer: `obstacle` (pure-random placeholder à la sparring, D16). | D17 built the durability layer but nothing consumed it; the registry + router make "add an interactive activity" = one handler file + one registry line, with double-click idempotency, crash recovery (terminal outcome derived from state + a finalize re-entry) and restart-surviving buttons solved once, here. |
 | D23 | **Regen splits on busyness: vitals pause, AP always accrues.** Resources carry `regenWhileBusy` (health/stamina: `false`); the hourly job writes three bulk-first groups — free characters (full tick), session-busy (AP-only tick; paused vitals are **skipped, not deferred**), in-memory-locked (deferred single tick that decides full-vs-busy when it lands). The lock-free AP `$inc` on busy characters is safe because AP is only ever written via atomic deltas. | You don't heal mid-climb (and pausing regen keeps future in-activity damage meaningful), but AP is "time owned" (D15) and must not punish being mid-adventure. Skipping (not deferring) vitals keeps TTL-reaped sessions side-effect-free (D17). |
 | D24 | **Gameplay is ephemeral; noteworthy outcomes go to the public chronicle.** Activity steps and travel replies are ephemeral (only the actor sees their journey); results worth an audience (arrivals, cleared/failed obstacles, future duels) are posted as short in-character lines to `settings.channels.chronicle` via `game/chronicle.ts` — fire-and-forget, never failing the action, never pinging. | Keeps game channels unspammed while giving the server a shared "what's happening in the game" feed (the owner's requested server log); ephemeral play still survives restarts because components re-resolve all state from the DB, never from the message. |
+| D25 | **Eight attributes with hardcoded racial bases + a creation point-buy.** The catalog is the owner's set (locks `RPG/`'s P5, minus Luck): `strength, endurance, agility, dexterity, charisma, willpower, perception, intelligence`. Racial base = `ATTRIBUTE_BASE` (25) shifted by the race's **net-zero ±5 modifiers** (`races.ts`, from `RPG/Ruleset.md` §4 with Toughness→Endurance, Fellowship→Charisma). A **required wizard step** distributes **50 points, max +20 on one attribute** (`game/character/attributes.ts` owns the pure math). Stored `attributes` = base + allocation; the allocation is kept as its own field so a mid-wizard race switch **rebases** instead of corrupting the spend (`setRace` recomputes atomically in-pipeline). | Owner's explicit call (2026-07-03), superseding the point-buy half of D14; aligns the bot with the `RPG/` design instead of waiting for it. Values are 🟡 balance placeholders — tuning is a catalog edit, and the pre-launch DB makes a clean cut free (`RPG/CLAUDE.md` §4). |
+| D26 | **Travel encounters are multi-approach challenges resolved by d100 roll-under checks.** `game/checks.ts` is the core test engine (the R1 shape from `RPG/`: target %, roll ≤ target, Success Levels, difficulty modifier, per-race **affinity multipliers** — a lutren swims at ×1.5; the skill term is a 🟡 flat bonus until P-skilltree locks the tree math). An `activity` encounter carries **options**: each a check with `success`/`failure` outcomes (`proceed` = arrive, `turn-back` = stay, `retry` = setback toward `maxSetbacks`) or a check-free choice; outcomes may add **deed traits** (`game/data/traits.ts` — the `RPG/` P-traits direction: ignore a drowning stranger → `cowardice`). The generic **`challenge`** handler replaced the single-button `obstacle`; per-option targets are computed at session start and stored in state, so the stateless panel shows honest % odds on every repaint. | The owner wants WHFRP-style choices — several solutions per obstacle, pick the one your build is good at — which is exactly `RPG/`'s multi-approach model, designed once, here. Adding an encounter = one catalog entry (test-validated), zero new handlers. |
+| D27 | **Account-level settings live on `Account`; `/profile` is the account surface, `/character view` is the character sheet.** `Account.settings`: `activeGame` (opt-out from future random/ambient game events; default **true**) and `dmNotifications` (already consumed by the approval-verdict DM). `/profile` shows an ephemeral panel with toggle buttons (`profile` component namespace, rendered from a `SETTING_META` map — adding a setting = model field + one map entry); the old `/profile` character embed moved to **`/character view [user]`** and now shows attributes + earned traits. | The account is the *player*, the character is the *piece* — settings must survive switches/rerolls (D12 finally has user-level state). The placeholder flags were chosen to have real consumers (ambient-events backlog; the DM flow) instead of dead toggles. |
 
 ## Target architecture
 
@@ -175,7 +178,7 @@ src/
     components/*.ts           one file = one button/select/modal handler ({ namespace, handle }),
                               routed by customId namespace (_-prefixed files = colocated builders)
     components/_activities/   activity handlers (D22): registry.ts (type → handler) + one file
-                              per ActivitySession type (obstacle…); dispatched by components/activity.ts
+                              per ActivitySession type (challenge…); dispatched by components/activity.ts
   events/*.ts           one file = one Discord event: { name, once?, execute }
   jobs/*.ts             one file = one cron job: { name, schedule, run }
   db/
@@ -184,14 +187,16 @@ src/
     services/*.ts       all DB access goes through services (accountService, characterService,
                         smackdownService, activitySessionService)
   game/                 server-RPG domain logic, Discord-agnostic where possible
+    checks.ts           the d100 roll-under test engine (target/SL/race affinity — D26)
     character/          pure rules + identity helpers (canCharacterAct/canEdit/canSubmit, limits)
                         + creationSteps.ts (the wizard step catalog — D20)
+                        + attributes.ts (racial bases + creation point-buy math — D25)
     combat/             combat engine (engine/stats/elo pure + testable, flavor data)
     activity/           durable-activity pure logic: session timing helpers (D17 seam) +
-                        per-activity step reducers (obstacle.ts — D22)
+                        per-activity step reducers (challenge.ts — D22/D26)
     world/              travel rules over the location graph + encounter rolling (D21)
     chronicle.ts        Discord adapter (marked): posts noteworthy actions to the public log (D24)
-    data/               static content catalogs (locations, encounters, fish, items...) — see D10
+    data/               static content catalogs (locations, encounters, traits, fish...) — see D10
     ...
   lexicon.ts            GENERAL flavour vocabulary (adjectives, adverbs, nouns, terms…) — reused
                         by fun, the RPG and real commands; NOT fun-only (ported from dataSpeech.js).
@@ -262,12 +267,13 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
   throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
   must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Three consumers
+  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Four consumers
   so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
-  D20 step catalog, race/gender selects, Edit-details modal, Submit — plus the owner's
-  approval buttons/modal), `comic` (the `h!comic` browser), and `activity` (the generic
-  durable-activity router — D22: resolves the session by id, verifies the clicker owns a
-  participant, dispatches to the `_activities/` registry by session type). All are fully
+  D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details modal,
+  Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
+  `activity` (the generic durable-activity router — D22: resolves the session by id, verifies
+  the clicker owns a participant, dispatches to the `_activities/` registry by session type),
+  and `profile` (the D27 account-settings toggles). All are fully
   **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
   `interaction.update()` that panel (`ModalSubmitInteraction.isFromMessage()`).
@@ -407,17 +413,18 @@ multi-room exploration) must NOT keep that state only in memory. Instead:
 
 **Consumers dispatch through the D22 registry** (`commands/components/_activities/`): a
 handler per session type owns `render(session)` (current step from state — also used for
-re-entry and stale-click repaints) and `onAction(...)`. The **`obstacle`** handler is the
-reference implementation, including the **crash-safe completion choreography**: win the
-final `advance` (the step guard doubles as a completion mutex) → run the idempotent side
-effects (setLocation, chronicle) → delete the session; if the process dies in between,
-`render` derives the terminal outcome from state and shows a "Press on" finalize button
-that re-runs the idempotent tail. Activity *step logic* stays pure in `game/activity/`
-(e.g. `obstacle.ts` reducer) so it's testable without Discord.
+re-entry and stale-click repaints) and `onAction(...)`. The **`challenge`** handler (D26,
+successor of the single-button `obstacle`) is the reference implementation, including the
+**crash-safe completion choreography**: win the final `advance` (the step guard doubles as
+a completion mutex) → run the idempotent side effects (setLocation, chronicle) → delete the
+session; if the process dies in between, `render` derives the terminal outcome from state
+and shows a "Press on" finalize button that re-runs the idempotent tail. Activity *step
+logic* stays pure in `game/activity/` (e.g. the `challenge.ts` reducer) so it's testable
+without Discord.
 
-Seam + first consumer built; **real mechanics still wait for the ruleset** (D14) — the
-obstacle rolls pure-random like sparring (D16). Next consumers: the serious `/smackdown
-duel`, richer 6C encounters.
+Challenges roll real d100 checks against attributes/skills (D25/D26); balance numbers and
+richer stakes (damage, loot) still wait for the ruleset (D14). Next consumers: the serious
+`/smackdown duel`, richer 6C encounters.
 
 Core primitive (Phase 2, re-homed onto characters in 6A): `characterService.applyResourceDeltas(characterId, deltas)`
 — aggregation-pipeline update that adjusts resources and clamps to `[0, max]` server-side.
@@ -453,11 +460,11 @@ methods (`setStage` in `characterService`).
 - Only the two regenerating vitals (`health`, `stamina`) ship so far. Meters that *rise*
   over time (hunger, stress, etc. from the old schema) have inverted tick semantics and
   get their own job later; add them to `resources.ts` when built.
-- **`attributes` and `skills` are intentionally modeled ahead of any consumer** (owner's
-  decision, 2026-06-15): they exist on `Character` as the visible skeleton of the target
-  game even though nothing reads them yet except the placeholder combat formula (`/profile`
-  shows only AP/vitals/currencies). Do NOT "tidy them away" as unused — the Phase 7 ruleset
-  will consume them.
+- **`attributes` are real since D25** (racial base + creation point-buy, consumed by the
+  D26 check engine and shown on `/character view`); **`skills` remain modeled ahead of
+  their consumer** (owner's decision, 2026-06-15) — only the placeholder flat bonus in
+  `checks.ts` and the combat formula read them. Do NOT "tidy them away" as unused — the
+  Phase 7 ruleset (P-skilltree) will consume them properly.
 - Free tier M0: 512 MB storage, shared cluster. Avoid per-message writes, avoid
   unbounded arrays (the old `gFishing.fish[]` grew without limit — cap or aggregate).
 - The old schema in `OldBot/Tosche/modules/schematicsGuild.js` remains the **reference**
@@ -569,17 +576,21 @@ Several overlap the `RPG/` design project — coordinate there instead of decidi
 
 **Current state (2026-07-03):** the core runtime, fun/admin command layer, AI persona and
 moderation are live; the server-RPG is mid-build — the Account/Character *structure* exists
-(6A/6B) but *mechanics* are blocked on the Phase 7 ruleset (D14). A full architecture review
-hardened the seams (D18 lock keying + drain-before-release, status-guarded approval
-transitions, side-effect-free `/profile` lookups, word-boundary moderation matching).
-The **game foundations landed (D20–D24)**: the step-driven creation wizard, the location
-graph + `/travel` (first `canCharacterAct`/AP consumer), the travel-encounter seam, the
-activity-handler registry with the `obstacle` reference activity (first D17 consumer),
-busy-aware regen, and the public chronicle channel.
-**187 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
+(6A/6B) and the **first real mechanics landed (D25–D27)**, everything else waits on the
+Phase 7 ruleset (D14, as narrowed). A full architecture review hardened the seams (D18 lock
+keying + drain-before-release, status-guarded approval transitions, side-effect-free
+lookups, word-boundary moderation matching). The **game foundations landed (D20–D24)**:
+the step-driven creation wizard, the location graph + `/travel` (first
+`canCharacterAct`/AP consumer), the travel-encounter seam, the activity-handler registry,
+busy-aware regen, and the public chronicle channel. On top of them, **D25–D27**: the
+8-attribute catalog with racial bases + the wizard's 50-point point-buy step, the d100
+check engine, multi-approach travel challenges with deed traits (the `challenge` activity
+replaced `obstacle`), and account settings (`/profile` = account panel + toggles;
+character sheet = `/character view`).
+**214 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
 live; the bot has not yet been run end-to-end against a live Atlas cluster (needs `.env` +
-`npm run deploy` — required again: `/travel` is a new slash command). See `RPG_SYSTEM.md`
-for the concrete game model and what is still placeholder.
+`npm run deploy` — required again: `/profile` and `/character` definitions changed). See
+`RPG_SYSTEM.md` for the concrete game model and what is still placeholder.
 
 **What works today:**
 
@@ -592,10 +603,13 @@ for the concrete game model and what is still placeholder.
   (`ctof`, `ftoc`, `cmtoimperial`, `kgtoimperial`, `bmi`, `bmiforheight`); *utility:* `ping`,
   `roll`, `avatar`, `timestamp`, `help`/`commands` (auto-generated command list); *admin (ownerOnly):* `clear`,
   `directmessage`/`dm`, `messagechannel`/`mc`.
-- **Slash (`/`)** — `character` (create/edit/race/submit/list/switch via the step-driven
-  creation wizard + owner approval), `profile`, `smackdown sparring` (round-by-round in
-  `#smackdown-spire`, commits Elo only), `travel` (location graph + encounters; approved
-  characters only), `leaderboard`, `ping`.
+- **Slash (`/`)** — `character` (create/edit/**view**/race/submit/list/switch via the
+  step-driven creation wizard — details, race, gender, **attribute point-buy** — + owner
+  approval; `view` is the public character sheet with attributes + traits), `profile` (the
+  account panel: active character, settings toggles — D27), `smackdown sparring`
+  (round-by-round in `#smackdown-spire`, commits Elo only), `travel` (location graph +
+  encounters: flavor lines or **multi-approach d100 challenges** — D26; approved characters
+  only), `leaderboard`, `ping`.
 - **Events** — `messageCreate` (banned-word check → `h!` routing → ambient AI),
   `interactionCreate` (slash + component routing), `clientReady` (starts jobs),
   `messageDelete`/`messageUpdate` (edit/delete log to `#espionage` — the delete log adds
@@ -604,9 +618,10 @@ for the concrete game model and what is still placeholder.
   the **exact match + its location** (and flag punctuation-collapsed matches as possible false
   positives), so a deletion is never a mystery.
 - **Jobs** — `resource-regen` (hourly, lock- and session-aware bulk-first per D7/D23).
-- **Component handlers** — `character` (creation wizard + approval petition), `comic`
-  (browser), `activity` (generic durable-activity router + `_activities/` registry; first
-  activity: `obstacle`).
+- **Component handlers** — `character` (creation wizard incl. attribute point-buy +
+  approval petition), `comic` (browser), `activity` (generic durable-activity router +
+  `_activities/` registry; first activity: `challenge`), `profile` (account-settings
+  toggles).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
   (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
   `game/chronicle.ts` (public game log — D24).
@@ -640,6 +655,11 @@ for the concrete game model and what is still placeholder.
             AP-spend consumer**) + encounter seam (flavor/activity); activity-handler registry +
             generic `activity` router + `obstacle` (**first D17 consumer**, pure-random per D16);
             session-aware switch guard; busy-split regen (D23); chronicle channel (D24).
+      - [x] **6D — first real mechanics** (D25–D27, owner-requested 2026-07-03): 8-attribute
+            catalog + racial bases + wizard point-buy step (50 pts, max +20); `game/checks.ts`
+            d100 roll-under engine; multi-approach travel **challenges** (options = checks,
+            race affinities, deed **traits**; replaced `obstacle`); account settings +
+            `/profile`↔`/character view` split. Numbers stay 🟡 until `RPG/` locks balance.
       - [ ] **6C** — NPC seeding + NPC-movement cron along the graph (NPC = `Character` with
             `ownerId: null`); more locations + per-location activity tables (see backlog).
 - [ ] **Phase 7 — RPG ruleset** — being **designed in `RPG/`** (d100 roll-under, roles +

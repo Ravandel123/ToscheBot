@@ -6,33 +6,34 @@ export interface CombatStats {
    attackBonus: number;
    defenseBonus: number;
    strengthBonus: number;
-   toughnessBonus: number;
+   enduranceBonus: number;
 }
 
-/** Attribute → bonus, as in the old bot: every 10 points = +1. */
+/** Attribute → bonus: the tens digit (Strength 47 → 4), as in RPG/'s derived stats. */
 export function attributeBonus(value: number): number {
    return Math.floor(value / 10);
 }
 
 /**
  * Derives combat stats from a character's attributes/skills. PLACEHOLDER FORMULA
- * (D14): the real numbers wait on the RPG ruleset. At base stats everyone is
- * identical, so sparring is effectively random — that's expected for now. The
- * maxHp shape is ported from the old `getMaxHp` (str*5 + wp*5 + tou*10 → 20).
+ * (D14): the real numbers wait on the RPG ruleset (its Wounds/soak math). Since
+ * D25 attributes DO differ per race + point-buy, so sparring is no longer fully
+ * random — but the shape is still throwaway. The maxHp shape is ported from the
+ * old `getMaxHp` (str*5 + wp*5 + endurance*10).
  */
 export function combatStatsFromCharacter(character: CharacterDoc): CombatStats {
    const str = attributeBonus(character.attributes.strength);
-   const tou = attributeBonus(character.attributes.toughness);
+   const end = attributeBonus(character.attributes.endurance);
    const wp = attributeBonus(character.attributes.willpower);
    const agi = attributeBonus(character.attributes.agility);
    const weaponSkill = character.skills.melee.level + character.skills.unarmed.level;
 
    return {
       name: character.identity.name,
-      maxHp: str * 5 + wp * 5 + tou * 10,
+      maxHp: str * 5 + wp * 5 + end * 10,
       attackBonus: weaponSkill + str,
-      defenseBonus: agi + tou,
+      defenseBonus: agi + end,
       strengthBonus: str,
-      toughnessBonus: tou,
+      enduranceBonus: end,
    };
 }

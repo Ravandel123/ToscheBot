@@ -28,7 +28,7 @@ const MAX_ROUNDS = 25;
  * Auto-resolves a sparring match. Pure except for randomness (mock `Math.random`
  * to test deterministically). Each round: the attacker rolls d20 + attackBonus
  * vs the defender's d20 + defenseBonus; on a hit, damage scales with strength,
- * how cleanly the attack landed, and the defender's toughness.
+ * how cleanly the attack landed, and the defender's endurance.
  */
 export function simulateFight(a: Fighter, b: Fighter): FightResult {
    const hp: Record<string, number> = { [a.id]: a.stats.maxHp, [b.id]: b.stats.maxHp };
@@ -45,7 +45,7 @@ export function simulateFight(a: Fighter, b: Fighter): FightResult {
 
       if (attackRoll >= defenseRoll) {
          const cleanliness = Math.floor((attackRoll - defenseRoll) / 5);
-         damage = Math.max(1, attacker.stats.strengthBonus + randomInt(1, 4) + cleanliness - defender.stats.toughnessBonus);
+         damage = Math.max(1, attacker.stats.strengthBonus + randomInt(1, 4) + cleanliness - defender.stats.enduranceBonus);
          hp[defender.id] -= damage;
       }
 

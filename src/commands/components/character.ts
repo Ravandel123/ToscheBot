@@ -11,6 +11,8 @@ import { characterService } from '../../db/services/characterService.js';
 import { accountService } from '../../db/services/accountService.js';
 import { canEdit, canSubmit, MAX_CHARACTERS_PER_ACCOUNT } from '../../game/character/rules.js';
 import { creationStep, firstIncompleteStep, type CreationStep } from '../../game/character/creationSteps.js';
+import { adjustAllocation, allocationFrom, effectiveAttributes, emptyAllocation, type AttributeAllocation } from '../../game/character/attributes.js';
+import { ATTRIBUTES, type AttributeKey } from '../../game/data/attributes.js';
 import { resolveGuildChannel } from '../../lib/discord.js';
 import { readIdentityModal, buildIdentityModal, buildRejectReasonModal } from './_characterModals.js';
 import { buildDecidedDecree, buildDecreeButtons, buildDecreeEmbed } from './_characterDecree.js';
@@ -43,6 +45,8 @@ export default {
          if (action === 'panel-overview') return handlePanelOverview(interaction, rest[0]);
          if (action === 'panel-edit') return handlePanelEdit(interaction, rest[0]);
          if (action === 'panel-submit') return handlePanelSubmit(interaction, rest[0]);
+         if (action === 'panel-attr') return handleAttributeAdjust(interaction, rest[0], rest[1], rest[2]);
+         if (action === 'panel-attr-reset') return handleAttributeReset(interaction, rest[0], rest[1]);
          if (action === 'approve') return handleApprove(client, interaction, rest[0]);
          if (action === 'reject') return handleRejectButton(interaction, rest[0]);
          return;
@@ -52,6 +56,7 @@ export default {
          if (action === 'panel-step') return handlePanelStep(interaction, rest[0]);
          if (action === 'panel-race') return handlePanelRace(interaction, rest[0]);
          if (action === 'panel-gender') return handlePanelGender(interaction, rest[0]);
+         if (action === 'panel-attr-pick') return handleAttributePick(interaction, rest[0]);
       }
    },
 } satisfies ComponentHandler;
@@ -155,6 +160,68 @@ async function handlePanelGender(interaction: StringSelectMenuInteraction, chara
    await interaction.update(buildCharacterPanel({ ...character, identity: { ...character.identity, gender } }));
 }
 
+// --- Attribute point-buy step (D25) ------------------------------------------
+
+/** Focusing an attribute just repaints the step view — the ± buttons carry the
+ *  focused key in their customIds, so no cursor is stored anywhere. */
+async function handleAttributePick(interaction: StringSelectMenuInteraction, characterId: string): Promise<void> {
+   const character = await ownedEditable(interaction, characterId);
+   if (!character)
+      return;
+
+   await updateAttributeStepView(interaction, character, interaction.values[0]);
+}
+
+async function handleAttributeAdjust(interaction: ButtonInteraction, characterId: string, key: string, rawDelta: string): Promise<void> {
+   const character = await ownedEditable(interaction, characterId);
+   if (!character)
+      return;
+
+   const delta = Number.parseInt(rawDelta, 10);
+   if (!(key in ATTRIBUTES) || Number.isNaN(delta)) {
+      await interaction.update(buildCharacterPanel(character));
+      return;
+   }
+
+   const allocation = adjustAllocation(allocationFrom(character.attributeAllocation), key as AttributeKey, delta);
+   await saveAllocation(interaction, character, allocation, key);
+}
+
+async function handleAttributeReset(interaction: ButtonInteraction, characterId: string, focus: string): Promise<void> {
+   const character = await ownedEditable(interaction, characterId);
+   if (!character)
+      return;
+
+   await saveAllocation(interaction, character, emptyAllocation(), focus);
+}
+
+async function saveAllocation(
+   interaction: ButtonInteraction,
+   character: CharacterDoc,
+   allocation: AttributeAllocation,
+   focus: string,
+): Promise<void> {
+   const race = character.identity.race;
+   await characterService.setAttributeAllocation(character._id, race, allocation);
+
+   const updated: CharacterDoc = { ...character, attributeAllocation: allocation, attributes: effectiveAttributes(race, allocation) };
+   await updateAttributeStepView(interaction, updated, focus);
+}
+
+async function updateAttributeStepView(
+   interaction: ButtonInteraction | StringSelectMenuInteraction,
+   character: CharacterDoc,
+   focus: string,
+): Promise<void> {
+   const step = creationStep('attributes');
+   if (!step) {
+      await interaction.update(buildCharacterPanel(character));
+      return;
+   }
+
+   await interaction.update(buildCharacterStepView(character, step, focus));
+}
+
 async function handlePanelEdit(interaction: ButtonInteraction, characterId: string): Promise<void> {
    const character = await ownedEditable(interaction, characterId);
    if (!character)
@@ -192,7 +259,7 @@ async function handlePanelSubmit(interaction: ButtonInteraction, characterId: st
    if (!check.ok) {
       await interaction.reply({
          content: check.reason === 'incomplete'
-            ? 'Give it a name (2+ characters) and a race before submitting.'
+            ? 'Finish every required step first — name, race, gender and attributes.'
             : "That character can't be submitted right now.",
          ...ephemeral,
       });
@@ -330,9 +397,13 @@ async function editDecreeMessage(interaction: ModalSubmitInteraction, messageId:
    }
 }
 
-/** DMs the petitioner with the verdict. Silently tolerates closed DMs. */
+/** DMs the petitioner with the verdict. Silently tolerates closed DMs and
+ *  respects the account's `dmNotifications` setting (D27). */
 async function notifyPlayer(client: ToscheClient, character: CharacterDoc, decision: 'approved' | 'rejected', reason?: string): Promise<void> {
    if (!character.ownerId)
+      return;
+
+   if (!(await accountService.getSettings(character.ownerId)).dmNotifications)
       return;
 
    const text = decision === 'approved'

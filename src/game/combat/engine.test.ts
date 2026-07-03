@@ -9,7 +9,7 @@ afterEach(() => {
 function fighter(id: string, overrides: Partial<CombatStats> = {}): Fighter {
    return {
       id,
-      stats: { name: id, maxHp: 20, attackBonus: 0, defenseBonus: 0, strengthBonus: 1, toughnessBonus: 1, ...overrides },
+      stats: { name: id, maxHp: 20, attackBonus: 0, defenseBonus: 0, strengthBonus: 1, enduranceBonus: 1, ...overrides },
    };
 }
 
@@ -25,8 +25,8 @@ describe('simulateFight', () => {
 
    it('lets a vastly stronger fighter win', () => {
       vi.spyOn(Math, 'random').mockReturnValue(0.5);
-      const strong = fighter('strong', { maxHp: 200, attackBonus: 100, defenseBonus: 100, strengthBonus: 50, toughnessBonus: 50 });
-      const weak = fighter('weak', { maxHp: 5, attackBonus: 0, defenseBonus: 0, strengthBonus: 0, toughnessBonus: 0 });
+      const strong = fighter('strong', { maxHp: 200, attackBonus: 100, defenseBonus: 100, strengthBonus: 50, enduranceBonus: 50 });
+      const weak = fighter('weak', { maxHp: 5, attackBonus: 0, defenseBonus: 0, strengthBonus: 0, enduranceBonus: 0 });
 
       expect(simulateFight(strong, weak).winnerId).toBe('strong');
    });

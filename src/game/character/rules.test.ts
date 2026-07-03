@@ -3,17 +3,23 @@ import { canCharacterAct, canEdit, canSubmit } from './rules.js';
 import { isIdentityComplete } from './identity.js';
 import type { CharacterDoc, CharacterIdentity } from '../../db/models/character.js';
 
+// A fully allocated point-buy (20+20+10 = CREATION_ATTRIBUTE_POINTS) so the
+// required 'attributes' creation step reads as complete by default.
+const FULL_ALLOCATION = { strength: 20, endurance: 20, agility: 10 };
+
 function character(overrides: {
    status?: CharacterDoc['approvalStatus'];
    hp?: number;
    ap?: number;
    identity?: Partial<CharacterIdentity>;
+   attributeAllocation?: Record<string, number>;
 } = {}): CharacterDoc {
    return {
       approvalStatus: overrides.status ?? 'approved',
       resources: { health: { current: overrides.hp ?? 20, max: 20 }, stamina: { current: 10, max: 10 } },
       actionPoints: { current: overrides.ap ?? 5, totalEarned: 5 },
-      identity: { name: 'Tosch', race: 'canid', epithet: '', gender: '', bio: '', ...overrides.identity },
+      identity: { name: 'Tosch', race: 'canid', epithet: '', gender: 'male', bio: '', ...overrides.identity },
+      attributeAllocation: overrides.attributeAllocation ?? FULL_ALLOCATION,
    } as unknown as CharacterDoc;
 }
 
@@ -76,5 +82,13 @@ describe('canSubmit', () => {
 
    it('blocks an incomplete draft', () => {
       expect(canSubmit(character({ status: 'draft', identity: { race: null } }))).toEqual({ ok: false, reason: 'incomplete' });
+   });
+
+   it('blocks a draft without a chosen gender', () => {
+      expect(canSubmit(character({ status: 'draft', identity: { gender: '' } }))).toEqual({ ok: false, reason: 'incomplete' });
+   });
+
+   it('blocks a draft with unspent attribute points (D25)', () => {
+      expect(canSubmit(character({ status: 'draft', attributeAllocation: { strength: 10 } }))).toEqual({ ok: false, reason: 'incomplete' });
    });
 });

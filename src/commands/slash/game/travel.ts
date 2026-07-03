@@ -8,7 +8,8 @@ import { displayName } from '../../../game/character/identity.js';
 import { LOCATIONS, locationName, type LocationId } from '../../../game/data/locations.js';
 import { TRAVEL_AP_COST, checkTravel, connectionsFrom, type TravelBlockReason } from '../../../game/world/travel.js';
 import { rollTravelEncounter } from '../../../game/world/encounters.js';
-import { initialObstacleState } from '../../../game/activity/obstacle.js';
+import { initialChallengeState } from '../../../game/activity/challenge.js';
+import { checkTarget } from '../../../game/checks.js';
 import { postChronicle } from '../../../game/chronicle.js';
 import { randomItem } from '../../../lib/random.js';
 import { activityHandler } from '../../components/_activities/registry.js';
@@ -152,10 +153,17 @@ async function startEncounterActivity(
 ): Promise<boolean> {
    // Travel's AP charge is the session's start cost (D17: charged at start;
    // clean cancel refunds; timeout forfeits) — no extra charge here.
-   if (encounter.activityType !== 'obstacle')
+   if (encounter.activityType !== 'challenge')
       return false;
 
-   const session = await activitySessionService.create('obstacle', [character._id], { ...initialObstacleState(encounterId, from, to) });
+   // Per-option d100 targets are computed HERE, from the live character, and
+   // stored in the session state — the stateless panel then shows honest %
+   // odds on every repaint without re-deriving stats (D26).
+   const optionTargets = Object.fromEntries(
+      encounter.options.flatMap((option) => (option.check ? [[option.id, checkTarget(character, option.check)] as const] : [])),
+   );
+
+   const session = await activitySessionService.create('challenge', [character._id], { ...initialChallengeState(encounterId, from, to, optionTargets) });
    await replyWithSessionStep(interaction, session, `⚠️ **${encounter.name}!**`);
    return true;
 }

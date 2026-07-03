@@ -17,7 +17,7 @@ export const smackdownService = {
       return SmackdownRecord.findOneAndUpdate(
          { _id: characterId },
          { $set: { characterName }, $setOnInsert: { eloRating: DEFAULT_ELO, wins: 0, losses: 0 } },
-         { upsert: true, new: true },
+         { upsert: true, returnDocument: 'after' },
       ).lean<SmackdownRecordDoc>();
    },
 
