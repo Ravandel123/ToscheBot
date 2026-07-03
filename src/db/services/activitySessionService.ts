@@ -35,6 +35,13 @@ export const activitySessionService = {
       return session && !isExpired(session.expiresAt) ? session : null;
    },
 
+   /** Every character id busy in ANY active, non-expired session — the durable
+    *  busy set the regen job splits on (D23). One round trip. */
+   async activeParticipantIds(): Promise<string[]> {
+      const ids: unknown[] = await ActivitySession.distinct('participantIds', { status: 'active', expiresAt: { $gt: new Date() } });
+      return ids.filter((id): id is string => typeof id === 'string');
+   },
+
    /**
     * Advances one step IFF the session is still at `expectedStep` and active —
     * optimistic concurrency that makes a step idempotent against double-clicks and

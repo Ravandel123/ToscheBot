@@ -7,11 +7,15 @@ export interface ResourceDefinition {
    name: string;
    defaultMax: number;
    regenPerHour: number;
+   /** Whether the hourly regen still applies while the character is busy in a
+    *  durable activity (D23). Vitals pause — you don't heal mid-climb/mid-duel;
+    *  Action Points are separate and ALWAYS accrue. */
+   regenWhileBusy: boolean;
 }
 
 export const RESOURCES = {
-   health: { name: 'Health', defaultMax: 20, regenPerHour: 2 },
-   stamina: { name: 'Stamina', defaultMax: 10, regenPerHour: 5 },
+   health: { name: 'Health', defaultMax: 20, regenPerHour: 2, regenWhileBusy: false },
+   stamina: { name: 'Stamina', defaultMax: 10, regenPerHour: 5, regenWhileBusy: false },
 } as const satisfies Record<string, ResourceDefinition>;
 
 export type ResourceKey = keyof typeof RESOURCES;

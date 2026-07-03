@@ -151,6 +151,11 @@ match these.
 | D17 | **Long, interactive, multi-step activities are durable** (turn-based duel, multi-room exploration…). An `ActivitySession` doc (Mongo) holds the per-step `state` AND is the cross-restart "this character is busy" lock; components are **stateless** (keyed by `sessionId`); each step is an **optimistic, step-guarded** atomic update (`{_id, step:N} → $inc step`), making it idempotent against double-clicks and crash-replay; idle sessions are reaped by a **TTL index** on `expiresAt`. **AP policy (default, tunable):** charged at start; clean cancel refunds; **timeout/abandon forfeits** (so a TTL delete needs no side effect). Short, auto-resolved actions stay atomic-commit (D5 rule 1 unchanged for them). | A restart/crash/abandon mid-activity must not corrupt state or strand a player. Persisting **per step** (not just at the end) makes activities resumable + crash-safe, reusing the stateless-component + DB-state pattern already proven by the character panel / comic browser. Seam built (`game/activity/`, `models/activitySession.ts`, `activitySessionService.ts`); first consumer is the serious duel / 6C travel. |
 | D18 | **Locks are keyed per character** (`CharacterLockManager`), not per Discord user, and deferred queues **drain before the lock is released**. | Characters are what the writes target (resources/AP/ELO), and NPCs (`ownerId: null`, 6C) have no user id to lock. "One user, one live activity" is already enforced by the active-character switch guard. Draining before release means a deferred op can never interleave with the next holder's critical section — the invariant Phase 7 activities can rely on. |
 | D19 | **One currency (`deltradaCoins`) until the economy layer exists.** The lore's regional per-race currencies (amber drops, pearl flakes, obsidian chips…) are reserved for the exchange/trade system being designed in `RPG/` (its P17) and get appended to the catalog when that ships. | Six parallel wallets with no economy were pure bookkeeping. The D10 asymmetry decides the direction: appending a currency later is one catalog line; removing one after players hold balances is a migration. |
+| D20 | **Character creation is a step-driven wizard over the draft doc.** Steps live in a typed catalog (`game/character/creationSteps.ts`: id, kind `modal\|select`, `required`, `isComplete`/`summary`); the panel renders FROM it (checklist + step picker + Continue + Submit gate) and `canSubmit` = all required steps complete. **No stored cursor**: the draft `Character` doc IS the wizard state; progress is derived from filled fields. | Interruptible + resumable-across-restarts falls out of the existing stateless-panel pattern with nothing to desync; adding a creation step (origin, starting kit, Phase 7 attribute allocation…) = one catalog entry + one renderer case, not a new flow. Editable-until-approved was already `canEdit` (D13). |
+| D21 | **The world is a data-driven location graph with a travel-encounter seam.** `locations.ts` edges are **undirected and test-validated** (a dangling/one-way edge fails `npm test`); `/travel` is the first `canCharacterAct` + `spendActionPoints` consumer (cost placeholder 0 — D14). Each move may roll an encounter from `game/data/encounters.ts`: kind `flavor` (instant line, move completes) or `activity` (the move is **interrupted** by a durable ActivitySession; arrival only on success — forced-back/timeout leaves the character at the origin). | Travel that is "a button that renames a string" is not worth building (backlog note); the encounter seam is where locations become gameplay. Deferring arrival makes an obstacle *mean something* without any stat mechanics. |
+| D22 | **Durable activities dispatch through a handler registry.** `ActivitySession.type → ActivityHandler { render(session), onAction(…) }` (`commands/components/_activities/registry.ts`, fail-fast on duplicates); the generic `activity` component namespace routes `activity:<action>:<sessionId>` — the router checks session liveness (incl. lazy expiry) and that the clicker **owns** a participant character; handlers own the step logic. **Busy = has an active session**: the switch guard treats it like a lock (cross-restart), and a gated command run while busy **re-enters** (re-renders the current step) instead of erroring. Reference consumer: `obstacle` (pure-random placeholder à la sparring, D16). | D17 built the durability layer but nothing consumed it; the registry + router make "add an interactive activity" = one handler file + one registry line, with double-click idempotency, crash recovery (terminal outcome derived from state + a finalize re-entry) and restart-surviving buttons solved once, here. |
+| D23 | **Regen splits on busyness: vitals pause, AP always accrues.** Resources carry `regenWhileBusy` (health/stamina: `false`); the hourly job writes three bulk-first groups — free characters (full tick), session-busy (AP-only tick; paused vitals are **skipped, not deferred**), in-memory-locked (deferred single tick that decides full-vs-busy when it lands). The lock-free AP `$inc` on busy characters is safe because AP is only ever written via atomic deltas. | You don't heal mid-climb (and pausing regen keeps future in-activity damage meaningful), but AP is "time owned" (D15) and must not punish being mid-adventure. Skipping (not deferring) vitals keeps TTL-reaped sessions side-effect-free (D17). |
+| D24 | **Gameplay is ephemeral; noteworthy outcomes go to the public chronicle.** Activity steps and travel replies are ephemeral (only the actor sees their journey); results worth an audience (arrivals, cleared/failed obstacles, future duels) are posted as short in-character lines to `settings.channels.chronicle` via `game/chronicle.ts` — fire-and-forget, never failing the action, never pinging. | Keeps game channels unspammed while giving the server a shared "what's happening in the game" feed (the owner's requested server log); ephemeral play still survives restarts because components re-resolve all state from the DB, never from the message. |
 
 ## Target architecture
 
@@ -169,6 +174,8 @@ src/
     slash/<category>/*.ts     one file = one command (categories: game, ...)
     components/*.ts           one file = one button/select/modal handler ({ namespace, handle }),
                               routed by customId namespace (_-prefixed files = colocated builders)
+    components/_activities/   activity handlers (D22): registry.ts (type → handler) + one file
+                              per ActivitySession type (obstacle…); dispatched by components/activity.ts
   events/*.ts           one file = one Discord event: { name, once?, execute }
   jobs/*.ts             one file = one cron job: { name, schedule, run }
   db/
@@ -178,9 +185,13 @@ src/
                         smackdownService, activitySessionService)
   game/                 server-RPG domain logic, Discord-agnostic where possible
     character/          pure rules + identity helpers (canCharacterAct/canEdit/canSubmit, limits)
+                        + creationSteps.ts (the wizard step catalog — D20)
     combat/             combat engine (engine/stats/elo pure + testable, flavor data)
-    activity/           durable multi-step activity timing helpers (D17 seam)
-    data/               static content catalogs (fish, items...) — see D10
+    activity/           durable-activity pure logic: session timing helpers (D17 seam) +
+                        per-activity step reducers (obstacle.ts — D22)
+    world/              travel rules over the location graph + encounter rolling (D21)
+    chronicle.ts        Discord adapter (marked): posts noteworthy actions to the public log (D24)
+    data/               static content catalogs (locations, encounters, fish, items...) — see D10
     ...
   lexicon.ts            GENERAL flavour vocabulary (adjectives, adverbs, nouns, terms…) — reused
                         by fun, the RPG and real commands; NOT fun-only (ported from dataSpeech.js).
@@ -251,12 +262,19 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
   throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
   must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Two consumers
-  so far: `character` (the creation **panel** — race select + Edit-details modal + Submit —
-  plus the owner's approval buttons/modal) and `comic` (the `h!comic` browser). Both are
-  fully **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
+  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Three consumers
+  so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
+  D20 step catalog, race/gender selects, Edit-details modal, Submit — plus the owner's
+  approval buttons/modal), `comic` (the `h!comic` browser), and `activity` (the generic
+  durable-activity router — D22: resolves the session by id, verifies the clicker owns a
+  participant, dispatches to the `_activities/` registry by session type). All are fully
+  **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
   `interaction.update()` that panel (`ModalSubmitInteraction.isFromMessage()`).
+- **Slash commands that may wait on a lock** (e.g. `/travel` queued behind a fight) must
+  `deferReply` *before* `runExclusive` — an interaction only waits ~3 s for its first ack —
+  and use `editReply` inside. Autocomplete handlers must be **read-only**
+  (`peekActiveCharacter`, not `getOrCreate`): they fire per keystroke.
 - The owner bypasses cooldowns and permission checks (but not command logic).
 - Jobs are loaded and validated in `init()`, but started by `clientReady` so they never
   run against a half-ready client.
@@ -331,7 +349,8 @@ Solution — `CharacterLockManager` in `core/locks.ts`. Locks are keyed by
 NPCs (`ownerId: null`) must be lockable too (6C movement), and
 `ActivitySession.participantIds` are character ids. "One user, one activity at a time"
 is enforced separately, by the active-character switch guard
-(`accountService.setActiveCharacter` refuses while either character is locked).
+(`accountService.setActiveCharacter` refuses while either character is **busy** — in-memory
+locked OR in an active `ActivitySession`, so it holds across restarts too — D22).
 
 - `runExclusive(characterIds: string[], fn)` — acquires locks for all listed characters
   (**always sorted by character id** to prevent deadlocks), runs `fn`, drains each
@@ -357,6 +376,8 @@ Rules:
 3. **Cron jobs**: bulk `updateMany` excluding `lockedIds()`, then `deferOrRun` an
    equivalent single-character op for each locked character. Nothing is lost; regen
    lands right after the fight ends — and always before the next lock holder starts.
+   With durable activities the regen job actually writes **three** bulk-first groups
+   (free / session-busy / locked-deferred) — see D23 for which resources tick where.
 4. Locks are **in-memory only** (single process, single guild). They do not survive
    restarts — that's fine for short actions (rule 1) and intentional for long ones: a crash
    auto-releases the in-memory lock so a player is never stranded "busy forever"; the durable
@@ -384,9 +405,19 @@ multi-room exploration) must NOT keep that state only in memory. Instead:
 - **Hang guard**: wrap long actions with a max lock-hold deadline and time out external calls
   (Discord/OpenAI) so a wedged step can't hold a player's lock forever.
 
-Seam built (`game/activity/session.ts` pure timing helpers, the model, and
-`activitySessionService` — `create`/`getActiveForParticipant`/`advance`/`complete`/`abandon`);
-**no mechanics yet** (D14). The first consumer is the serious `/smackdown duel` or 6C travel.
+**Consumers dispatch through the D22 registry** (`commands/components/_activities/`): a
+handler per session type owns `render(session)` (current step from state — also used for
+re-entry and stale-click repaints) and `onAction(...)`. The **`obstacle`** handler is the
+reference implementation, including the **crash-safe completion choreography**: win the
+final `advance` (the step guard doubles as a completion mutex) → run the idempotent side
+effects (setLocation, chronicle) → delete the session; if the process dies in between,
+`render` derives the terminal outcome from state and shows a "Press on" finalize button
+that re-runs the idempotent tail. Activity *step logic* stays pure in `game/activity/`
+(e.g. `obstacle.ts` reducer) so it's testable without Discord.
+
+Seam + first consumer built; **real mechanics still wait for the ruleset** (D14) — the
+obstacle rolls pure-random like sparring (D16). Next consumers: the serious `/smackdown
+duel`, richer 6C encounters.
 
 Core primitive (Phase 2, re-homed onto characters in 6A): `characterService.applyResourceDeltas(characterId, deltas)`
 — aggregation-pipeline update that adjusts resources and clamps to `[0, max]` server-side.
@@ -536,15 +567,19 @@ Several overlap the `RPG/` design project — coordinate there instead of decidi
 
 ## Roadmap & status
 
-**Current state (2026-07-02):** the core runtime, fun/admin command layer, AI persona and
+**Current state (2026-07-03):** the core runtime, fun/admin command layer, AI persona and
 moderation are live; the server-RPG is mid-build — the Account/Character *structure* exists
 (6A/6B) but *mechanics* are blocked on the Phase 7 ruleset (D14). A full architecture review
 hardened the seams (D18 lock keying + drain-before-release, status-guarded approval
 transitions, side-effect-free `/profile` lookups, word-boundary moderation matching).
-**153 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
+The **game foundations landed (D20–D24)**: the step-driven creation wizard, the location
+graph + `/travel` (first `canCharacterAct`/AP consumer), the travel-encounter seam, the
+activity-handler registry with the `obstacle` reference activity (first D17 consumer),
+busy-aware regen, and the public chronicle channel.
+**187 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
 live; the bot has not yet been run end-to-end against a live Atlas cluster (needs `.env` +
-`npm run deploy`). See `RPG_SYSTEM.md` for the concrete game model and what is still
-placeholder.
+`npm run deploy` — required again: `/travel` is a new slash command). See `RPG_SYSTEM.md`
+for the concrete game model and what is still placeholder.
 
 **What works today:**
 
@@ -557,9 +592,10 @@ placeholder.
   (`ctof`, `ftoc`, `cmtoimperial`, `kgtoimperial`, `bmi`, `bmiforheight`); *utility:* `ping`,
   `roll`, `avatar`, `timestamp`, `help`/`commands` (auto-generated command list); *admin (ownerOnly):* `clear`,
   `directmessage`/`dm`, `messagechannel`/`mc`.
-- **Slash (`/`)** — `character` (create/edit/race/submit/list/switch via the creation panel +
-  owner approval), `profile`, `smackdown sparring` (round-by-round in `#smackdown-spire`,
-  commits Elo only), `leaderboard`, `ping`.
+- **Slash (`/`)** — `character` (create/edit/race/submit/list/switch via the step-driven
+  creation wizard + owner approval), `profile`, `smackdown sparring` (round-by-round in
+  `#smackdown-spire`, commits Elo only), `travel` (location graph + encounters; approved
+  characters only), `leaderboard`, `ping`.
 - **Events** — `messageCreate` (banned-word check → `h!` routing → ambient AI),
   `interactionCreate` (slash + component routing), `clientReady` (starts jobs),
   `messageDelete`/`messageUpdate` (edit/delete log to `#espionage` — the delete log adds
@@ -567,10 +603,13 @@ placeholder.
   `guildMemberAdd`/`guildMemberRemove` (gate welcomes/farewells). Banned-word removals report
   the **exact match + its location** (and flag punctuation-collapsed matches as possible false
   positives), so a deletion is never a mystery.
-- **Jobs** — `resource-regen` (hourly, lock-aware bulk-first per D7).
-- **Component handlers** — `character` (creation panel + approval petition), `comic` (browser).
+- **Jobs** — `resource-regen` (hourly, lock- and session-aware bulk-first per D7/D23).
+- **Component handlers** — `character` (creation wizard + approval petition), `comic`
+  (browser), `activity` (generic durable-activity router + `_activities/` registry; first
+  activity: `obstacle`).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
-  (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables.
+  (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
+  `game/chronicle.ts` (public game log — D24).
 
 - [x] **Phase 0 — toolchain**: NodeNext, tsx (dev + prod), deps upgraded, `uuid`/`openai`/
       `dotenv` removed, empty base classes deleted.
@@ -596,9 +635,13 @@ placeholder.
             `spendActionPoints` + `canCharacterAct`, `game/data/{races,locations}.ts`.
       - [x] **6B** — `/character` lifecycle + interactive creation panel + owner approval via
             `imperialDecrees` (petition + buttons + reject-reason modal), component-handler infra.
-            `canCharacterAct` exists but **nothing gates on it yet** (sparring is ungated — D16).
-      - [ ] **6C** — locations graph + NPC seeding + NPC-movement cron + `travel` (first
-            `canCharacterAct` consumer). NPC = `Character` with `ownerId: null`.
+      - [x] **6B+** — game foundations (D20–D24): step-catalog creation wizard (panel renders
+            from `creationSteps.ts`); locations graph + `/travel` (**first `canCharacterAct` +
+            AP-spend consumer**) + encounter seam (flavor/activity); activity-handler registry +
+            generic `activity` router + `obstacle` (**first D17 consumer**, pure-random per D16);
+            session-aware switch guard; busy-split regen (D23); chronicle channel (D24).
+      - [ ] **6C** — NPC seeding + NPC-movement cron along the graph (NPC = `Character` with
+            `ownerId: null`); more locations + per-location activity tables (see backlog).
 - [ ] **Phase 7 — RPG ruleset** — being **designed in `RPG/`** (d100 roll-under, roles +
       learn-by-doing skills, Wounds, Stress; see `RPG/Ruleset.md` + its decision log/forks).
       Code nothing until the relevant fork locks (D14); shipping it replaces the placeholder

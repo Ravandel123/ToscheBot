@@ -5,7 +5,7 @@ import { Schema, model, type Model } from 'mongoose';
 // restart) AND the cross-restart "this character is busy" lock. Short, auto-resolved
 // actions (sparring) do NOT use this — they commit atomically (D5 rule 1). See D17.
 
-export type ActivityType = 'duel' | 'exploration'; // extend as activities are built
+export type ActivityType = 'duel' | 'exploration' | 'obstacle'; // extend as activities are built
 export type ActivityStatus = 'active' | 'completed' | 'abandoned';
 
 export interface ActivitySessionDoc {

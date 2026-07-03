@@ -12,8 +12,8 @@ Legend:
   placeholder values as balance.
 - ⬜ **planned** — not built yet.
 
-_Last updated: 2026-07-02 (post-review hardening: guarded approval transitions,
-per-character lock rename, side-effect-free `/profile` lookups)._
+_Last updated: 2026-07-03 (game foundations D20–D24: creation wizard, location graph +
+`/travel` + encounters, activity registry + `obstacle`, busy-split regen, chronicle)._
 
 ---
 
@@ -23,10 +23,16 @@ per-character lock rename, side-effect-free `/profile` lookups)._
   NPC). One account owns characters and controls one **active character** at a time.
 - ✅ NPC = a Character with `ownerId: null` (movement/AI later, Phase 6C).
 - ✅ Currencies and Smackdown ELO are **per character**.
-- ✅ Character **creation, editing, and approval** commands (`/character …` + owner
-  Approve/Reject) — Phase 6B.
-- 🟡 Attributes, skills, resource values, combat formula, AP regen rate — placeholders.
-- ⬜ Locations graph + NPC movement (6C), the actual RPG ruleset (Phase 7).
+- ✅ Character **creation, editing, and approval** — a step-driven **wizard panel** (D20)
+  over `/character …` + owner Approve/Reject — Phase 6B.
+- ✅ **Travel** along the location graph (`/travel`, D21) with a **travel-encounter seam**
+  (flavor lines or interactive obstacles) — the first `canCharacterAct` + AP consumer.
+- ✅ **Durable interactive activities** (D17/D22): registry-dispatched, crash-safe;
+  first activity: `obstacle` (🟡 pure-random placeholder mechanics).
+- ✅ **Chronicle**: gameplay is ephemeral; noteworthy outcomes go to a public log channel (D24).
+- 🟡 Attributes, skills, resource values, combat formula, AP regen rate, travel/obstacle
+  numbers — placeholders.
+- ⬜ NPC seeding + movement (6C), the actual RPG ruleset (Phase 7).
 
 An account owns up to **`MAX_CHARACTERS_PER_ACCOUNT = 3`** characters (one auto-starter
 draft + up to two more via `/character create`); the constant lives in
@@ -76,12 +82,14 @@ Keyed by `Character._id`. `{ characterName, eloRating (default 1000), wins, loss
 ## Catalogs (content in code — D10)
 
 ### Resources — `game/data/resources.ts` 🟡
-| key | name | defaultMax | regenPerHour |
-|---|---|---|---|
-| `health` | Health | 20 | 2 |
-| `stamina` | Stamina | 10 | 5 |
-Stored per character as `{current, max}`, clamped to `[0,max]` on every write. Rising
-meters (hunger/stress) — ⬜ not added yet.
+| key | name | defaultMax | regenPerHour | regenWhileBusy |
+|---|---|---|---|---|
+| `health` | Health | 20 | 2 | false |
+| `stamina` | Stamina | 10 | 5 | false |
+Stored per character as `{current, max}`, clamped to `[0,max]` on every write.
+`regenWhileBusy: false` ⇒ the resource does **not** tick while the character is in an
+active ActivitySession (D23) — the tick is skipped, not deferred. Rising meters
+(hunger/stress) — ⬜ not added yet.
 
 ### Attributes — `game/data/attributes.ts` 🟡 placeholder
 `strength, toughness, agility, dexterity, perception, intelligence, willpower, charisma,
@@ -101,20 +109,36 @@ never park six empty wallets.
 ### Races — `game/data/races.ts` ✅
 `canid, ermehn, felis, lutren, polcan, tamian, vulpin` (flavour only; no racial mechanics).
 
-### Locations — `game/data/locations.ts` 🟡 placeholder
-`spire` (start), `plaza`, `tavern`, with a `connectedTo` graph for future travel. A
-location MAY carry a `channelId`. Not Discord channels by default.
+### Locations — `game/data/locations.ts` ✅ graph / 🟡 content
+`spire` (start) ↔ `plaza` ↔ `tavern`, `plaza` ↔ `riverbank`. The `connectedTo` graph is
+**undirected and test-enforced** (`game/world/travel.test.ts`: every edge exists, is listed
+on both ends, no self-loops — a bad edit fails `npm test`). A location MAY carry a
+`channelId`. Not Discord channels by default. Stale stored ids resolve to the starting
+location (`resolveLocationId`, D10 rule 3). The location set itself is placeholder content.
+
+### Travel encounters — `game/data/encounters.ts` 🟡 placeholder content, ✅ seam (D21)
+Rolled on each `/travel` move (`TRAVEL_ENCOUNTER_CHANCE_PERCENT = 25`, weighted pick from
+the pool eligible for the destination; `locations: [...ids] | 'anywhere'`). Two kinds:
+- **`flavor`** — instant: a random line is appended to the arrival message + chronicle. The
+  move completes normally. (`patrol_gossip`, `dropped_ribbon`)
+- **`activity`** — interrupts the move with a durable ActivitySession of `activityType`;
+  the character arrives **only if the activity succeeds**. (`fallen_tree` → `obstacle`)
+Outcomes with real mechanics (damage, loot) wait for the Phase 7 ruleset (D14).
 
 ---
 
 ## Rules
 
 ### Action Points (AP) — ✅ rule, 🟡 rate
-- **No cap.** Accumulate via the hourly regen `$inc` (`current` and `totalEarned`).
+- **No cap.** Accumulate via the hourly regen `$inc` (`current` and `totalEarned`) — and
+  they accrue **even while the character is busy** in an activity (D23).
 - Spent only through `characterService.spendActionPoints(id, cost)` — atomic
   check-and-spend (filter requires `current >= cost`; can't overdraw under concurrency).
 - Regen rate is a placeholder (`AP_REGEN_PER_HOUR = 1`).
-- Consumers: ⬜ none yet (serious combat/travel in 6C/7 will cost AP).
+- Consumers: ✅ `/travel` goes through the spend path with `TRAVEL_AP_COST = 0` (🟡 a
+  placeholder price — the wiring is real, the number waits for Phase 7). An activity
+  spawned by travel is covered by that charge (D17: charged at start; clean cancel
+  refunds; timeout/abandon forfeits).
 
 ### Approval lifecycle — ✅ field + workflow
 `draft → pending → approved / rejected`.
@@ -133,56 +157,106 @@ location MAY carry a `channelId`. Not Discord channels by default.
 - `game/character/rules.ts → canCharacterAct(character, apCost)` gates *character actions*:
   requires `approved && health > 0 && actionPoints.current >= apCost`. **Viewing** (`/profile`,
   inventory) never uses this gate; a 0-HP character can be active and inspected, just can't
-  act. ⬜ **Nothing gates on `canCharacterAct` yet** — sparring is ungated (D16); travel/duel
-  (6C/7) are its first consumers.
+  act. ✅ **First consumer: `/travel`** — unapproved characters can't roam. Sparring stays
+  deliberately ungated (D16); the serious duel (Phase 7) is next.
 
-### Character lifecycle commands — ✅ (Phase 6B)
+### Character lifecycle commands — ✅ (Phase 6B, wizard since D20)
 `/character` subcommands:
 - `create` → a text **modal** (name required) makes a new draft (capped at
-  `MAX_CHARACTERS_PER_ACCOUNT`, set active) and lands on the **panel**.
-- `edit` → opens the **panel** for the active draft.
+  `MAX_CHARACTERS_PER_ACCOUNT`, set active) and lands on the **wizard panel**.
+- `edit` → opens the **wizard panel** for the active draft (this is also how an
+  interrupted creation is **resumed** — any time, even after a bot restart).
 - `list` → your characters + status + active marker.
 - `switch` → autocomplete → change active character.
 - `race` / `submit` → still work as standalone shortcuts, but the panel covers both.
 
-The **creation panel** (`commands/components/_characterPanel.ts`) is one ephemeral message
-combining what Discord splits across two surfaces: **race + gender dropdowns** (selects only
-live on messages) + an **Edit details** button (free text only lives in a modal: name,
-epithet, short description, avatar URL) + a **Submit** button (disabled until name+race set).
-An avatar URL renders as the embed **thumbnail** (also on `/profile` and the petition). The
-panel re-renders in place after each step and is **stateless** — the character id rides in the
-customIds and the state is the DB draft, so it survives restarts (no collector; matches the
-`comic` browser pattern). Identity limits (`game/character/identity.ts`): name 2–32, epithet
-≤50, bio ≤1000, avatar URL ≤400; gender is a fixed pick (`GENDER_CHOICES`).
+The **creation wizard** (D20) is one ephemeral panel driven by the **step catalog**
+`game/character/creationSteps.ts` — currently `details` (modal: name required 2–32, epithet
+≤50, bio ≤1000, avatar URL ≤400), `race` (select, required), `gender` (select, optional,
+`GENDER_CHOICES`). The panel's **overview** shows a ✅/⬜ checklist with per-step summaries,
+a **step picker** (jump to and redo ANY step while editable), **Continue** (jumps to the
+first unfinished step) and **Submit** (enabled once every *required* step is done —
+`canSubmit` reads the catalog). Select-kind steps open a focused **step view** (that step's
+dropdown + Back); modal-kind steps open their modal directly. An avatar URL renders as the
+embed **thumbnail** (also on `/profile` and the petition).
 
-### Active-character switching — ✅ service + command
+**There is no stored wizard cursor.** The draft doc is the wizard state; progress is derived
+from which fields are filled, and every customId carries the character id — so the flow is
+interruptible, resumable across restarts, and editable until approval with nothing to
+desync (no collector; matches the `comic` browser pattern). **Adding a creation step** =
+one catalog entry + one renderer case (`SELECT_STEP_ROWS` in `_characterPanel.ts` for a
+select, or a modal builder in `_characterModals.ts`).
+
+### Active-character switching — ✅ service + command (session-aware since D22)
 `/character switch` → `accountService.setActiveCharacter(userId, username, characterId,
-locks)`: only your own character; blocked if the current OR target character is locked
-(mid-fight/activity, via `CharacterLockManager.isLocked`). 0-HP / unapproved characters *can*
-be activated. This switch guard is also what enforces "one user, one activity at a time" —
-the locks themselves are per **character** (see CLAUDE.md "Concurrency model").
+locks)`: only your own character; blocked if the current OR target character is **busy** —
+in-memory locked (mid-fight) *or* in an active `ActivitySession` (mid-climb; this half
+survives restarts). 0-HP / unapproved characters *can* be activated. This switch guard is
+what enforces "one user, one live activity at a time" — the locks themselves are per
+**character** (see CLAUDE.md "Concurrency model").
 
-### Hourly regen — ✅
-`jobs/resourceRegen.ts` → `characterService.regenAll(excludeIds)` bulk-updates all
-characters not currently locked (one pipeline `updateMany`), then defers a single-character
-`regen` for each locked one (D7). Resources clamp to max; AP just grows.
+### Travel — ✅ (D21; numbers 🟡)
+`/travel destination:<autocomplete of connected locations>` moves the **active** character
+along the graph. Flow (whole decision under `runExclusive([characterId])`, reply deferred
+first): re-check busy (an active session **re-enters** — re-renders its current step instead
+of erroring) → `canCharacterAct(character, TRAVEL_AP_COST)` → edge check (`game/world/
+travel.ts → checkTravel`, stale origins fall back to start) → atomic AP spend → encounter
+roll → either `setLocation` + arrival reply (+ flavor line) or an interrupting activity
+session (see below). Replies are ephemeral; arrivals/outcomes go to the **chronicle** (D24).
+Autocomplete is read-only (`peekActiveCharacter` — no account creation per keystroke).
 
-### Durable activities — ✅ scaffold / ⬜ consumers (D17)
-Long, interactive, multi-step activities (turn-based duel, multi-room exploration) are made
+### Durable activities — ✅ scaffold + registry + first consumer (D17/D22)
+Long, interactive, multi-step activities (turn-based duel, obstacles, exploration) are made
 **crash-/restart-safe** by persisting state per step instead of holding it in memory:
-- **`ActivitySession`** (`db/models/activitySession.ts`): `{ type, participantIds, step,
-  status: active\|completed\|abandoned, state (opaque blob), expiresAt }`. It's both the saved
-  state *and* the cross-restart "this character is busy" lock.
+- **`ActivitySession`** (`db/models/activitySession.ts`): `{ type: duel\|exploration\|obstacle,
+  participantIds, step, status: active\|completed\|abandoned, state (opaque blob), expiresAt }`.
+  It's both the saved state *and* the cross-restart "this character is busy" lock.
 - **`activitySessionService.advance(id, expectedStep, state)`** is a step-guarded atomic
   update → each step is idempotent against double-clicks and crash-replay.
-- Components carry the `sessionId` (stateless), so buttons survive a restart.
+- Components carry the `sessionId` (stateless), so buttons survive a restart — **even on
+  ephemeral messages** (the interaction, not the message, is what gets updated).
 - A **TTL index** on `expiresAt` (refreshed each step) auto-reaps idle/abandoned sessions.
 - **AP policy (default, tunable):** charged at start; clean cancel refunds; **timeout/abandon
   forfeits** (a TTL delete then needs no side effect).
-- 🟡 `state` shape, the AP costs, and the actual step logic belong to each activity — **not
-  built yet** (blocked on the ruleset, D14). Pure timing helpers in `game/activity/session.ts`.
-First consumers: the serious `/smackdown duel` and 6C `travel`. Short auto-resolved actions
-(sparring) do **not** use this — they commit atomically (D5 rule 1).
+- **Registry dispatch (D22):** `commands/components/_activities/registry.ts` maps
+  `session.type → ActivityHandler { render, onAction }`; the generic `activity` component
+  namespace (`activity:<action>:<sessionId>`) resolves the session, checks liveness (incl.
+  lazy expiry) and that the clicker **owns** a participant character, then dispatches.
+  Unknown/retired types degrade to "this activity has ended" (D10 rule 3).
+
+#### The `obstacle` activity — ✅ pattern / 🟡 mechanics (first consumer)
+Spawned by an `activity` travel encounter (e.g. `fallen_tree`). State (`game/activity/
+obstacle.ts`, pure + tested): `{ encounterId, fromId, toId, progress, setbacks, lastLine }`.
+Each **Attempt** click = one pure-random roll (`OBSTACLE_SUCCESS_PERCENT = 55` 🟡, no stats —
+the D16 sparring precedent) committed via `advance`; `progress ≥ 2` ⇒ **cleared** (character
+`setLocation`s to the destination), `setbacks ≥ 3` ⇒ **forced back** (stays at origin);
+**Turn back** = clean cancel (`abandon`, refund seam); timeout ⇒ TTL reap ⇒ stays at origin,
+no side effect needed. Outcomes are chronicled. **Crash-safe completion:** the terminal
+outcome is *derived from state*, the final `advance` doubles as the completion mutex, side
+effects (move, chronicle, delete) are idempotent, and if the bot dies mid-tail, `render`
+shows a "Press on" **finalize** button that re-runs it. This file is the reference pattern
+for the future duel/NPC-talk/exploration handlers.
+
+Short auto-resolved actions (sparring) do **not** use sessions — they commit atomically
+(D5 rule 1).
+
+### Hourly regen — ✅ (busy-split since D23)
+`jobs/resourceRegen.ts` writes three bulk-first groups (D7/D23):
+1. **Free characters** → `characterService.regenAll(excluded)` — full tick (vitals clamp to
+   max, AP grows).
+2. **Session-busy characters** (from `activitySessionService.activeParticipantIds()`) →
+   `regenAllBusy(ids)` — **AP only** (+ any resource flagged `regenWhileBusy`); paused
+   vitals are skipped outright, not deferred.
+3. **In-memory-locked characters** → `deferOrRun` a single-character `regen(id)` that
+   decides full-vs-busy **when it executes** (the lock is gone, but a durable session may
+   still be running).
+
+### Chronicle — ✅ (D24)
+`game/chronicle.ts → postChronicle(client, line)` posts short in-character lines to
+`settings.channels.chronicle` (default name `chronicle`). Used by travel arrivals and
+obstacle outcomes; future duels/events should chronicle too. Best-effort: a missing channel
+logs a warning and never fails the action; lines never ping (`allowedMentions: []`).
+Convention: **gameplay replies are ephemeral, the chronicle is the public record.**
 
 ---
 
@@ -209,19 +283,22 @@ Future `/smackdown duel`: requires **approved** characters, uses real HP/attribu
 ## Services (where state changes)
 
 - `accountService` — getOrCreate (race-safe starter claim), getActiveCharacter,
-  peekActiveCharacter (read-only — viewing someone must not create their account),
-  setActiveCharacter.
+  peekActiveCharacter (read-only — viewing someone / autocomplete must not create their
+  account), setActiveCharacter (busy-aware: locks + active sessions).
 - `characterService` — get, getOwned, countOwned, create, createStarter, remove,
   updateIdentity, setRace, submitForApproval/approve/reject (status-guarded, return
   false on a stale transition), applyResourceDeltas (clamp [0,max]), applyCurrencyDeltas
-  (clamp ≥0), spendActionPoints (atomic), setLocation, regenAll/regen.
+  (clamp ≥0), spendActionPoints (atomic), setLocation, regenAll/regenAllBusy/regen
+  (the D23 busy split).
 - `smackdownService` — getOrCreate, recordResult (Elo), getLeaderboard.
-- `activitySessionService` — create, getActiveForParticipant, advance (step-guarded),
-  complete, abandon. The durability layer for long activities (D17) — see below.
+- `activitySessionService` — create, getActiveForParticipant, activeParticipantIds (the
+  durable busy set), advance (step-guarded), complete, abandon. The durability layer for
+  long activities (D17) — see below.
 
 All character writes go through services; commands stay thin. Discord buttons/selects/modals
-are handled by `commands/components/*` (keyed by customId namespace) — `character.ts` owns the
-create/edit/approve/reject flows; `_`-prefixed siblings build the embeds + modals.
+are handled by `commands/components/*` (keyed by customId namespace) — `character.ts` owns
+the wizard/approve/reject flows, `activity.ts` routes durable activities to the
+`_activities/` registry; `_`-prefixed siblings build the embeds + modals + activity views.
 
 ---
 
@@ -229,8 +306,13 @@ create/edit/approve/reject flows; `_`-prefixed siblings build the embeds + modal
 
 - What attributes/skills actually exist and what they *do* (the current sets are
   placeholders to be reconsidered).
-- Attribute allocation at character creation (point-buy?) and caps.
+- Attribute allocation at character creation (point-buy?) and caps — will become new
+  wizard steps in the D20 catalog when designed.
 - Real combat math (hit/damage/initiative), max-HP / regen formulas from attributes.
-- AP costs per action; whether AP ever needs a cap.
+- AP costs per action (travel currently 0; the spend path is wired); whether AP ever
+  needs a cap.
+- Obstacle/encounter resolution: replace the pure-random `OBSTACLE_SUCCESS_PERCENT` roll
+  with real checks (stats/skills), add stakes (damage, loot) and richer encounter tables
+  per location/edge.
 - Economy: how currencies are earned/spent; per-character wallets interactions.
-- Locations: full map, travel costs, what NPCs do there.
+- Locations: full map, travel costs, what NPCs do there (per-location activity tables).

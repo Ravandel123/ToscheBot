@@ -15,6 +15,9 @@ export const settings = {
       imperialDecrees: 'imperial-decrees',
       // Where arrivals and departures are announced (welcomes & farewells).
       gate: 'main-gate',
+      // Public game log: noteworthy character actions (travel, cleared obstacles,
+      // future duels…) are posted here so everyone can follow the game (D24).
+      chronicle: 'chronicle',
    },
 
    moderation: {

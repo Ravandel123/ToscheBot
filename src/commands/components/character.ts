@@ -10,17 +10,19 @@ import { settings } from '../../settings.js';
 import { characterService } from '../../db/services/characterService.js';
 import { accountService } from '../../db/services/accountService.js';
 import { canEdit, canSubmit, MAX_CHARACTERS_PER_ACCOUNT } from '../../game/character/rules.js';
+import { creationStep, firstIncompleteStep, type CreationStep } from '../../game/character/creationSteps.js';
 import { resolveGuildChannel } from '../../lib/discord.js';
 import { readIdentityModal, buildIdentityModal, buildRejectReasonModal } from './_characterModals.js';
 import { buildDecidedDecree, buildDecreeButtons, buildDecreeEmbed } from './_characterDecree.js';
-import { buildCharacterPanel } from './_characterPanel.js';
+import { buildCharacterPanel, buildCharacterStepView } from './_characterPanel.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { RaceId } from '../../game/data/races.js';
 import type { ToscheClient } from '../../client.js';
 
 // Handles every `character:*` interaction:
-//   panel-race / panel-edit / panel-save / panel-submit + create → the player's
-//     interactive creation panel (race dropdown, text modal, submit);
+//   panel-step / panel-continue / panel-overview → wizard navigation (D20);
+//   panel-race / panel-gender / panel-edit / panel-save / panel-submit + create
+//     → the individual creation steps (selects, text modal, submit);
 //   approve / reject / reject-reason → the owner's verdict on a petition.
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
@@ -37,6 +39,8 @@ export default {
       }
 
       if (interaction.isButton()) {
+         if (action === 'panel-continue') return handlePanelContinue(interaction, rest[0]);
+         if (action === 'panel-overview') return handlePanelOverview(interaction, rest[0]);
          if (action === 'panel-edit') return handlePanelEdit(interaction, rest[0]);
          if (action === 'panel-submit') return handlePanelSubmit(interaction, rest[0]);
          if (action === 'approve') return handleApprove(client, interaction, rest[0]);
@@ -45,6 +49,7 @@ export default {
       }
 
       if (interaction.isStringSelectMenu()) {
+         if (action === 'panel-step') return handlePanelStep(interaction, rest[0]);
          if (action === 'panel-race') return handlePanelRace(interaction, rest[0]);
          if (action === 'panel-gender') return handlePanelGender(interaction, rest[0]);
       }
@@ -66,6 +71,69 @@ async function handleCreateModal(client: ToscheClient, interaction: ModalSubmitI
    // Land straight on the panel — pick a race and submit, all in one place.
    await interaction.reply({ ...buildCharacterPanel(character), ...ephemeral });
 }
+
+// --- Wizard navigation (D20) -------------------------------------------------
+
+/** Opens one creation step on the right Discord surface: modal steps show their
+ *  modal (the submit repaints the panel), select steps swap the panel to a
+ *  focused step view. */
+async function openStep(
+   interaction: ButtonInteraction | StringSelectMenuInteraction,
+   character: CharacterDoc,
+   step: CreationStep,
+): Promise<void> {
+   if (step.kind === 'modal') {
+      // All modal steps currently share the identity modal; give each future
+      // modal step its own builder + `panel-save`-style action when it lands.
+      await interaction.showModal(buildIdentityModal({
+         customId: `character:panel-save:${character._id}`,
+         title: 'Edit your character',
+         prefill: character.identity,
+      }));
+      return;
+   }
+
+   await interaction.update(buildCharacterStepView(character, step));
+}
+
+async function handlePanelStep(interaction: StringSelectMenuInteraction, characterId: string): Promise<void> {
+   const character = await ownedEditable(interaction, characterId);
+   if (!character)
+      return;
+
+   const step = creationStep(interaction.values[0]);
+   if (!step) {
+      // A picker from an older bot version may list a renamed step — just repaint.
+      await interaction.update(buildCharacterPanel(character));
+      return;
+   }
+
+   await openStep(interaction, character, step);
+}
+
+async function handlePanelContinue(interaction: ButtonInteraction, characterId: string): Promise<void> {
+   const character = await ownedEditable(interaction, characterId);
+   if (!character)
+      return;
+
+   const step = firstIncompleteStep(character);
+   if (!step) {
+      await interaction.update(buildCharacterPanel(character));
+      return;
+   }
+
+   await openStep(interaction, character, step);
+}
+
+async function handlePanelOverview(interaction: ButtonInteraction, characterId: string): Promise<void> {
+   const character = await ownedEditable(interaction, characterId);
+   if (!character)
+      return;
+
+   await interaction.update(buildCharacterPanel(character));
+}
+
+// --- Individual steps ---------------------------------------------------------
 
 async function handlePanelRace(interaction: StringSelectMenuInteraction, characterId: string): Promise<void> {
    const character = await ownedEditable(interaction, characterId);

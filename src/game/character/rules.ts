@@ -1,12 +1,11 @@
 import type { CharacterDoc } from '../../db/models/character.js';
-import { isIdentityComplete } from './identity.js';
+import { requiredStepsComplete } from './creationSteps.js';
 
 export type ActBlockReason = 'not-approved' | 'incapacitated' | 'no-action-points';
 
-export interface ActCheck {
-   ok: boolean;
-   reason?: ActBlockReason;
-}
+export type ActCheck =
+   | { ok: true }
+   | { ok: false; reason: ActBlockReason };
 
 // How many characters one account may own. The owner's framing is "one character
 // to start"; a small cap leaves room for alts without inviting abuse on the free
@@ -19,22 +18,22 @@ const EDITABLE_STATUSES: CharacterDoc['approvalStatus'][] = ['draft', 'rejected'
 
 export type SubmitBlockReason = 'not-editable' | 'incomplete';
 
-export interface SubmitCheck {
-   ok: boolean;
-   reason?: SubmitBlockReason;
-}
+export type SubmitCheck =
+   | { ok: true }
+   | { ok: false; reason: SubmitBlockReason };
 
 /** Whether the character's identity can still be changed (draft or rejected). Pure. */
 export function canEdit(character: CharacterDoc): boolean {
    return EDITABLE_STATUSES.includes(character.approvalStatus);
 }
 
-/** Whether the character may be submitted for the Imperator's approval. Pure. */
+/** Whether the character may be submitted for the Imperator's approval. Pure.
+ *  Completeness is catalog-driven (D20): every required creation step must be done. */
 export function canSubmit(character: CharacterDoc): SubmitCheck {
    if (!canEdit(character))
       return { ok: false, reason: 'not-editable' };
 
-   if (!isIdentityComplete(character.identity))
+   if (!requiredStepsComplete(character))
       return { ok: false, reason: 'incomplete' };
 
    return { ok: true };

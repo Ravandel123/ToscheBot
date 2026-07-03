@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PipelineStage } from 'mongoose';
 import { Character, defaultCharacterStats, type CharacterDoc, type CharacterIdentity } from '../models/character.js';
+import { activitySessionService } from './activitySessionService.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
 import type { CurrencyKey } from '../../game/data/currencies.js';
@@ -177,25 +178,44 @@ export const characterService = {
       await Character.updateOne({ _id: characterId }, { $set: { locationId } });
    },
 
-   /** Bulk hourly regen for all characters except `excludeIds` (locked ones).
-    *  Resources nudge toward max (placeholder flat amounts); AP just accumulates
-    *  (no cap, D15). Returns the number of characters modified. */
+   /** Bulk hourly regen for all characters except `excludeIds` (locked or
+    *  mid-activity). Resources nudge toward max (placeholder flat amounts); AP
+    *  just accumulates (no cap, D15). Returns the number of characters modified. */
    async regenAll(excludeIds: string[] = []): Promise<number> {
-      const fields = regenFields();
+      const fields = regenFields('full');
       const filter = excludeIds.length > 0 ? { _id: { $nin: excludeIds } } : {};
       const result = await Character.updateMany(filter, setStage(fields));
       return result.modifiedCount;
    },
 
-   /** Single-character regen — the deferred op for a character locked at regen time (D7). */
+   /** Bulk hourly regen for characters busy in a durable activity (D23): AP
+    *  always accrues, but vitals not flagged `regenWhileBusy` pause (skipped,
+    *  not deferred — you don't heal mid-climb). Safe without a lock: every
+    *  field it touches is only ever written via atomic deltas. */
+   async regenAllBusy(ids: string[]): Promise<number> {
+      if (ids.length === 0)
+         return 0;
+
+      const result = await Character.updateMany({ _id: { $in: ids } }, setStage(regenFields('busy')));
+      return result.modifiedCount;
+   },
+
+   /** Single-character regen — the deferred op for a character locked at regen
+    *  time (D7). Decides full-vs-busy at EXECUTION time: the op lands after the
+    *  in-memory lock releases, but a durable session may still be running. */
    async regen(characterId: string): Promise<void> {
-      await Character.updateOne({ _id: characterId }, setStage(regenFields()));
+      const session = await activitySessionService.getActiveForParticipant(characterId);
+      await Character.updateOne({ _id: characterId }, setStage(regenFields(session ? 'busy' : 'full')));
    },
 };
 
+export type RegenScope = 'full' | 'busy';
+
 // One regen tick as a clamped $set map; shared by bulk + single paths so they
-// can't drift. AP has no max, so it just grows.
-function regenFields(): Record<string, unknown> {
+// can't drift. AP has no max, so it just grows — and it grows in BOTH scopes
+// (D15/D23); the 'busy' scope skips resources that pause mid-activity.
+// Exported for tests only (pure).
+export function regenFields(scope: RegenScope): Record<string, unknown> {
    const fields: Record<string, unknown> = {
       'actionPoints.current': { $add: ['$actionPoints.current', AP_REGEN_PER_HOUR] },
       'actionPoints.totalEarned': { $add: ['$actionPoints.totalEarned', AP_REGEN_PER_HOUR] },
@@ -203,6 +223,8 @@ function regenFields(): Record<string, unknown> {
 
    for (const [key, def] of Object.entries(RESOURCES)) {
       if (def.regenPerHour <= 0)
+         continue;
+      if (scope === 'busy' && !def.regenWhileBusy)
          continue;
 
       fields[`resources.${key}.current`] = {
