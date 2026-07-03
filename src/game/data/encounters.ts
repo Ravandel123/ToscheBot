@@ -71,7 +71,7 @@ export interface ActivityEncounter extends EncounterBase {
 export type EncounterDefinition = FlavorEncounter | ActivityEncounter;
 
 /** Chance that any encounter fires on a travel move. PLACEHOLDER tunable. */
-export const TRAVEL_ENCOUNTER_CHANCE_PERCENT = 25;
+export const TRAVEL_ENCOUNTER_CHANCE_PERCENT = 70;
 
 export const ENCOUNTERS = {
    patrol_gossip: {
