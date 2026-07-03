@@ -12,9 +12,9 @@ Legend:
   placeholder values as balance.
 - ⬜ **planned** — not built yet.
 
-_Last updated: 2026-07-03 (first real mechanics D25–D27: 8 attributes + racial bases +
-creation point-buy, d100 check engine, multi-approach travel challenges + deed traits,
-account settings + `/profile`↔`/character view` split)._
+_Last updated: 2026-07-03 (D25–D27 first real mechanics, then D28: the inventory &
+equipment prototype — item/slot catalogs, per-character instances, the `/inventory`
+panel, `/item grant`, equipment attribute modifiers feeding checks and the sheet)._
 
 ---
 
@@ -35,6 +35,11 @@ account settings + `/profile`↔`/character view` split)._
   🟡 All *numbers* (bases, pool, difficulty, skill bonus) are balance placeholders.
 - ✅ **Deed traits** (courage, cowardice…) accrued by encounter choices; nothing gates on
   them yet.
+- ✅ **Inventory & equipment (D28)**: a WHFRP-flavored item catalog + per-character
+  instances, standard equipment slots, the `/inventory` panel, `/item grant` as the only
+  loot source. Equipped gear shifts **effective attributes** (consumed by challenge checks
+  and the sheet). 🟡 All numbers (damage, weights, penalties) are placeholders; nothing
+  damages durability yet.
 - ✅ **Account settings** (D27): `activeGame`, `dmNotifications` — `/profile` toggles them.
 - ✅ **Chronicle**: gameplay is ephemeral; noteworthy outcomes go to a public log channel (D24).
 - 🟡 Skills, resource values, combat formula, AP regen rate, encounter stakes — placeholders.
@@ -85,6 +90,8 @@ the `/profile` panel's toggle buttons (`profile:toggle:<key>`).
 | `traits` | 6 × number | ✅ shape | deed traits (D26), start 0, clamp ≥0; accrued by encounter choices, nothing gates on them yet |
 | `skills` | 6 × {level,progress} | 🟡 | placeholder, level 1 |
 | `currencies` | 1 × number | ✅ per-character | `deltradaCoins`, start 0 (D19) |
+| `inventory` | ItemInstance[] | ✅ shape / 🟡 numbers | owned items (D28): `{ instanceId (8-char, rides in customIds), itemId → catalog, quality, quantity, durability?, acquiredAt }`; capped at `INVENTORY_STACK_LIMIT` (50) entries |
+| `equipment` | { slotId → instanceId } | ✅ | worn/wielded gear; plain object keyed by `equipmentSlots.ts` ids — adding a slot needs no migration |
 
 ### SmackdownRecord — `db/models/smackdownRecord.ts` ✅
 Keyed by `Character._id`. `{ characterName, eloRating (default 1000), wins, losses }`.
@@ -181,6 +188,41 @@ the pool eligible for the destination; `locations: [...ids] | 'anywhere'`). Two 
   `drowning_stranger` (riverbank: swim AGI+Swimming, lutren ×1.5, +courage/+empathy ·
   find a branch PER, +empathy · **walk on** — free, +cowardice).
 Stakes with real mechanics (damage, loot) wait for the Phase 7 ruleset (D14).
+
+### Items — `game/data/items.ts` ✅ shape (D28) / 🟡 every number
+A **discriminated union** by `kind`; adding a kind = one union member + one `ITEM_KINDS`
+meta entry (name, emoji, `stackable`) — the panel renders categories from the meta.
+WHFRP-flavored on purpose (`RPG/Ruleset.md` §8): gear is a choice, not a stat stick.
+
+| kind | stackable | key fields |
+|---|---|---|
+| `weapon` | no | `damage {min,max}` 🟡, `reach` (very short→very long), `hands` (1/2), `properties` (WHFRP-style: piercing, entangling, fast, slow, impact, defensive, hack, pummel, precise — descriptors until Phase 7 combat), `durabilityMax`, `slots` |
+| `shield` | no | `armor` (AV) 🟡, `durabilityMax`, `slots` |
+| `armor` | no | `armor` (AV) 🟡, `durabilityMax`, `slots` (worn on head/chest/hands/legs/feet) |
+| `consumable` | yes | `effects` — resource deltas applied on use (rations +5 stamina, poultice +5 health) |
+| `material` | yes | crafting stock (iron ingot, oak timber…) — no consumer yet (⬜ crafting) |
+| `clutter` | yes | flavor junk with a wink (bent spoon, mysterious sock) |
+
+Every equippable may carry **`attributeRequirements`** (STR 40 to wield the war maul —
+checked against BASE attributes so donning order can't matter) and **`attributeModifiers`**
+(steel breastplate **AGI −10, DEX −5**; steel helm **PER −5**; same shape as racial
+modifiers). Common fields: `name`, `description` (in-character), `material` (→ `MATERIALS`
+mini-catalog; bronze is deliberately pricey — polcan monopoly per canon), `weightKg`,
+`value` 🪙 (display-only until the economy, D19).
+
+**Craftsmanship quality is per INSTANCE** (`ITEM_QUALITIES`: poor → common → fine →
+masterwork): one catalog entry drops at any tier. 🟡 Quality scales **durability max and
+value only** ('Battered/Fine/Masterwork' name prefix); quality×damage waits for Phase 7.
+~30 items ship as the starter catalog; ids are append-only (D10) and **test-validated**
+(`items.test.ts`: legal slots, ordered damage ranges, positive weights, 2H ⇒ main hand
+only, non-zero effects/modifiers — a bad entry fails `npm test`).
+
+### Equipment slots — `game/data/equipmentSlots.ts` ✅ (D28)
+`mainHand, offHand, head, chest, hands, legs, feet`. The character's `equipment` map is a
+plain object keyed by these ids, so **adding a slot** (cloak, trinket, ammo…) **= one
+catalog entry + items that use it — no migration**. Weapons declare which slots fit
+(a dagger fits either hand → the panel offers a slot choice); **two-handed** weapons live
+in `mainHand` and freeze `offHand`.
 
 ---
 
@@ -289,6 +331,39 @@ roll → either `setLocation` + arrival reply (+ flavor line) or an interrupting
 session (see below). Replies are ephemeral; arrivals/outcomes go to the **chronicle** (D24).
 Autocomplete is read-only (`peekActiveCharacter` — no account creation per keystroke).
 
+### Inventory & equipment — ✅ (D28; numbers 🟡)
+- **`/inventory`** — ephemeral panel for the **active** character: **hub** (equipment by
+  slot, armor total + attribute-modifier summary, load `carried/capacity kg`, per-category
+  counts) → **category list** (sort by name / weight / value / newest, 10 per page) →
+  **item card** (kind-specific stat block, durability, requirements ✓/✗, quality/material/
+  weight/value) with contextual actions: Equip (slot choice when several fit) / Unequip /
+  Use / Drop (explicit confirm). Browse state (`kind.sort.page`) rides in customIds —
+  stateless, restart-proof.
+- **Equip rules** (pure, `game/character/inventory.ts → planEquip`): legal slot ·
+  requirements vs **base** attributes · broken gear refused · a two-handed weapon vacates
+  the off hand and blocks it while wielded · equipping into an occupied slot displaces the
+  occupant (it stays in the pack) · moving an equipped item frees its old slot. The plan is
+  applied atomically by `inventoryService` (filter-guarded on the instance still existing).
+- **Effective attributes** = stored attributes + Σ equipped `attributeModifiers`, floored
+  at 1 (`attributesWithEquipment`). Consumers: travel-challenge **check targets** (computed
+  at session start; gear is frozen while busy, so stored targets stay honest) and
+  `/character view` (shows `effective (base±mod)` + an Equipment field).
+- **Concurrency**: every mutation runs under the character lock with a fresh re-read and
+  is **refused while busy** (in-memory locked or in an active session). The two-open-panels
+  race (drop in window B, equip in window A) resolves to a typed "no longer in your pack"
+  note — never a double-spend. Browsing is read-only and lock-free.
+- **Consumables**: one charge per use — quantity-guarded decrement, then the catalog
+  `effects` as a clamped resource delta; the last charge removes the stack.
+- **Acquisition**: `/item grant player item [quality] [quantity]` (ownerOnly, autocomplete
+  over the catalog) is the **only** item source for now; it enforces the 50-entry cap and
+  🟡 carry capacity (= strength in kg; over-capacity blocks acquisition only — no movement
+  penalty yet). Unapproved characters CAN manage gear — it's sheet-building, not a
+  character action (same stance as the creation wizard; `canCharacterAct` untouched).
+- ⬜ Not built (by design, prototype scope): loot sources (fishing/shops/loot tables/
+  starting kit), durability damage + repair, partial-stack drops, ground piles + player
+  trading, ranged weapons + ammunition, auto-equip-best (the `RPG/` §14 simple layer),
+  selling (economy, P17), quality×damage interplay (Phase 7).
+
 ### Durable activities — ✅ scaffold + registry + first consumer (D17/D22)
 Long, interactive, multi-step activities (turn-based duel, obstacles, exploration) are made
 **crash-/restart-safe** by persisting state per step instead of holding it in memory:
@@ -385,6 +460,10 @@ Future `/smackdown duel`: requires **approved** characters, uses real HP/attribu
   applyResourceDeltas (clamp [0,max]), applyCurrencyDeltas (clamp ≥0), applyTraitDeltas
   (clamp ≥0 — D26), spendActionPoints (atomic), setLocation, regenAll/regenAllBusy/regen
   (the D23 busy split).
+- `inventoryService` — grantItems (stack-merge or per-unit instances; cap + capacity
+  checks), removeStack (drop + vacate referencing slots, one write), applyEquipPlan /
+  clearEquipmentSlot, consumeItem (quantity-guarded decrement + resource effects). All
+  callers hold the character's lock; every write is filter-guarded besides (D28).
 - `smackdownService` — getOrCreate, recordResult (Elo), getLeaderboard.
 - `activitySessionService` — create, getActiveForParticipant, activeParticipantIds (the
   durable busy set), advance (step-guarded), complete, abandon. The durability layer for
@@ -414,3 +493,9 @@ the wizard/approve/reject flows, `activity.ts` routes durable activities to the
 - Ambient/random events (the `activeGame` flag's consumer — backlog "Ambient events").
 - Economy: how currencies are earned/spent; per-character wallets interactions.
 - Locations: full map, travel costs, what NPCs do there (per-location activity tables).
+- Items (D28 follow-ups): where loot comes from (fishing, shops, encounter rewards, a
+  starting-kit wizard step); durability loss + repair; quality×damage; encumbrance
+  consequences (movement/AGI penalties vs the current acquisition-only gate); item checks
+  as challenge approaches (`RPG/` P-challenges: a rope trivializes the fallen tree);
+  partial-stack drops, ground piles, player-to-player trading; ranged weapons + ammo;
+  the auto-equip-best button (`RPG/` §14 simple layer).

@@ -6,6 +6,7 @@ import { CURRENCIES, type CurrencyKey } from '../../game/data/currencies.js';
 import { TRAITS, type TraitKey } from '../../game/data/traits.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
 import { effectiveAttributes, emptyAllocation, type AttributeAllocation } from '../../game/character/attributes.js';
+import type { ItemInstance } from '../../game/character/inventory.js';
 import type { RaceId } from '../../game/data/races.js';
 
 // A Character is the in-game entity (player-controlled OR NPC). Replaces the old
@@ -58,6 +59,13 @@ export interface CharacterDoc {
    skills: Record<SkillKey, SkillState>;
    // Currencies are per-character (D12).
    currencies: Record<CurrencyKey, number>;
+   // Owned item instances (D28); static item data resolves from the catalog
+   // (game/data/items.ts) by itemId at read time (D10). Bounded by
+   // INVENTORY_STACK_LIMIT (enforced in inventoryService, free-tier friendly).
+   inventory: ItemInstance[];
+   // Worn/wielded gear: equipment slot id → inventory instanceId. Plain object
+   // (not a catalog-derived field map) so ADDING a slot needs no migration.
+   equipment: Partial<Record<string, string>>;
    createdAt: Date;
    updatedAt: Date;
 }
@@ -65,6 +73,15 @@ export interface CharacterDoc {
 // Schema field maps derived from the catalogs (single source of truth).
 const fromKeys = <T>(keys: string[], value: T): Record<string, T> =>
    Object.fromEntries(keys.map((key) => [key, value]));
+
+const itemInstanceSchema = new Schema({
+   instanceId: { type: String, required: true },
+   itemId: { type: String, required: true },
+   quality: { type: String, required: true, default: 'common' },
+   quantity: { type: Number, required: true, default: 1 },
+   durability: { type: Number },
+   acquiredAt: { type: Date, required: true },
+}, { _id: false });
 
 const characterSchema = new Schema({
    _id: { type: String, required: true },
@@ -90,6 +107,8 @@ const characterSchema = new Schema({
    traits: fromKeys(Object.keys(TRAITS), { type: Number, required: true, default: 0 }),
    skills: fromKeys(Object.keys(SKILLS), { level: { type: Number, required: true }, progress: { type: Number, required: true } }),
    currencies: fromKeys(Object.keys(CURRENCIES), { type: Number, required: true }),
+   inventory: { type: [itemInstanceSchema], default: [] },
+   equipment: { type: Schema.Types.Mixed, default: {} },
 }, { timestamps: true, minimize: false });
 
 export const Character = model('Character', characterSchema) as unknown as Model<CharacterDoc>;
@@ -97,7 +116,7 @@ export const Character = model('Character', characterSchema) as unknown as Model
 /** Catalog-derived stat block for a fresh character (identity/owner set by the caller).
  *  Attributes start at the racial base with an untouched allocation — the wizard's
  *  point-buy step (and any later race change) recomputes them via the service. */
-export function defaultCharacterStats(race: RaceId | null = null): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'attributeAllocation' | 'traits' | 'skills' | 'currencies'> {
+export function defaultCharacterStats(race: RaceId | null = null): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'attributeAllocation' | 'traits' | 'skills' | 'currencies' | 'inventory' | 'equipment'> {
    return {
       resources: Object.fromEntries(
          Object.entries(RESOURCES).map(([key, def]) => [key, { current: def.defaultMax, max: def.defaultMax }]),
@@ -114,5 +133,7 @@ export function defaultCharacterStats(race: RaceId | null = null): Pick<Characte
       currencies: Object.fromEntries(
          Object.keys(CURRENCIES).map((key) => [key, 0]),
       ) as Record<CurrencyKey, number>,
+      inventory: [],
+      equipment: {},
    };
 }

@@ -159,6 +159,7 @@ match these.
 | D25 | **Eight attributes with hardcoded racial bases + a creation point-buy.** The catalog is the owner's set (locks `RPG/`'s P5, minus Luck): `strength, endurance, agility, dexterity, charisma, willpower, perception, intelligence`. Racial base = `ATTRIBUTE_BASE` (25) shifted by the race's **net-zero ±5 modifiers** (`races.ts`, from `RPG/Ruleset.md` §4 with Toughness→Endurance, Fellowship→Charisma). A **required wizard step** distributes **50 points, max +20 on one attribute** (`game/character/attributes.ts` owns the pure math). Stored `attributes` = base + allocation; the allocation is kept as its own field so a mid-wizard race switch **rebases** instead of corrupting the spend (`setRace` recomputes atomically in-pipeline). | Owner's explicit call (2026-07-03), superseding the point-buy half of D14; aligns the bot with the `RPG/` design instead of waiting for it. Values are 🟡 balance placeholders — tuning is a catalog edit, and the pre-launch DB makes a clean cut free (`RPG/CLAUDE.md` §4). |
 | D26 | **Travel encounters are multi-approach challenges resolved by d100 roll-under checks.** `game/checks.ts` is the core test engine (the R1 shape from `RPG/`: target %, roll ≤ target, Success Levels, difficulty modifier, per-race **affinity multipliers** — a lutren swims at ×1.5; the skill term is a 🟡 flat bonus until P-skilltree locks the tree math). An `activity` encounter carries **options**: each a check with `success`/`failure` outcomes (`proceed` = arrive, `turn-back` = stay, `retry` = setback toward `maxSetbacks`) or a check-free choice; outcomes may add **deed traits** (`game/data/traits.ts` — the `RPG/` P-traits direction: ignore a drowning stranger → `cowardice`). The generic **`challenge`** handler replaced the single-button `obstacle`; per-option targets are computed at session start and stored in state, so the stateless panel shows honest % odds on every repaint. | The owner wants WHFRP-style choices — several solutions per obstacle, pick the one your build is good at — which is exactly `RPG/`'s multi-approach model, designed once, here. Adding an encounter = one catalog entry (test-validated), zero new handlers. |
 | D27 | **Account-level settings live on `Account`; `/profile` is the account surface, `/character view` is the character sheet.** `Account.settings`: `activeGame` (opt-out from future random/ambient game events; default **true**) and `dmNotifications` (already consumed by the approval-verdict DM). `/profile` shows an ephemeral panel with toggle buttons (`profile` component namespace, rendered from a `SETTING_META` map — adding a setting = model field + one map entry); the old `/profile` character embed moved to **`/character view [user]`** and now shows attributes + earned traits. | The account is the *player*, the character is the *piece* — settings must survive switches/rerolls (D12 finally has user-level state). The placeholder flags were chosen to have real consumers (ambient-events backlog; the DM flow) instead of dead toggles. |
+| D28 | **Inventory & equipment prototype (WHFRP-flavored).** Items are a **discriminated-union catalog** (`game/data/items.ts`): kinds `weapon/shield/armor/consumable/material/clutter` (adding a kind = one union member + one `ITEM_KINDS` meta entry — the panel renders categories FROM the meta), WHFRP-style **weapon properties** (piercing, entangling…), reach, materials, and a per-INSTANCE **craftsmanship quality** ladder (poor→masterwork; 🟡 scales durability/value only — quality×damage interplay waits for Phase 7). The DB stores only **instances** (`Character.inventory[]`: 8-char `instanceId` riding in customIds, `itemId`, `quality`, `quantity` on stackable kinds, `durability`) and an **`equipment` slot→instanceId map** over the slot catalog (`equipmentSlots.ts` — **adding a slot = one catalog entry, no migration**; the schema field is a plain object). Equipped gear applies `attributeModifiers` (plate −10 AGI) → **effective attributes** consumed by challenge-check targets and `/character view`; `attributeRequirements` gate equipping and are checked against **base** attributes (donning order must never matter); **two-handed weapons occupy both hands** (equip vacates the off hand; the off hand refuses while one is wielded). **Every mutation runs under the character lock with a fresh re-read** (equip/use/drop from a second panel degrades to a typed "no longer in your pack" note — never a double-spend), is **refused while busy** (in-memory lock or active session: gear is frozen mid-adventure so stored challenge targets stay honest — D26), and every write is additionally filter-guarded server-side. `/inventory` = stateless ephemeral panel (hub → category list with sort + pages → item card; browse state `kind.sort.page` rides in customIds); **`/item grant` (ownerOnly) is the prototype's only loot source**. Encumbrance 🟡: `INVENTORY_STACK_LIMIT` 50 entries (bounds the embedded array on M0) + carry capacity = strength in kg, enforced on acquisition. | The owner wants gear closer to WHFRP than D&D: weight, penalties, requirements and properties make equipment a real *choice*, and armor penalties give D25 attributes + D26 checks an immediate consumer instead of waiting for combat. Per-instance quality = loot variety at zero catalog cost. Embedded instances (not a separate items collection) keep every panel action one doc read and every mutation one atomic single-doc write under the existing per-character lock. |
 
 ## Target architecture
 
@@ -185,18 +186,21 @@ src/
     connect.ts
     models/*.ts         mongoose schemas + exported TS types
     services/*.ts       all DB access goes through services (accountService, characterService,
-                        smackdownService, activitySessionService)
+                        smackdownService, activitySessionService, inventoryService)
   game/                 server-RPG domain logic, Discord-agnostic where possible
     checks.ts           the d100 roll-under test engine (target/SL/race affinity — D26)
     character/          pure rules + identity helpers (canCharacterAct/canEdit/canSubmit, limits)
                         + creationSteps.ts (the wizard step catalog — D20)
                         + attributes.ts (racial bases + creation point-buy math — D25)
+                        + inventory.ts (item instances, stacking, encumbrance, equip planning,
+                          equipment attribute modifiers, browse state — D28)
     combat/             combat engine (engine/stats/elo pure + testable, flavor data)
     activity/           durable-activity pure logic: session timing helpers (D17 seam) +
                         per-activity step reducers (challenge.ts — D22/D26)
     world/              travel rules over the location graph + encounter rolling (D21)
     chronicle.ts        Discord adapter (marked): posts noteworthy actions to the public log (D24)
-    data/               static content catalogs (locations, encounters, traits, fish...) — see D10
+    data/               static content catalogs (locations, encounters, traits, items,
+                        equipment slots, fish...) — see D10
     ...
   lexicon.ts            GENERAL flavour vocabulary (adjectives, adverbs, nouns, terms…) — reused
                         by fun, the RPG and real commands; NOT fun-only (ported from dataSpeech.js).
@@ -267,16 +271,24 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
   throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
   must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Four consumers
+  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Five consumers
   so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
   D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details modal,
   Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
   `activity` (the generic durable-activity router — D22: resolves the session by id, verifies
   the clicker owns a participant, dispatches to the `_activities/` registry by session type),
-  and `profile` (the D27 account-settings toggles). All are fully
+  `profile` (the D27 account-settings toggles), and `inventory` (the D28 pack/equipment
+  panel). All are fully
   **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
   `interaction.update()` that panel (`ModalSubmitInteraction.isFromMessage()`).
+- **Component mutations on game state** (the `inventory` handler is the reference pattern):
+  fast-fail if the character is in-memory locked (don't queue a button click behind a whole
+  fight), `deferUpdate()` (the lock wait + writes can pass the ~3 s ack window), then
+  `runExclusive` → **re-read the doc** → re-check session-busy → validate against the FRESH
+  state → one atomic, filter-guarded service write → repaint via `editReply`. Read-only
+  navigation skips the lock entirely — staleness self-heals because every view renders from
+  the DB, never from the message.
 - **Slash commands that may wait on a lock** (e.g. `/travel` queued behind a fight) must
   `deferReply` *before* `runExclusive` — an interaction only waits ~3 s for its first ack —
   and use `editReply` inside. Autocomplete handlers must be **read-only**
@@ -586,10 +598,13 @@ busy-aware regen, and the public chronicle channel. On top of them, **D25–D27*
 8-attribute catalog with racial bases + the wizard's 50-point point-buy step, the d100
 check engine, multi-approach travel challenges with deed traits (the `challenge` activity
 replaced `obstacle`), and account settings (`/profile` = account panel + toggles;
-character sheet = `/character view`).
-**214 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
+character sheet = `/character view`). Newest: the **inventory & equipment prototype
+(D28)** — item/slot catalogs, per-character instances, the `/inventory` panel and
+`/item grant`, with armor penalties feeding challenge checks and the sheet.
+**248 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
 live; the bot has not yet been run end-to-end against a live Atlas cluster (needs `.env` +
-`npm run deploy` — required again: `/profile` and `/character` definitions changed). See
+`npm run deploy` — required again: `/inventory` and `/item` are NEW commands, and
+`/profile`/`/character` definitions changed earlier). See
 `RPG_SYSTEM.md` for the concrete game model and what is still placeholder.
 
 **What works today:**
@@ -605,11 +620,14 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
   `directmessage`/`dm`, `messagechannel`/`mc`.
 - **Slash (`/`)** — `character` (create/edit/**view**/race/submit/list/switch via the
   step-driven creation wizard — details, race, gender, **attribute point-buy** — + owner
-  approval; `view` is the public character sheet with attributes + traits), `profile` (the
-  account panel: active character, settings toggles — D27), `smackdown sparring`
+  approval; `view` is the public character sheet with attributes, **equipment** + traits),
+  `profile` (the account panel: active character, settings toggles — D27), `inventory`
+  (the D28 pack/equipment panel: hub → category browser with sort/pages → item card with
+  equip/unequip/use/drop), `item grant` (ownerOnly: conjure catalog items into a player's
+  active character — the prototype's loot source), `smackdown sparring`
   (round-by-round in `#smackdown-spire`, commits Elo only), `travel` (location graph +
-  encounters: flavor lines or **multi-approach d100 challenges** — D26; approved characters
-  only), `leaderboard`, `ping`.
+  encounters: flavor lines or **multi-approach d100 challenges** — D26, rolled against
+  **equipment-modified attributes** — D28; approved characters only), `leaderboard`, `ping`.
 - **Events** — `messageCreate` (banned-word check → `h!` routing → ambient AI),
   `interactionCreate` (slash + component routing), `clientReady` (starts jobs),
   `messageDelete`/`messageUpdate` (edit/delete log to `#espionage` — the delete log adds
@@ -621,7 +639,7 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
 - **Component handlers** — `character` (creation wizard incl. attribute point-buy +
   approval petition), `comic` (browser), `activity` (generic durable-activity router +
   `_activities/` registry; first activity: `challenge`), `profile` (account-settings
-  toggles).
+  toggles), `inventory` (the D28 panel — lock-guarded, busy-gated gear mutations).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
   (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
   `game/chronicle.ts` (public game log — D24).
@@ -660,6 +678,14 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
             d100 roll-under engine; multi-approach travel **challenges** (options = checks,
             race affinities, deed **traits**; replaced `obstacle`); account settings +
             `/profile`↔`/character view` split. Numbers stay 🟡 until `RPG/` locks balance.
+      - [x] **6E — inventory & equipment prototype** (D28, owner-requested 2026-07-03):
+            item + slot catalogs (WHFRP weapon properties, craftsmanship quality tiers,
+            materials, reach), per-character instances + slot map, `/inventory` panel
+            (browse/sort/equip/use/drop under the character lock, busy-gated), `/item grant`,
+            equipment attribute modifiers → challenge checks + `/character view`. Still ⬜:
+            loot sources (fishing/shops/loot tables), durability damage + repair, partial-
+            stack drops, ground piles/trading, ranged weapons + ammo, a starting-kit wizard
+            step, auto-equip-best (`RPG/` §14 simple layer), selling (economy — P17).
       - [ ] **6C** — NPC seeding + NPC-movement cron along the graph (NPC = `Character` with
             `ownerId: null`); more locations + per-location activity tables (see backlog).
 - [ ] **Phase 7 — RPG ruleset** — being **designed in `RPG/`** (d100 roll-under, roles +

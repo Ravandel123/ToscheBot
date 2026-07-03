@@ -4,6 +4,7 @@ import { accountService } from '../../../db/services/accountService.js';
 import { characterService } from '../../../db/services/characterService.js';
 import { activitySessionService } from '../../../db/services/activitySessionService.js';
 import { canCharacterAct, type ActBlockReason } from '../../../game/character/rules.js';
+import { attributesWithEquipment } from '../../../game/character/inventory.js';
 import { displayName } from '../../../game/character/identity.js';
 import { LOCATIONS, locationName, type LocationId } from '../../../game/data/locations.js';
 import { TRAVEL_AP_COST, checkTravel, connectionsFrom, type TravelBlockReason } from '../../../game/world/travel.js';
@@ -158,9 +159,12 @@ async function startEncounterActivity(
 
    // Per-option d100 targets are computed HERE, from the live character, and
    // stored in the session state — the stateless panel then shows honest %
-   // odds on every repaint without re-deriving stats (D26).
+   // odds on every repaint without re-deriving stats (D26). Equipped gear
+   // shifts the attributes (plate drags your climb — D28); it can't change
+   // mid-challenge because the busy gate freezes gear while a session runs.
+   const subject = { ...character, attributes: attributesWithEquipment(character) };
    const optionTargets = Object.fromEntries(
-      encounter.options.flatMap((option) => (option.check ? [[option.id, checkTarget(character, option.check)] as const] : [])),
+      encounter.options.flatMap((option) => (option.check ? [[option.id, checkTarget(subject, option.check)] as const] : [])),
    );
 
    const session = await activitySessionService.create('challenge', [character._id], { ...initialChallengeState(encounterId, from, to, optionTargets) });

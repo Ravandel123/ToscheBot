@@ -7,8 +7,10 @@ import { CURRENCIES } from '../../../game/data/currencies.js';
 import { RACES } from '../../../game/data/races.js';
 import { ATTRIBUTES, ATTRIBUTE_KEYS } from '../../../game/data/attributes.js';
 import { TRAITS, TRAIT_KEYS } from '../../../game/data/traits.js';
+import { EQUIPMENT_SLOTS } from '../../../game/data/equipmentSlots.js';
 import { locationName } from '../../../game/data/locations.js';
 import { displayName, isHttpUrl, STATUS_LABEL } from '../../../game/character/identity.js';
+import { equipmentAttributeModifiers, equippedItems, itemDisplayName, totalEquippedArmor } from '../../../game/character/inventory.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
 
 export function buildCharacterSheet(character: CharacterDoc): EmbedBuilder {
@@ -23,9 +25,24 @@ export function buildCharacterSheet(character: CharacterDoc): EmbedBuilder {
       .map(([key, def]) => `${def.emoji} **${def.name}:** ${character.currencies[key as keyof typeof CURRENCIES]}`)
       .join('\n');
 
+   // Equipped gear shifts effective attributes (D28): show `effective (base±mod)`
+   // so a plated canid can see exactly what the steel costs him.
+   const modifiers = equipmentAttributeModifiers(character);
    const attributes = ATTRIBUTE_KEYS
-      .map((key) => `**${ATTRIBUTES[key].abbreviation}** ${character.attributes[key] ?? '—'}`)
+      .map((key) => {
+         const base = character.attributes[key];
+         const shift = modifiers[key] ?? 0;
+         if (base === undefined)
+            return `**${ATTRIBUTES[key].abbreviation}** —`;
+         if (shift === 0)
+            return `**${ATTRIBUTES[key].abbreviation}** ${base}`;
+         return `**${ATTRIBUTES[key].abbreviation}** ${Math.max(1, base + shift)} (${base}${shift > 0 ? '+' : ''}${shift})`;
+      })
       .join(' · ');
+
+   const gear = equippedItems(character)
+      .map(({ slot, item }) => `${EQUIPMENT_SLOTS[slot].emoji} **${EQUIPMENT_SLOTS[slot].name}:** ${itemDisplayName(item)}`)
+      .join('\n');
 
    // Traits are earned by deeds — only what the character has actually become.
    const traits = TRAIT_KEYS
@@ -43,6 +60,7 @@ export function buildCharacterSheet(character: CharacterDoc): EmbedBuilder {
          { name: 'Vitals', value: resources, inline: true },
          { name: 'Currencies', value: currencies, inline: true },
          { name: 'Attributes', value: attributes },
+         ...(gear ? [{ name: `Equipment · 🛡️ Armor ${totalEquippedArmor(character)}`, value: gear }] : []),
          ...(traits ? [{ name: 'Traits', value: traits }] : []),
       );
 

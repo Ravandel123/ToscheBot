@@ -26,6 +26,7 @@ import {
    type ChallengeState,
 } from '../../../game/activity/challenge.js';
 import { checkTarget, rollAgainst } from '../../../game/checks.js';
+import { attributesWithEquipment } from '../../../game/character/inventory.js';
 import { randomItem } from '../../../lib/random.js';
 import type { ActivityHandler, ActivityView } from '../../../types/activities.js';
 import type { ActivitySessionDoc } from '../../../db/models/activitySession.js';
@@ -78,9 +79,10 @@ async function handleOption(
    }
 
    // Roll against the target computed (and shown) when the session opened;
-   // fall back to a fresh computation for pre-D26 blobs.
+   // fall back to a fresh computation for pre-D26 blobs (with equipped-gear
+   // modifiers applied, like the session-start computation — D28).
    const check = option.check
-      ? rollAgainst(state.optionTargets[option.id] ?? checkTarget(actor, option.check))
+      ? rollAgainst(state.optionTargets[option.id] ?? checkTarget({ ...actor, attributes: attributesWithEquipment(actor) }, option.check))
       : null;
    const success = check?.success ?? true;
    const outcome = appliedOutcome(option, success);
