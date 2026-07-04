@@ -26,8 +26,8 @@ panel, `/item grant`, equipment attribute modifiers feeding checks and the sheet
 - ✅ Currencies and Smackdown ELO are **per character**.
 - ✅ Character **creation, editing, and approval** — a step-driven **wizard panel** (D20)
   over `/character …` + owner Approve/Reject — Phase 6B.
-- ✅ **Travel** along the location graph (`/travel`, D21) with a **travel-encounter seam**
-  (flavor lines or interactive challenges) — the first `canCharacterAct` + AP consumer.
+- ✅ **Travel** along the location graph (via the `/play` hub's travel select, D21/D30) with a
+  **travel-encounter seam** (flavor lines or interactive challenges) — the first `canCharacterAct` + AP consumer.
 - ✅ **Durable interactive activities** (D17/D22): registry-dispatched, crash-safe;
   first activity: `challenge` (multi-approach, d100-checked — D26).
 - ✅ **Attributes are real (D25)**: eight of them, racial bases, a 50-point creation
@@ -167,7 +167,7 @@ on both ends, no self-loops — a bad edit fails `npm test`). A location MAY car
 location (`resolveLocationId`, D10 rule 3). The location set itself is placeholder content.
 
 ### Travel encounters — `game/data/encounters.ts` ✅ model (D21/D26) / 🟡 content & numbers
-Rolled on each `/travel` move (`TRAVEL_ENCOUNTER_CHANCE_PERCENT = 25`, weighted pick from
+Rolled on each travel move (from the `/play` hub, D30) (`TRAVEL_ENCOUNTER_CHANCE_PERCENT`, weighted pick from
 the pool eligible for the destination; `locations: [...ids] | 'anywhere'`). Two kinds:
 - **`flavor`** — instant: a random line is appended to the arrival message + chronicle. The
   move completes normally. (`patrol_gossip`, `dropped_ribbon`)
@@ -249,7 +249,7 @@ SL     = tens(target) − tens(roll)     (Success Levels; negative on a failure)
 - Spent only through `characterService.spendActionPoints(id, cost)` — atomic
   check-and-spend (filter requires `current >= cost`; can't overdraw under concurrency).
 - Regen rate is a placeholder (`AP_REGEN_PER_HOUR = 1`).
-- Consumers: ✅ `/travel` goes through the spend path with `TRAVEL_AP_COST = 0` (🟡 a
+- Consumers: ✅ travel (the `/play` hub) goes through the spend path with `TRAVEL_AP_COST = 0` (🟡 a
   placeholder price — the wiring is real, the number waits for Phase 7). An activity
   spawned by travel is covered by that charge (D17: charged at start; clean cancel
   refunds; timeout/abandon forfeits).
@@ -271,7 +271,7 @@ SL     = tens(target) − tens(roll)     (Success Levels; negative on a failure)
 - `game/character/rules.ts → canCharacterAct(character, apCost)` gates *character actions*:
   requires `approved && health > 0 && actionPoints.current >= apCost`. **Viewing**
   (`/character view`, inventory) never uses this gate; a 0-HP character can be active and
-  inspected, just can't act. ✅ **First consumer: `/travel`** — unapproved characters can't
+  inspected, just can't act. ✅ **First consumer: travel** (the `/play` hub) — unapproved characters can't
   roam. Sparring stays deliberately ungated (D16); the serious duel (Phase 7) is next.
 
 ### Character lifecycle commands — ✅ (Phase 6B, wizard since D20)
@@ -321,15 +321,17 @@ survives restarts). 0-HP / unapproved characters *can* be activated. This switch
 what enforces "one user, one live activity at a time" — the locks themselves are per
 **character** (see CLAUDE.md "Concurrency model").
 
-### Travel — ✅ (D21; numbers 🟡)
-`/travel destination:<autocomplete of connected locations>` moves the **active** character
-along the graph. Flow (whole decision under `runExclusive([characterId])`, reply deferred
-first): re-check busy (an active session **re-enters** — re-renders its current step instead
-of erroring) → `canCharacterAct(character, TRAVEL_AP_COST)` → edge check (`game/world/
-travel.ts → checkTravel`, stale origins fall back to start) → atomic AP spend → encounter
-roll → either `setLocation` + arrival reply (+ flavor line) or an interrupting activity
-session (see below). Replies are ephemeral; arrivals/outcomes go to the **chronicle** (D24).
-Autocomplete is read-only (`peekActiveCharacter` — no account creation per keystroke).
+### Travel — ✅ (D21; hub D30; numbers 🟡)
+Travel is a **`/play` hub action**, not a standalone command (the old `/travel` was folded
+in — D30). The hub's **"Travel to…" select** lists the connected locations; picking one moves
+the **active** character along the graph. Flow (component `deferUpdate` first, whole decision
+under `runExclusive([characterId])`): re-check busy (an active session **re-enters** —
+re-renders its current step instead of erroring) → `canCharacterAct(character, TRAVEL_AP_COST)`
+→ edge check (`game/world/travel.ts → checkTravel`, stale origins fall back to start) → atomic
+AP spend → encounter roll → either `setLocation` + **re-render the hub at the destination**
+(+ flavor banner) or an interrupting activity session (see below). Replies are ephemeral;
+arrivals/outcomes go to the **chronicle** (D24). The travel-execution + view live in
+`commands/components/_playPanel.ts`.
 
 ### Inventory & equipment — ✅ (D28; numbers 🟡)
 - **`/inventory`** — ephemeral panel for the **active** character: **hub** (equipment by

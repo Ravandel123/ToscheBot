@@ -166,6 +166,7 @@ match these.
 | D27 | **Account-level settings live on `Account`; `/profile` is the account surface, `/character view` is the character sheet.** `Account.settings`: `activeGame` (opt-out from future random/ambient game events; default **true**) and `dmNotifications` (already consumed by the approval-verdict DM). `/profile` shows an ephemeral panel with toggle buttons (`profile` component namespace, rendered from a `SETTING_META` map — adding a setting = model field + one map entry); the old `/profile` character embed moved to **`/character view [user]`** and now shows attributes + earned traits. | The account is the *player*, the character is the *piece* — settings must survive switches/rerolls (D12 finally has user-level state). The placeholder flags were chosen to have real consumers (ambient-events backlog; the DM flow) instead of dead toggles. |
 | D28 | **Inventory & equipment prototype (WHFRP-flavored).** Items are a **discriminated-union catalog** (`game/data/items.ts`): kinds `weapon/shield/armor/consumable/material/clutter` (adding a kind = one union member + one `ITEM_KINDS` meta entry — the panel renders categories FROM the meta), WHFRP-style **weapon properties** (piercing, entangling…), reach, materials, and a per-INSTANCE **craftsmanship quality** ladder (poor→masterwork; 🟡 scales durability/value only — quality×damage interplay waits for Phase 7). The DB stores only **instances** (`Character.inventory[]`: 8-char `instanceId` riding in customIds, `itemId`, `quality`, `quantity` on stackable kinds, `durability`) and an **`equipment` slot→instanceId map** over the slot catalog (`equipmentSlots.ts` — **adding a slot = one catalog entry, no migration**; the schema field is a plain object). Equipped gear applies `attributeModifiers` (plate −10 AGI) → **effective attributes** consumed by challenge-check targets and `/character view`; `attributeRequirements` gate equipping and are checked against **base** attributes (donning order must never matter); **two-handed weapons occupy both hands** (equip vacates the off hand; the off hand refuses while one is wielded). **Every mutation runs under the character lock with a fresh re-read** (equip/use/drop from a second panel degrades to a typed "no longer in your pack" note — never a double-spend), is **refused while busy** (in-memory lock or active session: gear is frozen mid-adventure so stored challenge targets stay honest — D26), and every write is additionally filter-guarded server-side. `/inventory` = stateless ephemeral panel (hub → category list with sort + pages → item card; browse state `kind.sort.page` rides in customIds); **`/item grant` (ownerOnly) is the prototype's only loot source**. Encumbrance 🟡: `INVENTORY_STACK_LIMIT` 50 entries (bounds the embedded array on M0) + carry capacity = strength in kg, enforced on acquisition. | The owner wants gear closer to WHFRP than D&D: weight, penalties, requirements and properties make equipment a real *choice*, and armor penalties give D25 attributes + D26 checks an immediate consumer instead of waiting for combat. Per-instance quality = loot variety at zero catalog cost. Embedded instances (not a separate items collection) keep every panel action one doc read and every mutation one atomic single-doc write under the existing per-character lock. |
 | D29 | **Production launches through a `bot.js` shim at the repo root, not a changed startup command.** Sparkedhost's startup-command template is fixed to (effectively) `node bot.js` unless a support ticket changes it. `bot.js` is hand-written, not compiled: it calls tsx's own `register()` export (`import { register } from 'tsx/esm/api'`) to install tsx's loader hook on the already-running `node` process, then `await import('./src/index.ts')`. It sits outside `src/` (not type-checked by `npm run build`, excluded from `eslint.config.mjs`'s lint set alongside `eslint.config.mjs` itself) since it's hosting glue, not domain code. | Calling raw `node:module`'s `register('tsx/esm', parentURL)` directly is **not** enough and throws ("tsx must be loaded with `--import` instead of `--loader`") — tsx's `initialize` hook requires a `data` payload that only tsx's own `register()` wrapper supplies. Verified with a repo-local smoke test before relying on it. Avoids a support ticket entirely and keeps D11 (no `dist/`, tsx everywhere) intact. |
+| D30 | **`/play` is the game's single entry point — a location-centric hub — and the standalone `/travel` is folded into it.** `/play` opens an ephemeral, stateless hub (`play` component namespace, panel in `_playPanel.ts`) showing the active character's place (name/description), vitals (HP/AP) and two kinds of interaction: a **"Travel to…" select** of the connected locations and a **button per local action**. The travel select carries the whole execution that used to be the `/travel` command (validate → spend AP → roll encounter → move-or-start-challenge); a plain arrival **re-renders the hub at the destination** so the play loop continues, an 'activity' encounter hands the message to the challenge activity exactly as before. Local actions come from a **data-driven catalog** (`game/data/hubActions.ts`: id, label, emoji, `locations` filter `'anywhere'`|ids, `comingSoon` line — the backlog's "locations = activity tables" made concrete and **test-validated** against `LOCATIONS`); **every one is a PLACEHOLDER today** (button → in-character "coming soon" ephemeral, hub stays up). Opening `/play` while mid-activity re-enters the current step (D22). The standalone `/travel` slash command is **removed** (its pure rules in `game/world/travel.ts` and the encounter/challenge stack are unchanged). | The owner wants one discoverable "default to the game" surface instead of a scatter of slash commands, and the hub is where the "each location has its own things to do" constraint (backlog) actually lands — turning a placeholder into a real activity is one catalog flip + one handler case. Folding travel in avoids two parallel travel entry points; reviving `/travel` is a one-file restore if ever wanted. |
 
 ## Target architecture
 
@@ -205,8 +206,8 @@ src/
                         per-activity step reducers (challenge.ts — D22/D26)
     world/              travel rules over the location graph + encounter rolling (D21)
     chronicle.ts        Discord adapter (marked): posts noteworthy actions to the public log (D24)
-    data/               static content catalogs (locations, encounters, traits, items,
-                        equipment slots, fish...) — see D10
+    data/               static content catalogs (locations, encounters, hubActions,
+                        traits, items, equipment slots, fish...) — see D10
     ...
   lexicon.ts            GENERAL flavour vocabulary (adjectives, adverbs, nouns, terms…) — reused
                         by fun, the RPG and real commands; NOT fun-only (ported from dataSpeech.js).
@@ -277,14 +278,15 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
   throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
   must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Five consumers
+  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Seven consumers
   so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
   D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details modal,
   Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
   `activity` (the generic durable-activity router — D22: resolves the session by id, verifies
   the clicker owns a participant, dispatches to the `_activities/` registry by session type),
-  `profile` (the D27 account-settings toggles), and `inventory` (the D28 pack/equipment
-  panel). All are fully
+  `profile` (the D27 account-settings toggles), `inventory` (the D28 pack/equipment
+  panel), and `play` (the D30 game hub — travel select + placeholder local-action buttons).
+  All are fully
   **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
   `interaction.update()` that panel (`ModalSubmitInteraction.isFromMessage()`).
@@ -295,9 +297,10 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   state → one atomic, filter-guarded service write → repaint via `editReply`. Read-only
   navigation skips the lock entirely — staleness self-heals because every view renders from
   the DB, never from the message.
-- **Slash commands that may wait on a lock** (e.g. `/travel` queued behind a fight) must
+- **Slash commands that may wait on a lock** (e.g. `/smackdown` queued behind another fight) must
   `deferReply` *before* `runExclusive` — an interaction only waits ~3 s for its first ack —
-  and use `editReply` inside. Autocomplete handlers must be **read-only**
+  and use `editReply` inside. The component equivalent (the `/play` travel select, D30) uses
+  `deferUpdate` + `editReply` instead. Autocomplete handlers must be **read-only**
   (`peekActiveCharacter`, not `getOrCreate`): they fire per keystroke.
 - The owner bypasses cooldowns and permission checks (but not command logic).
 - Jobs are loaded and validated in `init()`, but started by `clientReady` so they never
@@ -579,7 +582,9 @@ Several overlap the `RPG/` design project — coordinate there instead of decidi
 - **Locations = activity tables** — treat as a 6C design constraint: travel is only worth
   building if each location has its own things to do (tavern = gambling/rest, plaza =
   market/gossip, spire = duels, river = its own fishing table). Otherwise `travel` is a
-  button that renames a string.
+  button that renames a string. *(The `/play` hub (D30) is now the SURFACE for this —
+  `game/data/hubActions.ts` lists per-location actions as buttons, all placeholders today;
+  each backlog activity above becomes one catalog flip + one handler case.)*
 - **Weekly DB backup job** — Atlas M0 has **no backups**; a cron dumping the collections
   to JSON and posting the file to an owner-only channel insures the whole game state for
   an hour of work. Cheap enough to just do early.
@@ -598,19 +603,22 @@ moderation are live; the server-RPG is mid-build — the Account/Character *stru
 Phase 7 ruleset (D14, as narrowed). A full architecture review hardened the seams (D18 lock
 keying + drain-before-release, status-guarded approval transitions, side-effect-free
 lookups, word-boundary moderation matching). The **game foundations landed (D20–D24)**:
-the step-driven creation wizard, the location graph + `/travel` (first
-`canCharacterAct`/AP consumer), the travel-encounter seam, the activity-handler registry,
+the step-driven creation wizard, the location graph + travel (first
+`canCharacterAct`/AP consumer, now the `/play` hub — D30), the travel-encounter seam, the activity-handler registry,
 busy-aware regen, and the public chronicle channel. On top of them, **D25–D27**: the
 8-attribute catalog with racial bases + the wizard's 50-point point-buy step, the d100
 check engine, multi-approach travel challenges with deed traits (the `challenge` activity
 replaced `obstacle`), and account settings (`/profile` = account panel + toggles;
 character sheet = `/character view`). Newest: the **inventory & equipment prototype
 (D28)** — item/slot catalogs, per-character instances, the `/inventory` panel and
-`/item grant`, with armor penalties feeding challenge checks and the sheet.
-**248 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
+`/item grant`, with armor penalties feeding challenge checks and the sheet. Newest: the
+**`/play` game hub (D30)** — a single location-centric entry point (travel select +
+placeholder per-location action buttons from `game/data/hubActions.ts`) that **folds the
+standalone `/travel` in**.
+**252 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
 live; the bot has not yet been run end-to-end against a live Atlas cluster (needs `.env` +
-`npm run deploy` — required again: `/inventory` and `/item` are NEW commands, and
-`/profile`/`/character` definitions changed earlier). See
+`npm run deploy` — required again: `/play` is a NEW command and `/travel` was REMOVED, plus
+`/inventory`/`/item` are new and `/profile`/`/character` definitions changed earlier). See
 `RPG_SYSTEM.md` for the concrete game model and what is still placeholder.
 
 **What works today:**
@@ -631,9 +639,11 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
   (the D28 pack/equipment panel: hub → category browser with sort/pages → item card with
   equip/unequip/use/drop), `item grant` (ownerOnly: conjure catalog items into a player's
   active character — the prototype's loot source), `smackdown sparring`
-  (round-by-round in `#smackdown-spire`, commits Elo only), `travel` (location graph +
-  encounters: flavor lines or **multi-approach d100 challenges** — D26, rolled against
-  **equipment-modified attributes** — D28; approved characters only), `leaderboard`, `ping`.
+  (round-by-round in `#smackdown-spire`, commits Elo only), `play` (the D30 game hub —
+  the default entry point: travel across the location graph via a select, encounters as
+  flavor lines or **multi-approach d100 challenges** — D26, rolled against
+  **equipment-modified attributes** — D28; placeholder buttons for the local activities
+  still to be built; approved characters only for travel), `leaderboard`, `ping`.
 - **Events** — `messageCreate` (banned-word check → `h!` routing → ambient AI),
   `interactionCreate` (slash + component routing), `clientReady` (starts jobs),
   `messageDelete`/`messageUpdate` (edit/delete log to `#espionage` — the delete log adds
@@ -645,7 +655,8 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
 - **Component handlers** — `character` (creation wizard incl. attribute point-buy +
   approval petition), `comic` (browser), `activity` (generic durable-activity router +
   `_activities/` registry; first activity: `challenge`), `profile` (account-settings
-  toggles), `inventory` (the D28 panel — lock-guarded, busy-gated gear mutations).
+  toggles), `inventory` (the D28 panel — lock-guarded, busy-gated gear mutations),
+  `play` (the D30 game hub — travel select + placeholder local-action buttons).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
   (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
   `game/chronicle.ts` (public game log — D24).
@@ -675,8 +686,8 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
       - [x] **6B** — `/character` lifecycle + interactive creation panel + owner approval via
             `imperialDecrees` (petition + buttons + reject-reason modal), component-handler infra.
       - [x] **6B+** — game foundations (D20–D24): step-catalog creation wizard (panel renders
-            from `creationSteps.ts`); locations graph + `/travel` (**first `canCharacterAct` +
-            AP-spend consumer**) + encounter seam (flavor/activity); activity-handler registry +
+            from `creationSteps.ts`); locations graph + travel (**first `canCharacterAct` +
+            AP-spend consumer**; later folded into the `/play` hub — D30) + encounter seam (flavor/activity); activity-handler registry +
             generic `activity` router + `obstacle` (**first D17 consumer**, pure-random per D16);
             session-aware switch guard; busy-split regen (D23); chronicle channel (D24).
       - [x] **6D — first real mechanics** (D25–D27, owner-requested 2026-07-03): 8-attribute
