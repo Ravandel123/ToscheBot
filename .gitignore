@@ -4,8 +4,10 @@ node_modules/
 # Compiled output
 dist/
 
-# Environment variables
+# Environment variables (.env = local/Tyril by default; .env.production = live
+# Tosche config, loaded locally via ENV_FILE=.env.production)
 .env
+.env.*
 
 # Logs
 *.log

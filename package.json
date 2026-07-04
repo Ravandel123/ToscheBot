@@ -11,7 +11,8 @@
       "lint": "eslint .",
       "test": "vitest run",
       "test:watch": "vitest",
-      "deploy": "tsx src/scripts/deploy-commands.ts"
+      "deploy": "tsx src/scripts/deploy-commands.ts",
+      "clear-commands": "tsx src/scripts/clear-commands.ts"
    },
    "dependencies": {
       "discord.js": "^14.26.4",

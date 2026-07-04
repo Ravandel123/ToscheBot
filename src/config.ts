@@ -1,7 +1,9 @@
 import { BotConfig } from './types/core.js';
 
 try {
-   process.loadEnvFile();
+   // Set ENV_FILE to load an alternate env file (e.g. `.env.production` to run
+   // the live Tosche config locally instead of the default local/Tyril `.env`).
+   process.loadEnvFile(process.env.ENV_FILE);
 } catch {
    // No .env file — environment variables come from the host (e.g. the VPS service).
 }
