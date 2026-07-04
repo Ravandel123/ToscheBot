@@ -1,5 +1,6 @@
 import type { ActivityType } from '../../db/models/activitySession.js';
 import type { CheckDefinition } from '../checks.js';
+import type { LocationCondition } from '../world/conditions.js';
 import type { TraitKey } from './traits.js';
 
 // Travel-encounter catalog (D21/D26): things that can happen on the road. Two
@@ -21,12 +22,18 @@ interface EncounterBase {
    locations: readonly string[] | 'anywhere';
    /** Relative pick weight within the eligible pool. */
    weight: number;
+   /** When it can fire (D31): time of day, weather, running events, traits… —
+    *  the owner's "character walks in and, if a criterion holds, something
+    *  happens". Omitted = always eligible. */
+   conditions?: LocationCondition;
 }
 
 export interface FlavorEncounter extends EncounterBase {
    kind: 'flavor';
    /** One is appended to the arrival message (and the chronicle line). */
    lines: readonly [string, ...string[]];
+   /** A location feature this sighting reveals (→ LocationFeature.id, D31). */
+   discovers?: string;
 }
 
 /** How one attempted approach ends — or doesn't. */
@@ -39,6 +46,8 @@ export interface ChallengeOutcome {
    lines: readonly [string, ...string[]];
    /** Deed-trait deltas this outcome inflicts/earns (D26). */
    traits?: Partial<Record<TraitKey, number>>;
+   /** A location feature this outcome reveals at the DESTINATION (D31). */
+   discovers?: string;
 }
 
 /** One approach to a challenge — a button on the encounter panel. */
@@ -92,6 +101,39 @@ export const ENCOUNTERS = {
       lines: [
          'You spot a torn ribbon in the mud — someone left in a hurry.',
          'A crow watches you from a fencepost, unimpressed.',
+      ],
+   },
+   // --- Conditional encounters (D31): fire only when their criteria hold -------
+   soaked_traveler: {
+      name: 'Soaked through',
+      kind: 'flavor',
+      locations: 'anywhere',
+      weight: 2,
+      conditions: { weather: ['rain', 'storm'] },
+      lines: [
+         'The rain finds every gap in your cloak before you are halfway there.',
+         'You arrive dripping; a puddle forms around your boots within moments.',
+      ],
+   },
+   grateful_beggar: {
+      name: 'A grateful beggar',
+      kind: 'flavor',
+      locations: ['plaza'],
+      weight: 2,
+      conditions: { minTraits: { empathy: 1 } },
+      lines: [
+         'A beggar catches your sleeve — "I heard what you did by the river. Deltrada sees, friend."',
+      ],
+   },
+   reed_glimmer: {
+      name: 'A glimmer in the reeds',
+      kind: 'flavor',
+      locations: ['riverbank'],
+      weight: 4,
+      conditions: { timeOfDay: ['night'] },
+      discovers: 'old_jetty',
+      lines: [
+         'Moonlight catches on something among the reeds — worn planks, rotted rope… the river has not quite swallowed an old jetty.',
       ],
    },
    fallen_tree: {

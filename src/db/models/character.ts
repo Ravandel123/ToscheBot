@@ -96,7 +96,9 @@ const characterSchema = new Schema({
       bio: { type: String, default: '' },
       avatarUrl: { type: String, default: '' },
    },
-   locationId: { type: String, required: true, default: STARTING_LOCATION },
+   // Indexed: presence ("who is at the plaza?") is an indexed query over this
+   // field — the single source of truth, never duplicated into location docs (D31).
+   locationId: { type: String, required: true, default: STARTING_LOCATION, index: true },
    resources: fromKeys(Object.keys(RESOURCES), { current: { type: Number, required: true }, max: { type: Number, required: true } }),
    actionPoints: {
       current: { type: Number, required: true, default: 0 },

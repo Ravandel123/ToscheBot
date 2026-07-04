@@ -12,9 +12,9 @@ Legend:
   placeholder values as balance.
 - ⬜ **planned** — not built yet.
 
-_Last updated: 2026-07-03 (D25–D27 first real mechanics, then D28: the inventory &
-equipment prototype — item/slot catalogs, per-character instances, the `/inventory`
-panel, `/item grant`, equipment attribute modifiers feeding checks and the sheet)._
+_Last updated: 2026-07-04 (D31: living locations — the `LocationState` collection
+(weather, events, discoveries, stats), derived presence, the game clock + condition
+language gating hub actions and conditional encounters)._
 
 ---
 
@@ -41,6 +41,12 @@ panel, `/item grant`, equipment attribute modifiers feeding checks and the sheet
   and the sheet). 🟡 All numbers (damage, weights, penalties) are placeholders; nothing
   damages durability yet.
 - ✅ **Account settings** (D27): `activeGame`, `dmNotifications` — `/profile` toggles them.
+- ✅ **Living locations (D31)**: each location has dynamic state in the `LocationState`
+  collection — **weather**, **running events**, **server-wide discoveries**, **stats**
+  (danger/prosperity), visits — plus **derived presence** (who stands there, incl. NPCs)
+  and a **game clock**; one typed **condition language** gates hub actions ("market
+  closed at night", secrets hidden until discovered) and conditional encounters.
+  🟡 All weights/durations/chances are placeholder flavor.
 - ✅ **Chronicle**: gameplay is ephemeral; noteworthy outcomes go to a public log channel (D24).
 - 🟡 Skills, resource values, combat formula, AP regen rate, encounter stakes — placeholders.
 - ⬜ NPC seeding + movement (6C), the full RPG ruleset (Phase 7).
@@ -96,6 +102,25 @@ the `/profile` panel's toggle buttons (`profile:toggle:<key>`).
 ### SmackdownRecord — `db/models/smackdownRecord.ts` ✅
 Keyed by `Character._id`. `{ characterName, eloRating (default 1000), wins, losses }`.
 `characterName` is denormalized so the leaderboard needs no join.
+
+### LocationState — `db/models/locationState.ts` ✅ (D31)
+One doc per location, keyed by the location id, **created lazily on first read**
+(`locationStateService.getFresh` — no seeding step). The dynamic half of the world; the
+static half is the code catalog (`game/data/locations.ts`).
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | string | → `LocationId` |
+| `weather` | `{ kind, since, until }` | current spell; re-rolled by a **filter-guarded** update once `until` lapses (one concurrent winner) |
+| `events` | `[{ eventId, startedAt, endsAt }]` | running location events; lapsed ones swept on read; starts are guarded (`tryStartEvent`) |
+| `discoveredFeatureIds` | string[] | **server-wide** — one character's find unlocks the place for everyone (chronicled once) |
+| `stats` | `Record<string, number>` | keyed by `LOCATION_STATS` (danger, prosperity); plain object — **adding a stat = one catalog entry, no migration** |
+| `visits` | number | total arrivals (flavor/titles fodder) |
+
+**Presence is deliberately NOT stored here**: "who is at the plaza" derives from an
+indexed query over `Character.locationId` (`characterService.atLocation` — approved
+characters, active or benched, plus every NPC; drafts are not in the world yet). One
+source of truth — nothing to drift under concurrent moves.
 
 ---
 
@@ -166,9 +191,56 @@ on both ends, no self-loops — a bad edit fails `npm test`). A location MAY car
 `channelId`. Not Discord channels by default. Stale stored ids resolve to the starting
 location (`resolveLocationId`, D10 rule 3). The location set itself is placeholder content.
 
-### Travel encounters — `game/data/encounters.ts` ✅ model (D21/D26) / 🟡 content & numbers
-Rolled on each travel move (from the `/play` hub, D30) (`TRAVEL_ENCOUNTER_CHANCE_PERCENT`, weighted pick from
-the pool eligible for the destination; `locations: [...ids] | 'anywhere'`). Two kinds:
+Since D31 a location also carries (all optional, all test-validated in `locations.test.ts`):
+- **`climate`** — weather-weight overrides (riverbank: more fog/rain);
+- **`features`** — discoverable points of interest `{ id, name, discoveryLine }`, hidden
+  until someone finds them (currently: the riverbank's `old_jetty`, revealed by the
+  night-only `reed_glimmer` encounter);
+- **`baseStats`** — starting values for the dynamic stats (riverbank danger 20…).
+
+### Weather — `game/data/weather.ts` ✅ shape (D31) / 🟡 content
+`clear, overcast, rain, storm, fog` — each `{ name, emoji, hubLine, durationHours,
+defaultWeight }`. A location's current **spell** lives in its LocationState and is
+re-rolled lazily when it lapses (`rollWeather`: location climate over default weights).
+Consumed by hub display and `weather` conditions; 🟡 no mechanical effect on checks yet.
+
+### Location events — `game/data/locationEvents.ts` ✅ shape (D31) / 🟡 content
+Transient happenings that switch ON at a place for a few hours: `market_day` (plaza,
+daylight), `bards_night` (tavern, evening/night — unlocks the `listen` hub action),
+`garrison_drill` (spire, daylight). Each `{ name, emoji, banner, locations, conditions?,
+startChancePercent, durationHours }`. Rolled on qualifying arrivals
+(`game/world/events.ts`), started via the guarded `tryStartEvent` (of two simultaneous
+arrivals only one starts + announces it), swept on read after `endsAt`, bannered on the
+hub, chronicled when they break out.
+
+### Location stats — `game/data/locationStats.ts` ✅ shape (D31) / 🟡 numbers
+`danger` (0–100, bands calm→perilous) and `prosperity` (0–100, destitute→opulent).
+Stored per location in LocationState (missing keys fall back to `baseStats`/defaults —
+adding a stat needs no migration). Consumers: **danger raises the travel-encounter
+chance** (`travelEncounterChance`), both color the hub line.
+`locationStateService.adjustStat` (clamped) is the write seam — ⬜ nothing drives the
+values yet (event/outcome deltas wait for balance).
+
+### The game clock & conditions — `game/world/{time,conditions}.ts` ✅ (D31)
+`timeOfDay()` maps the real clock (fixed owner-timezone UTC offset, `GAME_UTC_OFFSET_HOURS`)
+to `morning / day / evening / night`. **One condition language** gates everything:
+`LocationCondition = { timeOfDay?, weather?, duringEvent?, requiresDiscovery?, minTraits? }`,
+evaluated by `evaluateCondition(condition, worldContext(state, character))` with a short
+player-facing reason on failure ("only during the evening or night"). Used by hub-action
+`availability` (+`hidden` for secrets), encounter `conditions` and event start conditions.
+`minTraits` is the **first thing that reads deed traits** (the plaza beggar greets
+`empathy ≥ 1`).
+
+### Travel encounters — `game/data/encounters.ts` ✅ model (D21/D26/D31) / 🟡 content & numbers
+Rolled on each travel move (from the `/play` hub, D30) (`TRAVEL_ENCOUNTER_CHANCE_PERCENT`
+**+ the destination's danger** — `travelEncounterChance`; weighted pick from
+the pool eligible for the destination; `locations: [...ids] | 'anywhere'`). Since D31 an
+encounter may carry **`conditions`** (the shared condition language — time of day, weather,
+running events, discoveries, min traits: the owner's "walk in and if a criterion holds,
+something happens") and flavor encounters / challenge outcomes may **`discovers`** a
+location feature (revealed server-wide + chronicled exactly once). Conditional content so
+far: `soaked_traveler` (rain/storm), `grateful_beggar` (plaza, empathy ≥ 1),
+`reed_glimmer` (riverbank at night — discovers the old jetty). Two kinds:
 - **`flavor`** — instant: a random line is appended to the arrival message + chronicle. The
   move completes normally. (`patrol_gossip`, `dropped_ribbon`)
 - **`activity`** — interrupts the move with a durable **`challenge`** ActivitySession and
@@ -321,17 +393,26 @@ survives restarts). 0-HP / unapproved characters *can* be activated. This switch
 what enforces "one user, one live activity at a time" — the locks themselves are per
 **character** (see CLAUDE.md "Concurrency model").
 
-### Travel — ✅ (D21; hub D30; numbers 🟡)
+### Travel — ✅ (D21; hub D30; world state D31; numbers 🟡)
 Travel is a **`/play` hub action**, not a standalone command (the old `/travel` was folded
-in — D30). The hub's **"Travel to…" select** lists the connected locations; picking one moves
+in — D30). The hub shows the location's **weather + time + danger/prosperity line, running
+events, and who is standing there** (players + NPCs, viewer marked, capped name list), and
+its **"Travel to…" select** lists the connected locations; picking one moves
 the **active** character along the graph. Flow (component `deferUpdate` first, whole decision
 under `runExclusive([characterId])`): re-check busy (an active session **re-enters** —
 re-renders its current step instead of erroring) → `canCharacterAct(character, TRAVEL_AP_COST)`
 → edge check (`game/world/travel.ts → checkTravel`, stale origins fall back to start) → atomic
-AP spend → encounter roll → either `setLocation` + **re-render the hub at the destination**
-(+ flavor banner) or an interrupting activity session (see below). Replies are ephemeral;
-arrivals/outcomes go to the **chronicle** (D24). The travel-execution + view live in
-`commands/components/_playPanel.ts`.
+AP spend → read the **destination's live state** (`getFresh`) → conditional encounter roll
+(danger-biased chance) → either `setLocation` + `recordVisit` + possible **feature
+discovery** + possible **event start** + **re-render the hub at the destination**
+(+ banners) or an interrupting activity session (see below). Replies are ephemeral;
+arrivals/outcomes/discoveries/event starts go to the **chronicle** (D24). The travel
+execution lives in `commands/components/_playPanel.ts`; the shared hub view + context
+loader in `_hubView.ts`. **Local action buttons** are filtered/disabled by their
+`availability` conditions at render AND re-validated at click time (stale panels: the
+character may have moved, night may have fallen, the event may have ended). Multiple open
+hubs stay safe: the character is re-read under its lock, and every LocationState write is
+filter-guarded.
 
 ### Inventory & equipment — ✅ (D28; numbers 🟡)
 - **`/inventory`** — ephemeral panel for the **active** character: **hub** (equipment by
@@ -394,11 +475,14 @@ live character at session start, stored in state), and one button per option + *
 
 Each option click = one d100 `rollAgainst(storedTarget)` (or an auto-success for check-free
 options) → the option's `success`/`failure` outcome → committed via `advance` (flavor line
-+ roll summary ride in the state, so repaints are stable). Trait deltas apply after the
-step guard is won (atomic, at-most-once; a crash there loses at most one flavor point —
-accepted). `proceed` ⇒ arrival (`setLocation`), `turn-back` (or `setbacks ≥ maxSetbacks`)
++ roll summary ride in the state, so repaints are stable). Trait deltas and feature
+**discoveries** (`outcome.discovers`, D31) apply after the step guard is won (atomic,
+at-most-once; a crash there loses at most one flavor point — accepted). `proceed` ⇒ arrival
+(`setLocation` + `recordVisit`), `turn-back` (or `setbacks ≥ maxSetbacks`)
 ⇒ stays at origin; **Turn back** = clean cancel (`abandon`, refund seam); timeout ⇒ TTL
-reap ⇒ stays at origin, no side effect needed. Outcomes are chronicled. **Crash-safe
+reap ⇒ stays at origin, no side effect needed. Outcomes are chronicled. Every ending
+(proceed / forced back / retreat) **re-renders the `/play` hub** at wherever the character
+stands, so the loop continues (D31). **Crash-safe
 completion:** the terminal outcome is *stored in state* (`resolution`), the final `advance`
 doubles as the completion mutex, side effects (move, chronicle, delete) are idempotent, and
 if the bot dies mid-tail, `render` shows a "Press on" **finalize** button that re-runs it.
@@ -460,8 +544,13 @@ Future `/smackdown duel`: requires **approved** characters, uses real HP/attribu
   setAttributeAllocation (persists point-buy + recomputed attributes),
   submitForApproval/approve/reject (status-guarded, return false on a stale transition),
   applyResourceDeltas (clamp [0,max]), applyCurrencyDeltas (clamp ≥0), applyTraitDeltas
-  (clamp ≥0 — D26), spendActionPoints (atomic), setLocation, regenAll/regenAllBusy/regen
-  (the D23 busy split).
+  (clamp ≥0 — D26), spendActionPoints (atomic), setLocation, atLocation (derived presence
+  over the indexed `locationId` — D31), regenAll/regenAllBusy/regen (the D23 busy split).
+- `locationStateService` (D31) — getFresh (lazy create + guarded weather re-roll + event
+  sweep), tryStartEvent (guarded: one starter among concurrent arrivals), discoverFeature
+  ($addToSet; true = newly found), adjustStat (clamped to the catalog range — the ⬜ write
+  seam), recordVisit. Every write is an atomic filter-guarded single-doc update; no
+  location locks needed.
 - `inventoryService` — grantItems (stack-merge or per-unit instances; cap + capacity
   checks), removeStack (drop + vacate referencing slots, one write), applyEquipPlan /
   clearEquipmentSlot, consumeItem (quantity-guarded decrement + resource effects). All
@@ -495,6 +584,9 @@ the wizard/approve/reject flows, `activity.ts` routes durable activities to the
 - Ambient/random events (the `activeGame` flag's consumer — backlog "Ambient events").
 - Economy: how currencies are earned/spent; per-character wallets interactions.
 - Locations: full map, travel costs, what NPCs do there (per-location activity tables).
+- World state drivers (D31 follow-ups): what nudges danger/prosperity (`adjustStat` has no
+  writer yet), weather-modified check difficulty, per-character discoveries, more
+  weathers/events/features, event-driven encounter pools.
 - Items (D28 follow-ups): where loot comes from (fishing, shops, encounter rewards, a
   starting-kit wizard step); durability loss + repair; quality×damage; encumbrance
   consequences (movement/AGI penalties vs the current acquisition-only gate); item checks

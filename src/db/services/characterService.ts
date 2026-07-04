@@ -208,6 +208,17 @@ export const characterService = {
       await Character.updateOne({ _id: characterId }, { $set: { locationId } });
    },
 
+   /** Who is standing at a location (presence, D31): approved player characters
+    *  (active or benched — they exist in the world either way) plus every NPC.
+    *  Drafts/pending are not in the world yet. Read-only, rides the locationId
+    *  index; presence is DERIVED, never stored on the location (no drift). */
+   async atLocation(locationId: string): Promise<Pick<CharacterDoc, '_id' | 'ownerId' | 'identity'>[]> {
+      return Character.find(
+         { locationId, $or: [{ ownerId: null }, { approvalStatus: 'approved' }] },
+         { identity: 1, ownerId: 1 },
+      ).lean<Pick<CharacterDoc, '_id' | 'ownerId' | 'identity'>[]>();
+   },
+
    /** Bulk hourly regen for all characters except `excludeIds` (locked or
     *  mid-activity). Resources nudge toward max (placeholder flat amounts); AP
     *  just accumulates (no cap, D15). Returns the number of characters modified. */

@@ -13,6 +13,8 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type ButtonInteraction, type MessageActionRowComponentBuilder } from 'discord.js';
 import { activitySessionService } from '../../../db/services/activitySessionService.js';
 import { characterService } from '../../../db/services/characterService.js';
+import { locationStateService } from '../../../db/services/locationStateService.js';
+import { freshHubView, revealFeature } from '../_hubView.js';
 import { postChronicle } from '../../../game/chronicle.js';
 import { displayName } from '../../../game/character/identity.js';
 import { locationName } from '../../../game/data/locations.js';
@@ -102,6 +104,11 @@ async function handleOption(
    if (outcome.traits)
       await characterService.applyTraitDeltas(actor._id, outcome.traits);
 
+   // Some outcomes reveal a feature of the destination (D31) — idempotent, and
+   // it announces itself to the chronicle only when genuinely new.
+   if (outcome.discovers)
+      await revealFeature(client, actor, next.toId, outcome.discovers);
+
    if (challengeProgress(next) === 'ongoing') {
       await interaction.update(stepView(advanced, next));
       return;
@@ -111,7 +118,9 @@ async function handleOption(
    await finalize(client, interaction, advanced, actor, next);
 }
 
-/** The idempotent completion tail: move (only on 'proceed') → chronicle → delete session → repaint. */
+/** The idempotent completion tail: move (only on 'proceed') → chronicle → delete
+ *  session → repaint the HUB at wherever the character ended up, so the play
+ *  loop continues without a fresh `/play` (D30/D31). */
 async function finalize(
    client: ToscheClient,
    interaction: ButtonInteraction,
@@ -123,11 +132,19 @@ async function finalize(
    const name = displayName(actor);
    const challenge = encounterName(state.encounterId);
 
-   if (proceeded)
+   if (proceeded) {
       await characterService.setLocation(actor._id, state.toId);
+      await locationStateService.recordVisit(state.toId);
+   }
 
    await activitySessionService.complete(session._id);
-   await interaction.update(proceeded ? proceededView(state) : turnedBackView(state));
+
+   const survivor = await characterService.get(actor._id);
+   const banner = proceeded
+      ? `✅ ${state.lastLine || 'You press on.'}\nYou arrive at **${locationName(state.toId)}**.`
+      : `❌ ${challenge} proves too much — you trudge back to **${locationName(state.fromId)}**.`;
+   await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
+
    await postChronicle(client, proceeded
       ? `🧭 **${name}** reached **${locationName(state.toId)}**, getting past ${challenge.toLowerCase()} on the way.`
       : `🧭 **${name}** set out for **${locationName(state.toId)}**, but ${challenge.toLowerCase()} forced them back to **${locationName(state.fromId)}**.`);
@@ -142,11 +159,10 @@ async function handleRetreat(
    const state = challengeStateFrom(session.state);
 
    await activitySessionService.abandon(session._id);
-   await interaction.update({
-      content: `You think better of it and turn back toward **${locationName(state.fromId)}**, ${displayName(actor)}.`,
-      embeds: [],
-      components: [],
-   });
+
+   const survivor = await characterService.get(actor._id);
+   const banner = `↩️ You think better of it and turn back toward **${locationName(state.fromId)}**.`;
+   await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
 }
 
 async function repaintCurrent(interaction: ButtonInteraction, sessionId: string): Promise<void> {
@@ -200,22 +216,6 @@ function finalizeView(session: ActivitySessionDoc, state: ChallengeState): Activ
    );
 
    return { embeds: [embed], components: [row] };
-}
-
-function proceededView(state: ChallengeState): ActivityView & { content: string } {
-   return {
-      content: `✅ ${state.lastLine || 'You press on.'}\nYou arrive at **${locationName(state.toId)}**.`,
-      embeds: [],
-      components: [],
-   };
-}
-
-function turnedBackView(state: ChallengeState): ActivityView & { content: string } {
-   return {
-      content: `❌ ${encounterName(state.encounterId)} proves too much — you trudge back to **${locationName(state.fromId)}**.`,
-      embeds: [],
-      components: [],
-   };
 }
 
 /** One button per available approach + Turn back, chunked into ≤5-wide rows. */

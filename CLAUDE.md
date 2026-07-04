@@ -167,6 +167,7 @@ match these.
 | D28 | **Inventory & equipment prototype (WHFRP-flavored).** Items are a **discriminated-union catalog** (`game/data/items.ts`): kinds `weapon/shield/armor/consumable/material/clutter` (adding a kind = one union member + one `ITEM_KINDS` meta entry — the panel renders categories FROM the meta), WHFRP-style **weapon properties** (piercing, entangling…), reach, materials, and a per-INSTANCE **craftsmanship quality** ladder (poor→masterwork; 🟡 scales durability/value only — quality×damage interplay waits for Phase 7). The DB stores only **instances** (`Character.inventory[]`: 8-char `instanceId` riding in customIds, `itemId`, `quality`, `quantity` on stackable kinds, `durability`) and an **`equipment` slot→instanceId map** over the slot catalog (`equipmentSlots.ts` — **adding a slot = one catalog entry, no migration**; the schema field is a plain object). Equipped gear applies `attributeModifiers` (plate −10 AGI) → **effective attributes** consumed by challenge-check targets and `/character view`; `attributeRequirements` gate equipping and are checked against **base** attributes (donning order must never matter); **two-handed weapons occupy both hands** (equip vacates the off hand; the off hand refuses while one is wielded). **Every mutation runs under the character lock with a fresh re-read** (equip/use/drop from a second panel degrades to a typed "no longer in your pack" note — never a double-spend), is **refused while busy** (in-memory lock or active session: gear is frozen mid-adventure so stored challenge targets stay honest — D26), and every write is additionally filter-guarded server-side. `/inventory` = stateless ephemeral panel (hub → category list with sort + pages → item card; browse state `kind.sort.page` rides in customIds); **`/item grant` (ownerOnly) is the prototype's only loot source**. Encumbrance 🟡: `INVENTORY_STACK_LIMIT` 50 entries (bounds the embedded array on M0) + carry capacity = strength in kg, enforced on acquisition. | The owner wants gear closer to WHFRP than D&D: weight, penalties, requirements and properties make equipment a real *choice*, and armor penalties give D25 attributes + D26 checks an immediate consumer instead of waiting for combat. Per-instance quality = loot variety at zero catalog cost. Embedded instances (not a separate items collection) keep every panel action one doc read and every mutation one atomic single-doc write under the existing per-character lock. |
 | D29 | **Production launches through a `bot.js` shim at the repo root, not a changed startup command.** Sparkedhost's startup-command template is fixed to (effectively) `node bot.js` unless a support ticket changes it. `bot.js` is hand-written, not compiled: it calls tsx's own `register()` export (`import { register } from 'tsx/esm/api'`) to install tsx's loader hook on the already-running `node` process, then `await import('./src/index.ts')`. It sits outside `src/` (not type-checked by `npm run build`, excluded from `eslint.config.mjs`'s lint set alongside `eslint.config.mjs` itself) since it's hosting glue, not domain code. | Calling raw `node:module`'s `register('tsx/esm', parentURL)` directly is **not** enough and throws ("tsx must be loaded with `--import` instead of `--loader`") — tsx's `initialize` hook requires a `data` payload that only tsx's own `register()` wrapper supplies. Verified with a repo-local smoke test before relying on it. Avoids a support ticket entirely and keeps D11 (no `dist/`, tsx everywhere) intact. |
 | D30 | **`/play` is the game's single entry point — a location-centric hub — and the standalone `/travel` is folded into it.** `/play` opens an ephemeral, stateless hub (`play` component namespace, panel in `_playPanel.ts`) showing the active character's place (name/description), vitals (HP/AP) and two kinds of interaction: a **"Travel to…" select** of the connected locations and a **button per local action**. The travel select carries the whole execution that used to be the `/travel` command (validate → spend AP → roll encounter → move-or-start-challenge); a plain arrival **re-renders the hub at the destination** so the play loop continues, an 'activity' encounter hands the message to the challenge activity exactly as before. Local actions come from a **data-driven catalog** (`game/data/hubActions.ts`: id, label, emoji, `locations` filter `'anywhere'`|ids, `comingSoon` line — the backlog's "locations = activity tables" made concrete and **test-validated** against `LOCATIONS`); **every one is a PLACEHOLDER today** (button → in-character "coming soon" ephemeral, hub stays up). Opening `/play` while mid-activity re-enters the current step (D22). The standalone `/travel` slash command is **removed** (its pure rules in `game/world/travel.ts` and the encounter/challenge stack are unchanged). | The owner wants one discoverable "default to the game" surface instead of a scatter of slash commands, and the hub is where the "each location has its own things to do" constraint (backlog) actually lands — turning a placeholder into a real activity is one catalog flip + one handler case. Folding travel in avoids two parallel travel entry points; reviving `/travel` is a one-file restore if ever wanted. |
+| D31 | **Locations live: static catalog + a dynamic `LocationState` collection + DERIVED presence.** The static half stays in code (D10): `locations.ts` gains `climate` (weather-weight overrides), discoverable `features` and `baseStats`; new catalogs `weather.ts`, `locationEvents.ts`, `locationStats.ts` (danger, prosperity) — extending any of them = one entry, no migration. The dynamic half is the **`LocationState`** collection (one doc per location, **lazily created on first read** by `locationStateService.getFresh`): the current **weather spell** (re-rolled by a filter-guarded update once `until` lapses), **running events** (started by guarded rolls on qualifying arrivals — `game/world/events.ts` — and swept on read), **server-wide `discoveredFeatureIds`**, clamped **stats** (danger biases the travel-encounter chance via `travelEncounterChance`; `adjustStat` is the write seam) and a `visits` counter. **Presence is never stored**: "who is here" = an indexed query over `Character.locationId` (`characterService.atLocation` — approved characters + NPCs; benched alts count, drafts don't), shown on the hub. One typed **condition language** (`game/world/conditions.ts`: `timeOfDay`/`weather`/`duringEvent`/`requiresDiscovery`/`minTraits`, evaluated against a `WorldContext` snapshot; the game clock in `world/time.ts` runs on the owner's timezone via a fixed UTC offset) gates **hub actions** (closed-with-reason 🔒 and disabled, or `hidden` until discovered), **encounters** (the owner's "walk in and if a criterion holds, something happens" — also the first trait consumer) and **event starts**; flavor encounters and challenge outcomes may `discovers` a feature (revealed + chronicled exactly once — `revealFeature`). Every LocationState write is an atomic filter-guarded single-doc update and travel still re-reads the character under its lock, so N stale `/play` panels race safely; `play:act` clicks **re-validate location AND availability at click time**. The hub view moved to `commands/components/_hubView.ts` (shared by `_playPanel` and the challenge finalize/retreat, which now return the player TO the hub). | The owner wants living places — weather, events, secrets, "who is standing here" — that stay one-catalog-line extensible. His instinct (a locations collection) is right for location-OWNED state, but storing presence there too would mean two writes per move and drift under concurrency; deriving it from the already-authoritative `Character.locationId` (+1 index) is one cheap query that cannot lie. Server-wide (not per-character) discoveries fit a ~10-person co-op server: one scout unlocks the jetty for everyone and the chronicle gets a story; a per-character scope can be added later as another condition field. |
 
 ## Target architecture
 
@@ -193,7 +194,8 @@ src/
     connect.ts
     models/*.ts         mongoose schemas + exported TS types
     services/*.ts       all DB access goes through services (accountService, characterService,
-                        smackdownService, activitySessionService, inventoryService)
+                        smackdownService, activitySessionService, inventoryService,
+                        locationStateService — D31)
   game/                 server-RPG domain logic, Discord-agnostic where possible
     checks.ts           the d100 roll-under test engine (target/SL/race affinity — D26)
     character/          pure rules + identity helpers (canCharacterAct/canEdit/canSubmit, limits)
@@ -205,9 +207,12 @@ src/
     activity/           durable-activity pure logic: session timing helpers (D17 seam) +
                         per-activity step reducers (challenge.ts — D22/D26)
     world/              travel rules over the location graph + encounter rolling (D21)
+                        + time.ts (the game clock), conditions.ts (the D31 condition
+                        language + WorldContext), events.ts (location-event rolling)
     chronicle.ts        Discord adapter (marked): posts noteworthy actions to the public log (D24)
-    data/               static content catalogs (locations, encounters, hubActions,
-                        traits, items, equipment slots, fish...) — see D10
+    data/               static content catalogs (locations, weather, locationEvents,
+                        locationStats, encounters, hubActions, traits, items, equipment
+                        slots, fish...) — see D10
     ...
   lexicon.ts            GENERAL flavour vocabulary (adjectives, adverbs, nouns, terms…) — reused
                         by fun, the RPG and real commands; NOT fun-only (ported from dataSpeech.js).
@@ -285,7 +290,8 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   `activity` (the generic durable-activity router — D22: resolves the session by id, verifies
   the clicker owns a participant, dispatches to the `_activities/` registry by session type),
   `profile` (the D27 account-settings toggles), `inventory` (the D28 pack/equipment
-  panel), and `play` (the D30 game hub — travel select + placeholder local-action buttons).
+  panel), and `play` (the D30/D31 game hub — travel select + condition-gated local-action
+  buttons; the shared hub VIEW + context loader live in `_hubView.ts`).
   All are fully
   **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
@@ -611,14 +617,21 @@ check engine, multi-approach travel challenges with deed traits (the `challenge`
 replaced `obstacle`), and account settings (`/profile` = account panel + toggles;
 character sheet = `/character view`). Newest: the **inventory & equipment prototype
 (D28)** — item/slot catalogs, per-character instances, the `/inventory` panel and
-`/item grant`, with armor penalties feeding challenge checks and the sheet. Newest: the
+`/item grant`, with armor penalties feeding challenge checks and the sheet. Then the
 **`/play` game hub (D30)** — a single location-centric entry point (travel select +
 placeholder per-location action buttons from `game/data/hubActions.ts`) that **folds the
-standalone `/travel` in**.
-**252 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
+standalone `/travel` in**. Newest: **living locations (D31)** — the `LocationState`
+collection (lazy per-location doc: weather spells, running events, server-wide feature
+discoveries, danger/prosperity stats, visits), presence derived from the indexed
+`Character.locationId`, the game clock + one typed condition language gating hub actions
+(market closed at night, secrets hidden until found), conditional travel encounters
+(first trait consumer) and event starts — all rendered on the hub; challenge endings now
+return the player to the hub.
+**290 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
 live; the bot has not yet been run end-to-end against a live Atlas cluster (needs `.env` +
 `npm run deploy` — required again: `/play` is a NEW command and `/travel` was REMOVED, plus
-`/inventory`/`/item` are new and `/profile`/`/character` definitions changed earlier). See
+`/inventory`/`/item` are new and `/profile`/`/character` definitions changed earlier; D31
+itself added NO new slash commands, so it forces no extra redeploy). See
 `RPG_SYSTEM.md` for the concrete game model and what is still placeholder.
 
 **What works today:**
@@ -639,11 +652,13 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
   (the D28 pack/equipment panel: hub → category browser with sort/pages → item card with
   equip/unequip/use/drop), `item grant` (ownerOnly: conjure catalog items into a player's
   active character — the prototype's loot source), `smackdown sparring`
-  (round-by-round in `#smackdown-spire`, commits Elo only), `play` (the D30 game hub —
-  the default entry point: travel across the location graph via a select, encounters as
-  flavor lines or **multi-approach d100 challenges** — D26, rolled against
-  **equipment-modified attributes** — D28; placeholder buttons for the local activities
-  still to be built; approved characters only for travel), `leaderboard`, `ping`.
+  (round-by-round in `#smackdown-spire`, commits Elo only), `play` (the D30/D31 game hub —
+  the default entry point: the location's weather/time/danger/prosperity, running events,
+  **who is standing there** (players + NPCs), travel across the location graph via a
+  select, encounters as flavor lines or **multi-approach d100 challenges** — D26, rolled
+  against **equipment-modified attributes** — D28, filtered by **live conditions** — D31;
+  local-action buttons gated by time/weather/events/discoveries (still placeholders);
+  approved characters only for travel), `leaderboard`, `ping`.
 - **Events** — `messageCreate` (banned-word check → `h!` routing → ambient AI),
   `interactionCreate` (slash + component routing), `clientReady` (starts jobs),
   `messageDelete`/`messageUpdate` (edit/delete log to `#espionage` — the delete log adds
@@ -656,7 +671,8 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
   approval petition), `comic` (browser), `activity` (generic durable-activity router +
   `_activities/` registry; first activity: `challenge`), `profile` (account-settings
   toggles), `inventory` (the D28 panel — lock-guarded, busy-gated gear mutations),
-  `play` (the D30 game hub — travel select + placeholder local-action buttons).
+  `play` (the D30/D31 game hub — travel select + condition-gated local-action buttons,
+  re-validated at click time).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
   (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
   `game/chronicle.ts` (public game log — D24).
@@ -703,6 +719,15 @@ live; the bot has not yet been run end-to-end against a live Atlas cluster (need
             loot sources (fishing/shops/loot tables), durability damage + repair, partial-
             stack drops, ground piles/trading, ranged weapons + ammo, a starting-kit wizard
             step, auto-equip-best (`RPG/` §14 simple layer), selling (economy — P17).
+      - [x] **6F — living locations** (D31, owner-requested 2026-07-04): the `LocationState`
+            collection (lazy docs: weather spells, running location events, server-wide
+            feature discoveries, danger/prosperity stats, visit counter), presence derived
+            from the indexed `Character.locationId` (shown on the hub incl. NPCs), the
+            game clock (`world/time.ts`) + typed condition language (`world/conditions.ts`)
+            gating hub actions / conditional encounters / event starts, encounter- and
+            outcome-driven discoveries, challenge endings returning to the hub. Still ⬜:
+            real consumers for `adjustStat` (event/outcome stat deltas), weather-modified
+            check difficulty, per-character discoveries, NPC presence (needs 6C seeding).
       - [ ] **6C** — NPC seeding + NPC-movement cron along the graph (NPC = `Character` with
             `ownerId: null`); more locations + per-location activity tables (see backlog).
 - [ ] **Phase 7 — RPG ruleset** — being **designed in `RPG/`** (d100 roll-under, roles +

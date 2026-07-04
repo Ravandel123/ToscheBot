@@ -1,9 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { eligibleEncounters, rollTravelEncounter } from './encounters.js';
-import { ENCOUNTERS, type ChallengeOption } from '../data/encounters.js';
+import { eligibleEncounters, rollTravelEncounter, travelEncounterChance } from './encounters.js';
+import { ENCOUNTERS, TRAVEL_ENCOUNTER_CHANCE_PERCENT, type ChallengeOption, type EncounterDefinition } from '../data/encounters.js';
+import { LOCATIONS, type LocationDefinition, type LocationId } from '../data/locations.js';
+import type { WorldContext } from './conditions.js';
 
 afterEach(() => {
    vi.restoreAllMocks();
+});
+
+const ctx = (overrides: Partial<WorldContext> = {}): WorldContext => ({
+   timeOfDay: 'day',
+   weather: 'clear',
+   activeEventIds: [],
+   discoveredFeatureIds: [],
+   ...overrides,
 });
 
 describe('eligibleEncounters', () => {
@@ -42,6 +52,60 @@ describe('ENCOUNTERS catalog', () => {
                expect(option.failure, `${id}/${option.id} has a check but no failure outcome`).toBeDefined();
          }
       }
+   });
+});
+
+describe('conditional encounters (D31)', () => {
+   it('filters by context when one is provided, stays unfiltered without one', () => {
+      expect(eligibleEncounters('riverbank', ctx({ timeOfDay: 'night' })).map((e) => e.id)).toContain('reed_glimmer');
+      expect(eligibleEncounters('riverbank', ctx({ timeOfDay: 'day' })).map((e) => e.id)).not.toContain('reed_glimmer');
+      expect(eligibleEncounters('riverbank').map((e) => e.id)).toContain('reed_glimmer');
+   });
+
+   it('gates weather-bound encounters on the current weather', () => {
+      expect(eligibleEncounters('plaza', ctx({ weather: 'storm' })).map((e) => e.id)).toContain('soaked_traveler');
+      expect(eligibleEncounters('plaza', ctx({ weather: 'clear' })).map((e) => e.id)).not.toContain('soaked_traveler');
+   });
+
+   it('gates trait-bound encounters on the arriving character', () => {
+      expect(eligibleEncounters('plaza', ctx({ traits: { empathy: 1 } })).map((e) => e.id)).toContain('grateful_beggar');
+      expect(eligibleEncounters('plaza', ctx()).map((e) => e.id)).not.toContain('grateful_beggar');
+   });
+
+   it('discovers only features that exist at every destination it can fire on', () => {
+      for (const [id, def] of Object.entries(ENCOUNTERS) as [string, EncounterDefinition][]) {
+         const discovers: string[] = [];
+         if (def.kind === 'flavor' && def.discovers)
+            discovers.push(def.discovers);
+         if (def.kind === 'activity') {
+            for (const option of def.options as readonly ChallengeOption[]) {
+               if (option.success.discovers)
+                  discovers.push(option.success.discovers);
+               if (option.failure?.discovers)
+                  discovers.push(option.failure.discovers);
+            }
+         }
+         if (discovers.length === 0)
+            continue;
+
+         expect(Array.isArray(def.locations), `${id}: discovering encounters need explicit locations`).toBe(true);
+         for (const featureId of discovers)
+            for (const locationId of def.locations as readonly string[]) {
+               const location: LocationDefinition = LOCATIONS[locationId as LocationId];
+               expect(
+                  location.features?.some((feature) => feature.id === featureId),
+                  `${id}: '${featureId}' is not a feature of ${locationId}`,
+               ).toBe(true);
+            }
+      }
+   });
+});
+
+describe('travelEncounterChance', () => {
+   it('adds destination danger on top of the base chance, capped at 95', () => {
+      expect(travelEncounterChance(0)).toBe(TRAVEL_ENCOUNTER_CHANCE_PERCENT);
+      expect(travelEncounterChance(40)).toBe(TRAVEL_ENCOUNTER_CHANCE_PERCENT + 10);
+      expect(travelEncounterChance(1000)).toBeLessThanOrEqual(95);
    });
 });
 

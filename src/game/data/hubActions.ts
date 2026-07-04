@@ -11,6 +11,14 @@
 // of what each location offers. Ids are stable slugs (D10) — they ride in
 // `play:act:<id>` customIds.
 
+import type { LocationCondition } from '../world/conditions.js';
+
+export interface HubActionAvailability extends LocationCondition {
+   /** When unavailable: true = hide the action entirely (undiscovered secrets),
+    *  false/absent = show it closed with the reason ("only during the morning"). */
+   hidden?: boolean;
+}
+
 export interface HubAction {
    /** Stable slug; rides in the `play:act:<id>` customId. */
    id: string;
@@ -20,6 +28,9 @@ export interface HubAction {
    description: string;
    /** Location ids that offer this action; 'anywhere' = every location. */
    locations: readonly string[] | 'anywhere';
+   /** When the action can be used (D31); omitted = always. Evaluated live —
+    *  when the hub renders AND again when the button is clicked (stale panels). */
+   availability?: HubActionAvailability;
    /** In-character line shown when the (not-yet-built) action is used. */
    comingSoon: string;
 }
@@ -66,6 +77,8 @@ export const HUB_ACTIONS = {
       emoji: '🪙',
       description: 'See what the plaza stalls are selling today.',
       locations: ['plaza'],
+      // The owner's canonical example (D31): shops keep daylight hours.
+      availability: { timeOfDay: ['morning', 'day'] },
       comingSoon: 'The stalls are still setting up their wares. Come back when the economy opens.',
    },
    drink: {
@@ -82,7 +95,17 @@ export const HUB_ACTIONS = {
       emoji: '🎲',
       description: 'Chance a few coins at the dice table.',
       locations: ['tavern'],
+      availability: { timeOfDay: ['evening', 'night'] },
       comingSoon: 'The dice are still being carved. Keep your coins a while longer.',
+   },
+   listen: {
+      id: 'listen',
+      label: 'Join the singing',
+      emoji: '🎻',
+      description: 'Pull up a stool and add your voice to the bards\' racket.',
+      locations: ['tavern'],
+      availability: { duringEvent: 'bards_night' },
+      comingSoon: 'The bards nod along politely, but their songbook is still being written.',
    },
    fish: {
       id: 'fish',
@@ -91,6 +114,16 @@ export const HUB_ACTIONS = {
       description: 'Try the river for a catch.',
       locations: ['riverbank'],
       comingSoon: 'The fish are here, but the rods have not been strung yet.',
+   },
+   jetty: {
+      id: 'jetty',
+      label: 'Search the old jetty',
+      emoji: '🛶',
+      description: 'Pick through the rotted pilings the river almost swallowed.',
+      locations: ['riverbank'],
+      // Invisible until somebody finds the jetty (a night encounter reveals it).
+      availability: { requiresDiscovery: 'old_jetty', hidden: true },
+      comingSoon: 'Black water gurgles between the planks. Whatever the jetty hides, it is not giving it up yet.',
    },
 } as const satisfies Record<string, HubAction>;
 

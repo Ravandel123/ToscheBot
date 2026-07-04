@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HUB_ACTIONS, actionsAt, hubAction, type HubAction } from './hubActions.js';
-import { LOCATIONS } from './locations.js';
+import { LOCATIONS, type LocationDefinition, type LocationId } from './locations.js';
+import { LOCATION_EVENTS } from './locationEvents.js';
 
 describe('actionsAt', () => {
    it("offers every 'anywhere' action at each location", () => {
@@ -36,5 +37,29 @@ describe('HUB_ACTIONS catalog', () => {
          expect(hubAction(key)).toBe(action);
       }
       expect(hubAction('no_such_action')).toBeUndefined();
+   });
+
+   it('availability gates reference real events and discoverable features (D31)', () => {
+      for (const [id, action] of Object.entries(HUB_ACTIONS) as [string, HubAction][]) {
+         const availability = action.availability;
+         if (!availability)
+            continue;
+
+         if (availability.duringEvent)
+            expect(availability.duringEvent in LOCATION_EVENTS, `${id} gates on unknown event '${availability.duringEvent}'`).toBe(true);
+
+         if (availability.requiresDiscovery) {
+            // A discovery gate only makes sense for explicitly-located actions,
+            // and every one of those locations must actually own the feature.
+            expect(Array.isArray(action.locations), `${id}: discovery-gated actions need explicit locations`).toBe(true);
+            for (const locationId of action.locations as readonly string[]) {
+               const location: LocationDefinition = LOCATIONS[locationId as LocationId];
+               expect(
+                  location.features?.some((feature) => feature.id === availability.requiresDiscovery),
+                  `${id}: '${availability.requiresDiscovery}' is not a feature of ${locationId}`,
+               ).toBe(true);
+            }
+         }
+      }
    });
 });

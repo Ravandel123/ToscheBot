@@ -1,7 +1,10 @@
 import { MessageFlags } from 'discord.js';
 import { ComponentHandler } from '../../types/interactions.js';
 import { accountService } from '../../db/services/accountService.js';
-import { hubAction } from '../../game/data/hubActions.js';
+import { locationStateService } from '../../db/services/locationStateService.js';
+import { actionsAt, hubAction } from '../../game/data/hubActions.js';
+import { resolveLocationId } from '../../game/data/locations.js';
+import { evaluateCondition, worldContext } from '../../game/world/conditions.js';
 import { performTravel } from './_playPanel.js';
 
 // Handles the `/play` game hub (namespace `play`). The hub is ephemeral and
@@ -11,8 +14,9 @@ import { performTravel } from './_playPanel.js';
 //     maybe start a challenge), so it follows the D28 mutation choreography:
 //     fast-fail if in-memory locked → deferUpdate → runExclusive (in
 //     performTravel) → repaint;
-//   * `play:act:<id>` — a location action; every one is a PLACEHOLDER for now,
-//     so it just pops an in-character "coming soon" note and leaves the hub up.
+//   * `play:act:<id>` — a location action; still PLACEHOLDERS, but location
+//     and availability (D31) are re-checked at CLICK time — a hub message can
+//     outlive a move, a nightfall or an event's end (stale panels).
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
@@ -41,8 +45,24 @@ export default {
 
       if (action === 'act') {
          const local = hubAction(args[0] ?? '');
+         const locationId = resolveLocationId(character.locationId);
+
+         // The action must be offered where the character stands NOW, not where
+         // the (possibly stale) panel was rendered.
+         if (!local || !actionsAt(locationId).some((offered) => offered.id === local.id)) {
+            await interaction.reply({ content: 'Nothing of the sort can be done where you now stand. Open a fresh `/play`.', ...ephemeral });
+            return;
+         }
+
+         const state = await locationStateService.getFresh(locationId);
+         const availability = evaluateCondition(local.availability, worldContext(state, character));
+         if (!availability.ok) {
+            await interaction.reply({ content: `🔒 **${local.label}** — ${availability.reason}.`, ...ephemeral });
+            return;
+         }
+
          await interaction.reply({
-            content: local ? `${local.emoji} ${local.comingSoon} _(coming soon)_` : 'That action is no longer here.',
+            content: `${local.emoji} ${local.comingSoon} _(coming soon)_`,
             ...ephemeral,
          });
          return;

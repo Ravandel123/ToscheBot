@@ -1,48 +1,35 @@
-// Discord adapter (marked): the `/play` game hub — the location-centric board
-// `/play` shows and the `play:*` components repaint. Stateless like the account
-// panel and the comic browser: the hub is ephemeral and personal, so the
-// clicking user IS the active-character owner, and all real state is re-read
-// from the DB on every interaction (nothing rides in the customIds but the
-// travel destination / action slug). This file also owns the travel EXECUTION
-// that used to live in the standalone `/travel` command (folded into the hub):
-// validate → spend AP → roll encounter → move or start a durable challenge
-// (D17/D21/D26). A plain arrival re-renders the hub at the new place so the
-// play loop continues; an 'activity' encounter hands the message to the
-// challenge activity, exactly as `/travel` did.
-import {
-   ActionRowBuilder,
-   ButtonBuilder,
-   ButtonStyle,
-   EmbedBuilder,
-   StringSelectMenuBuilder,
-   type MessageActionRowComponentBuilder,
-   type MessageComponentInteraction,
-} from 'discord.js';
+// Discord adapter (marked): the `/play` game hub's EXECUTION side — the travel
+// move that used to live in the standalone `/travel` command (folded into the
+// hub, D30): validate → spend AP → read the destination's live state → roll a
+// (possibly conditional) encounter → move or start a durable challenge
+// (D17/D21/D26/D31). The hub VIEW lives in `_hubView.ts`; this file owns the
+// mutation choreography. A plain arrival re-renders the hub at the new place
+// (with weather/events/presence freshly read) so the play loop continues; an
+// 'activity' encounter hands the message to the challenge activity.
+import type { MessageComponentInteraction } from 'discord.js';
 import { characterService } from '../../db/services/characterService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
+import { locationStateService } from '../../db/services/locationStateService.js';
 import { canCharacterAct, type ActBlockReason } from '../../game/character/rules.js';
 import { attributesWithEquipment } from '../../game/character/inventory.js';
-import { displayName, STATUS_LABEL } from '../../game/character/identity.js';
-import { LOCATIONS, locationName, resolveLocationId, type LocationId } from '../../game/data/locations.js';
-import { actionsAt } from '../../game/data/hubActions.js';
+import { displayName } from '../../game/character/identity.js';
+import { LOCATIONS, locationName, type LocationId } from '../../game/data/locations.js';
+import { statValue } from '../../game/data/locationStats.js';
 import { TRAVEL_AP_COST, checkTravel, connectionsFrom, type TravelBlockReason } from '../../game/world/travel.js';
-import { rollTravelEncounter } from '../../game/world/encounters.js';
+import { rollTravelEncounter, travelEncounterChance } from '../../game/world/encounters.js';
+import { worldContext } from '../../game/world/conditions.js';
+import { rollEventStart } from '../../game/world/events.js';
 import { initialChallengeState } from '../../game/activity/challenge.js';
 import { checkTarget } from '../../game/checks.js';
 import { postChronicle } from '../../game/chronicle.js';
 import { randomItem } from '../../lib/random.js';
 import { activityHandler } from './_activities/registry.js';
+import { freshHubView, revealFeature } from './_hubView.js';
 import type { ActivityEncounter, EncounterId } from '../../game/data/encounters.js';
 import type { ActivitySessionDoc } from '../../db/models/activitySession.js';
 import type { CharacterDoc } from '../../db/models/character.js';
+import type { ActivityView } from '../../types/activities.js';
 import type { ToscheClient } from '../../client.js';
-
-const HUB_COLOR = 0x3F5E7A; // campaign-map blue
-
-export interface HubView {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
 
 const ACT_BLOCK_MESSAGE: Record<ActBlockReason, string> = {
    'not-approved': 'Only characters recognized by the Imperator may roam Deltrada. Finish yours with `/character edit` and submit it.',
@@ -50,80 +37,9 @@ const ACT_BLOCK_MESSAGE: Record<ActBlockReason, string> = {
    'no-action-points': 'You lack the Action Points for the road.',
 };
 
-/** The hub board for a character at its current location: where it can go
- *  (a travel select) and what it can do here (action buttons). Pure — no DB.
- *  `banner` shows a one-off line at the top (e.g. an arrival). */
-export function buildHubView(character: CharacterDoc, banner?: string): HubView {
-   const locationId = resolveLocationId(character.locationId);
-   const location = LOCATIONS[locationId];
-   const approved = character.approvalStatus === 'approved';
-   const actions = actionsAt(locationId);
-
-   const embed = new EmbedBuilder()
-      .setColor(HUB_COLOR)
-      .setTitle(`🗺️ ${displayName(character)} — ${location.name}`)
-      .setDescription([
-         banner ? `${banner}\n` : '',
-         `_${location.description}_`,
-         approved ? '' : `\n⚠️ ${STATUS_LABEL[character.approvalStatus]} — you cannot act until the Imperator recognizes you.`,
-      ].filter(Boolean).join('\n'))
-      .addFields(
-         {
-            name: '❤️ Health',
-            value: `${character.resources.health.current}/${character.resources.health.max}`,
-            inline: true,
-         },
-         { name: '⚡ Action Points', value: `${character.actionPoints.current}`, inline: true },
-         {
-            name: 'Here you can',
-            value: actions.map((action) => `${action.emoji} **${action.label}** — ${action.description}`).join('\n') || '—',
-         },
-      )
-      .setFooter({ text: 'Travel with the menu · other actions are coming soon' });
-
-   return { embeds: [embed], components: hubComponents(character, locationId, actions) };
-}
-
-function hubComponents(
-   character: CharacterDoc,
-   locationId: LocationId,
-   actions: ReturnType<typeof actionsAt>,
-): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
-   const rows: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
-
-   const destinations = connectionsFrom(locationId);
-   if (destinations.length > 0) {
-      const select = new StringSelectMenuBuilder()
-         .setCustomId('play:travel')
-         .setPlaceholder('🧭 Travel to…')
-         .addOptions(
-            destinations.map((id) => ({
-               label: LOCATIONS[id].name,
-               value: id,
-               description: LOCATIONS[id].description.slice(0, 100),
-               emoji: '🧭',
-            })),
-         );
-      rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select));
-   }
-
-   // One button per local action, chunked into ≤5-wide rows (Discord limit).
-   const buttons = actions.map((action) =>
-      new ButtonBuilder()
-         .setCustomId(`play:act:${action.id}`)
-         .setLabel(action.label)
-         .setEmoji(action.emoji)
-         .setStyle(ButtonStyle.Secondary),
-   );
-   for (let i = 0; i < buttons.length; i += 5)
-      rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(buttons.slice(i, i + 5)));
-
-   return rows;
-}
-
 /** Renders an active session's current step (re-entry / encounter start), or null
  *  if its type has no handler (a retired activity — caller degrades gracefully). */
-export function sessionStepView(session: ActivitySessionDoc, note: string): (HubView & { content: string }) | null {
+export function sessionStepView(session: ActivitySessionDoc, note: string): (Required<Omit<ActivityView, 'content'>> & { content: string }) | null {
    const handler = activityHandler(session.type);
    if (!handler)
       return null;
@@ -136,8 +52,10 @@ export function sessionStepView(session: ActivitySessionDoc, note: string): (Hub
  * Executes a travel move for the hub. The `interaction` must already be
  * acknowledged with `deferUpdate()` (the lock wait + writes can pass the ~3 s
  * ack window). Serializes the whole decision per character so a double-fired
- * click can't move twice or open two sessions; the second run re-checks inside
- * the lock and re-enters. Repaints the hub's own (ephemeral) message.
+ * click can't move twice or open two sessions — and a STALE panel (one of
+ * several open hubs) is caught by re-reading the character inside the lock:
+ * the edge is validated from where the character stands NOW, not where the
+ * panel was rendered. Repaints the hub's own (ephemeral) message.
  */
 export async function performTravel(
    client: ToscheClient,
@@ -161,22 +79,26 @@ export async function performTravel(
 
       const act = canCharacterAct(fresh, TRAVEL_AP_COST);
       if (!act.ok) {
-         await interaction.editReply(hubWithNote(fresh, ACT_BLOCK_MESSAGE[act.reason]));
+         await interaction.editReply(await freshHubView(fresh, ACT_BLOCK_MESSAGE[act.reason]));
          return;
       }
 
       const travel = checkTravel(fresh.locationId, destination);
       if (!travel.ok) {
-         await interaction.editReply(hubWithNote(fresh, travelBlockMessage(travel.reason, travel.from)));
+         await interaction.editReply(await freshHubView(fresh, travelBlockMessage(travel.reason, travel.from)));
          return;
       }
 
       if (!await characterService.spendActionPoints(fresh._id, TRAVEL_AP_COST)) {
-         await interaction.editReply(hubWithNote(fresh, ACT_BLOCK_MESSAGE['no-action-points']));
+         await interaction.editReply(await freshHubView(fresh, ACT_BLOCK_MESSAGE['no-action-points']));
          return;
       }
 
-      const rolled = rollTravelEncounter(travel.to);
+      // The DESTINATION's live state shapes the road (D31): conditional
+      // encounters read it, and its danger raises the encounter odds.
+      const destinationState = await locationStateService.getFresh(travel.to);
+      const ctx = worldContext(destinationState, fresh);
+      const rolled = rollTravelEncounter(travel.to, ctx, travelEncounterChance(statValue(travel.to, destinationState.stats, 'danger')));
 
       // An 'activity' encounter interrupts the move — the character only arrives
       // if the activity ends in success (its handler moves them).
@@ -187,24 +109,39 @@ export async function performTravel(
       }
 
       await characterService.setLocation(fresh._id, travel.to);
+      await locationStateService.recordVisit(travel.to);
 
       const flavorLine = rolled?.encounter.kind === 'flavor' ? randomItem(rolled.encounter.lines) : null;
+      const discoveryLine = rolled?.encounter.kind === 'flavor' && rolled.encounter.discovers
+         ? await revealFeature(client, fresh, travel.to, rolled.encounter.discovers)
+         : null;
+
+      // An arrival can spark a location event (D31) — the write is guarded, so
+      // of two simultaneous arrivals only one starts (and announces) it.
+      const eventRoll = rollEventStart(travel.to, ctx);
+      const startedEvent = eventRoll && await locationStateService.tryStartEvent(travel.to, eventRoll.id, eventRoll.startedAt, eventRoll.endsAt)
+         ? eventRoll
+         : null;
+
       const arrived = await characterService.get(fresh._id);
-      const banner = [`🧭 You leave **${locationName(travel.from)}** and arrive at **${locationName(travel.to)}**.`, flavorLine].filter(Boolean).join('\n');
+      const banner = [
+         `🧭 You leave **${locationName(travel.from)}** and arrive at **${locationName(travel.to)}**.`,
+         flavorLine,
+         discoveryLine,
+         startedEvent ? `${startedEvent.event.emoji} **${startedEvent.event.name}** has just begun here!` : null,
+      ].filter(Boolean).join('\n');
 
       // Re-render the hub at the destination so the loop keeps going.
-      await interaction.editReply(arrived ? { content: '', ...buildHubView(arrived, banner) } : { content: banner, embeds: [], components: [] });
+      await interaction.editReply(arrived ? await freshHubView(arrived, banner) : { content: banner, embeds: [], components: [] });
 
       await postChronicle(client, [
          `🧭 **${displayName(fresh)}** traveled from **${locationName(travel.from)}** to **${locationName(travel.to)}**.`,
          flavorLine ? ` ${flavorLine}` : '',
       ].join(''));
-   });
-}
 
-/** A hub repaint carrying a one-off note (a refusal reason or arrival flavor). */
-function hubWithNote(character: CharacterDoc, note: string): HubView & { content: string } {
-   return { content: '', ...buildHubView(character, note) };
+      if (startedEvent)
+         await postChronicle(client, `${startedEvent.event.emoji} **${startedEvent.event.name}** breaks out at **${locationName(travel.to)}**!`);
+   });
 }
 
 async function editReplyStep(interaction: MessageComponentInteraction, session: ActivitySessionDoc, note: string): Promise<void> {

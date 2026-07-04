@@ -2,7 +2,8 @@ import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { SlashCommand } from '../../../types/commands.js';
 import { accountService } from '../../../db/services/accountService.js';
 import { activitySessionService } from '../../../db/services/activitySessionService.js';
-import { buildHubView, sessionStepView } from '../../components/_playPanel.js';
+import { sessionStepView } from '../../components/_playPanel.js';
+import { freshHubView } from '../../components/_hubView.js';
 
 // The default entry point to the server RPG (D1). A single ephemeral hub that
 // shows where the active character is, what it can do here, and where it can
@@ -44,6 +45,6 @@ export default {
          return;
       }
 
-      await interaction.reply({ ...buildHubView(character), ...ephemeral });
+      await interaction.reply({ ...await freshHubView(character), ...ephemeral });
    },
 } satisfies SlashCommand;
