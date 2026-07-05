@@ -1,7 +1,7 @@
-// Discord adapter (marked): builds the identity modal (used by both
-// `/character create` and `/character edit`) and the reject-reason modal, and
-// reads their submitted values back. Modals only host text inputs — race is a
-// separate `/character race` step (no select menus inside modals).
+// Discord adapter (marked): builds the identity modal (used by `/character
+// create`, both for a brand-new draft and for resuming an editable one) and
+// the reject-reason modal, and reads their submitted values back. Modals only
+// host text inputs — race is a separate wizard step (no select menus inside modals).
 import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, type ModalSubmitInteraction } from 'discord.js';
 import {
    AVATAR_URL_MAX_LENGTH,

@@ -667,9 +667,11 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   (`ctof`, `ftoc`, `cmtoimperial`, `kgtoimperial`, `bmi`, `bmiforheight`); *utility:* `ping`,
   `roll`, `avatar`, `timestamp`, `help`/`commands` (auto-generated command list); *admin (ownerOnly):* `clear`,
   `directmessage`/`dm`, `messagechannel`/`mc`.
-- **Slash (`/`)** — `character` (create/edit/**view**/race/submit/list/switch via the
-  step-driven creation wizard — details, race, gender, **attribute point-buy** — + owner
-  approval; `view` is the public character sheet with attributes, **equipment** + traits),
+- **Slash (`/`)** — `character` (`create` is the single creation/editing entry point — opens
+  the step-driven creation wizard panel for a new or still-editable draft — details, race,
+  gender, **attribute point-buy**, submit, all on the panel — + owner approval; plus
+  **view**/list/switch; `view` is the public character sheet with attributes, **equipment**
+  + traits),
   `profile` (the account panel: active character, settings toggles — D27), `inventory`
   (the D28 pack/equipment panel: hub → category browser with sort/pages → item card with
   equip/unequip/use/**store**/drop), `stash` (D33 — browse + withdraw the active
@@ -682,7 +684,7 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   select, encounters as flavor lines or **multi-approach d100 challenges** — D26, rolled
   against **equipment-modified attributes** — D28, filtered by **live conditions** — D31;
   local-action buttons gated by time/weather/events/discoveries (still placeholders);
-  approved characters only for travel), `leaderboard`, `ping`.
+  approved characters only for travel), `leaderboard`.
 - **Events** — `messageCreate` (banned-word check → `h!` routing → ambient AI),
   `interactionCreate` (slash + component routing), `clientReady` (starts jobs),
   `messageDelete`/`messageUpdate` (edit/delete log to `#espionage` — the delete log adds

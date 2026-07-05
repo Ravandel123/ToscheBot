@@ -408,7 +408,7 @@ async function notifyPlayer(client: ToscheClient, character: CharacterDoc, decis
 
    const text = decision === 'approved'
       ? `✅ Your character **${character.identity.name}** has been recognized by the Imperator. You may now act, soldier.`
-      : `❌ Your character **${character.identity.name}** was not recognized.${reason ? ` Reason: ${reason}` : ''}\nOpen it with \`/character edit\` to fix and resubmit.`;
+      : `❌ Your character **${character.identity.name}** was not recognized.${reason ? ` Reason: ${reason}` : ''}\nOpen it with \`/character create\` to fix and resubmit.`;
 
    try {
       const user = await client.users.fetch(character.ownerId);

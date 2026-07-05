@@ -5,7 +5,7 @@
 //   directly, so they need no view of their own).
 // Stateless: the character id (and step id) ride in every customId and the
 // state is the DB draft itself, so the wizard survives restarts and can be
-// resumed any time with `/character edit`. Underscore prefix → loader skips it.
+// resumed any time with `/character create`. Underscore prefix → loader skips it.
 import {
    ActionRowBuilder,
    ButtonBuilder,

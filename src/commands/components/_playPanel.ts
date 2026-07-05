@@ -32,7 +32,7 @@ import type { ActivityView } from '../../types/activities.js';
 import type { ToscheClient } from '../../client.js';
 
 const ACT_BLOCK_MESSAGE: Record<ActBlockReason, string> = {
-   'not-approved': 'Only characters recognized by the Imperator may roam Deltrada. Finish yours with `/character edit` and submit it.',
+   'not-approved': 'Only characters recognized by the Imperator may roam Deltrada. Finish yours with `/character create` and submit it.',
    'incapacitated': 'You are in no state to travel — recover first.',
    'no-action-points': 'You lack the Action Points for the road.',
 };
