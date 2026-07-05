@@ -47,11 +47,11 @@ Deliberately deferred — it's a whole table to author and balance, not needed t
 loop.
 
 ### Wounds — low, gritty, not a HP bar ⬜ not decided (formula proposed) *(was P8)*
-Proposed formula: `Wounds = StrengthBonus + 2×EnduranceBonus + ⌊WillpowerBonus/2⌋ ± Size`,
+Proposed formula: `Wounds = StrengthBonus + 2×ConstitutionBonus + ⌊WillpowerBonus/2⌋ ± Size`,
 typically landing **7–13** — deliberately low (pillar 3 in README.md: fast, consequential
 fights, not HP-bloat attrition). **Willpower is deliberately half-weighted**: it's also the
 governing stat for Stress/Madness resistance (flavor-progression.md), so a *full* weight in
-Wounds too would make it a clean super-stat that out-scales Strength/Endurance for raw
+Wounds too would make it a clean super-stat that out-scales Strength/Constitution for raw
 survivability — halving it keeps "grit toughens the body a little" true without that
 double-dip. At 0 Wounds you're **Downed**, never dead (below). Owner's framing: not committed
 to this exact formula, or even to "Wounds" as the name — could be something other than a
@@ -59,7 +59,7 @@ WHFRP-style Wounds pool; open to a better idea. **Not built** — sparring uses 
 placeholder `maxHp` (Implementation, below) that predates this design.
 
 ### Soak, damage, and the anti-stalemate rule ⬜ not decided (shape proposed)
-- **Soak** = `EnduranceBonus + Armour Value (AV)` — subtracted from every hit's damage.
+- **Soak** = `ConstitutionBonus + Armour Value (AV)` — subtracted from every hit's damage.
   **Always call it AV, never "AP"** — "AP" is Action Points (world-travel.md); a character
   sheet must never abbreviate armour as AP.
 - **Damage** = `weapon Damage + net SL (the opposed margin) + StrengthBonus` (ranged: weapon +
@@ -72,7 +72,7 @@ placeholder `maxHp` (Implementation, below) that predates this design.
   detailed yet.
 
 **Worked illustration** (numbers illustrative only): an ermehn duellist (Melee-tree Effective
-55, StrengthBonus 2, dagger Damage 3) attacks a canid soldier (Dodge 40, EnduranceBonus 4,
+55, StrengthBonus 2, dagger Damage 3) attacks a canid soldier (Dodge 40, ConstitutionBonus 4,
 leather AV 1, Wounds 13). Attacker rolls 22 → SL +3; defender Dodges, rolls 61 → fail, SL −2.
 Margin +5 → hit. Damage = 3 + 5 + 2 = 10, − Soak (4+1=5) = **5 Wounds**. Canid drops to 8 —
 gritty (not a one-shot), but roughly three clean hits put him Down.
@@ -174,9 +174,9 @@ sparring once the serious Duel mode exists (Ruleset above).
 
 `game/combat/stats.ts` derives **placeholder** combat stats per character:
 `attributeBonus(v) = floor(v/10)`; `maxHp = strengthBonus×5 + willpowerBonus×5 +
-enduranceBonus×10` (ported from the old bot's `getMaxHp`); `attackBonus = weaponSkill +
+constitutionBonus×10` (ported from the old bot's `getMaxHp`); `attackBonus = weaponSkill +
 strengthBonus` where `weaponSkill` = the character's trained points in the `melee` +
-`brawling` skill-tree roots (skills.md); `defenseBonus = agilityBonus + enduranceBonus`.
+`brawling` skill-tree roots (skills.md); `defenseBonus = agilityBonus + consitutionBonus`.
 `game/combat/engine.ts` resolves rounds as `d20 + attackBonus` vs `d20 + defenseBonus` — this
 is a **different, older engine** than `checks.ts`'s d100 system, kept only because sparring is
 explicitly fantasy/for-fun and nothing here needs to match the real ruleset. Since D25 gave

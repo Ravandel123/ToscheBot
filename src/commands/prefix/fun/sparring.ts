@@ -22,7 +22,7 @@ function randomCombatStats(name: string): CombatStats {
       attackBonus: randomInt(1, 6),
       defenseBonus: randomInt(1, 6),
       strengthBonus: randomInt(1, 4),
-      enduranceBonus: randomInt(1, 4),
+      consitutionBonus: randomInt(1, 4),
    };
 }
 

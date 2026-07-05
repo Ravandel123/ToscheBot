@@ -51,5 +51,5 @@ Smackdown ELO.
   encounters, skills, eventually combat) is proven fun. Recommendation carried over from the
   design docs: keep this last, add it once there's something worth spending coins on.
 - **Time/encumbrance/survival as a deep-layer economy sink** *(P18)* — hooks (a Fatigued
-  condition, Endurance vs disease) can stay in the design without building a full survival sim;
+  condition, Consitution vs disease) can stay in the design without building a full survival sim;
   must always stay auto-managed for casuals per README.md's pillar 6.

@@ -11,7 +11,7 @@ export interface AttributeDefinition {
 
 export const ATTRIBUTES = {
    strength: { name: 'Strength', abbreviation: 'STR' },
-   endurance: { name: 'Endurance', abbreviation: 'END' },
+   consitution: { name: 'Consitution', abbreviation: 'END' },
    agility: { name: 'Agility', abbreviation: 'AGI' },
    dexterity: { name: 'Dexterity', abbreviation: 'DEX' },
    charisma: { name: 'Charisma', abbreviation: 'CHA' },

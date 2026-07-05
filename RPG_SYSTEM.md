@@ -194,7 +194,7 @@ active ActivitySession (D23) — the tick is skipped, not deferred. Rising meter
 (hunger/stress) — ⬜ not added yet.
 
 ### Attributes — `game/data/attributes.ts` ✅ set / 🟡 balance (D25)
-The owner's eight (locks `RPG/`'s P5, Luck dropped): `strength, endurance, agility,
+The owner's eight (locks `RPG/`'s P5, Luck dropped): `strength, constitution, agility,
 dexterity, charisma, willpower, perception, intelligence`. Values live on the d100
 roll-under scale: **racial base = `ATTRIBUTE_BASE` (25) ± the race's modifiers**, plus the
 creation point-buy. Consumed by `game/checks.ts` (encounter tests) and the placeholder
@@ -243,16 +243,16 @@ never park six empty wallets.
 ### Races — `game/data/races.ts` ✅ ids / 🟡 balance
 `canid, ermehn, felis, lutren, polcan, tamian, vulpin`. Each carries **`attributeModifiers`**
 (D25): net-zero **+5 to two, −5 to two** on `ATTRIBUTE_BASE`, from `RPG/Ruleset.md` §4
-(Toughness→Endurance, Fellowship→Charisma). A test enforces the net-zero invariant.
+(Constitution, Fellowship→Charisma). A test enforces the net-zero invariant.
 
 | race | +5 / +5 | −5 / −5 |
 |---|---|---|
 | canid | strength, willpower | agility, charisma |
 | ermehn | agility, dexterity | strength, charisma |
-| felis | agility, intelligence | strength, endurance |
+| felis | agility, intelligence | strength, consitution |
 | lutren | dexterity, charisma | strength, willpower |
-| polcan | strength, endurance | agility, charisma |
-| tamian | agility, perception | strength, endurance |
+| polcan | strength, consitution | agility, charisma |
+| tamian | agility, perception | strength, consitution |
 | vulpin | charisma, intelligence | strength, willpower |
 
 Races can also carry **check affinities** per encounter option (not on the race itself):
@@ -620,7 +620,7 @@ and will be removed from sparring later.
 
 🟡 Combat formula (`game/combat/engine.ts` + `stats.ts`): per round, attacker
 `d20 + attackBonus` vs defender `d20 + defenseBonus`; on hit, damage from strength,
-cleanliness, endurance. Bonuses are the attribute's tens digit; `maxHp = strB*5 + wpB*5 +
+cleanliness, consitution. Bonuses are the attribute's tens digit; `maxHp = strB*5 + wpB*5 +
 endB*10`. **Placeholder** — since D25 attributes differ per race/point-buy so builds bleed
 through slightly, but the shape is throwaway; the real d100 opposed-test combat waits on
 the ruleset (`RPG/` §9).

@@ -2,7 +2,7 @@ import type { AttributeKey } from './attributes.js';
 
 // The seven anthropomorphic races of Dunia (BtWD). `attributeModifiers` are the
 // hardcoded racial bases from RPG/Ruleset.md §4 (mapped onto the owner's P5
-// attribute set: Toughness→Endurance, Fellowship→Charisma): +5 to two, −5 to
+// attribute set: Constitution, Fellowship→Charisma): +5 to two, −5 to
 // two — net zero, applied to ATTRIBUTE_BASE. 🟡 Balance values, tunable there.
 
 export interface RaceDefinition {
@@ -26,7 +26,7 @@ export const RACES = {
    felis: {
       name: 'Felis',
       description: 'Scholars of Kishar — clever, aloof.',
-      attributeModifiers: { agility: 5, intelligence: 5, strength: -5, endurance: -5 },
+      attributeModifiers: { agility: 5, intelligence: 5, strength: -5, consitution: -5 },
    },
    lutren: {
       name: 'Lutren',
@@ -36,12 +36,12 @@ export const RACES = {
    polcan: {
       name: 'Polcan',
       description: 'Stateless exiles of the Western Sea — piratical, bronze-clad.',
-      attributeModifiers: { strength: 5, endurance: 5, agility: -5, charisma: -5 },
+      attributeModifiers: { strength: 5, consitution: 5, agility: -5, charisma: -5 },
    },
    tamian: {
       name: 'Tamian',
       description: 'Treetop dwellers of forest Terria — agile, industrious.',
-      attributeModifiers: { agility: 5, perception: 5, strength: -5, endurance: -5 },
+      attributeModifiers: { agility: 5, perception: 5, strength: -5, consitution: -5 },
    },
    vulpin: {
       name: 'Vulpin',

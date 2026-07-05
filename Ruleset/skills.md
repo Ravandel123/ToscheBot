@@ -86,7 +86,7 @@ touch a number. Deep: hand-pick talents, plan attribute bumps, chase caps.
 ### Talents ⬜ not built
 Discrete, mostly one-line perks (some ranked), bought with points, cheaper if they fit a
 role. Each must be legible from one tooltip line — no "+2% in a sub-case" noise. Sample
-direction (all 🟡 illustrative, not authored content): **Hardy** (+Endurance Bonus to Wounds),
+direction (all 🟡 illustrative, not authored content): **Hardy** (+Consitution Bonus to Wounds),
 **Marksman** (+Ranged / steadier aim), **Combat Reflexes** (+Initiative), **Resolute** (+resist
 Fear/Intimidate, slower Stress gain), **Dual Wielder**, **Field Dressing** (stabilize a Downed
 ally), **Trapper**, **Fleet Footed**, **Lettered/Linguist**, **Stout Heart** (Madness buffer).
@@ -104,7 +104,7 @@ proposed root attribute, sketches the intended launch catalog:
 | root attribute | skills |
 |---|---|
 | Strength | Athletics, Row |
-| Endurance | Endurance (resistance) |
+| Consitution | Consitution (resistance) |
 | Agility | **Melee**, Dodge, Climb, Stealth, Acrobatics, Ride, Swim |
 | Dexterity | **Ranged**, Trade (a craft, per-material), Sleight of Hand, Pick Lock, Sail/Drive |
 | Perception | Awareness, Track, Search, Navigate |

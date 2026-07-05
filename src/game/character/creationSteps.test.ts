@@ -5,7 +5,7 @@ import { CREATION_ATTRIBUTE_POINTS } from './attributes.js';
 import type { CharacterDoc, CharacterIdentity } from '../../db/models/character.js';
 
 // 20+20+10 = CREATION_ATTRIBUTE_POINTS — the attributes step reads complete.
-const FULL_ALLOCATION = { strength: 20, endurance: 20, agility: 10 };
+const FULL_ALLOCATION = { strength: 20, consitution: 20, agility: 10 };
 
 function character(identity: Partial<CharacterIdentity> = {}, attributeAllocation: Record<string, number> = FULL_ALLOCATION): CharacterDoc {
    return {

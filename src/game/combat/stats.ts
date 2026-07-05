@@ -7,7 +7,7 @@ export interface CombatStats {
    attackBonus: number;
    defenseBonus: number;
    strengthBonus: number;
-   enduranceBonus: number;
+   consitutionBonus: number;
 }
 
 /** Attribute → bonus: the tens digit (Strength 47 → 4), as in RPG/'s derived stats. */
@@ -20,11 +20,11 @@ export function attributeBonus(value: number): number {
  * (D14): the real numbers wait on the RPG ruleset (its Wounds/soak math). Since
  * D25 attributes DO differ per race + point-buy, so sparring is no longer fully
  * random — but the shape is still throwaway. The maxHp shape is ported from the
- * old `getMaxHp` (str*5 + wp*5 + endurance*10).
+ * old `getMaxHp` (str*5 + wp*5 + consitution*10).
  */
 export function combatStatsFromCharacter(character: CharacterDoc): CombatStats {
    const str = attributeBonus(character.attributes.strength);
-   const end = attributeBonus(character.attributes.endurance);
+   const end = attributeBonus(character.attributes.consitution);
    const wp = attributeBonus(character.attributes.willpower);
    const agi = attributeBonus(character.attributes.agility);
    // Placeholder weapon competence: whatever the character has trained in the
@@ -39,6 +39,6 @@ export function combatStatsFromCharacter(character: CharacterDoc): CombatStats {
       attackBonus: weaponSkill + str,
       defenseBonus: agi + end,
       strengthBonus: str,
-      enduranceBonus: end,
+      consitutionBonus: end,
    };
 }

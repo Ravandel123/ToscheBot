@@ -5,7 +5,7 @@ import type { CharacterDoc, CharacterIdentity } from '../../db/models/character.
 
 // A fully allocated point-buy (20+20+10 = CREATION_ATTRIBUTE_POINTS) so the
 // required 'attributes' creation step reads as complete by default.
-const FULL_ALLOCATION = { strength: 20, endurance: 20, agility: 10 };
+const FULL_ALLOCATION = { strength: 20, consitution: 20, agility: 10 };
 
 function character(overrides: {
    status?: CharacterDoc['approvalStatus'];

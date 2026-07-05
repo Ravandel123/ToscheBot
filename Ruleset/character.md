@@ -27,7 +27,7 @@ starting point):
 | Attribute | Governs |
 |---|---|
 | **Strength** | melee damage, carrying, breaking |
-| **Endurance** *(was "Toughness")* | soak, Wounds, resistance to disease/poison/fatigue |
+| **Constitution** *(was "Toughness")* | soak, Wounds, resistance to disease/poison/fatigue |
 | **Agility** | speed/reflexes, melee to-hit, Dodge, initiative |
 | **Dexterity** | fine work, ranged to-hit, crafts, sleight, locks |
 | **Charisma** *(was "Fellowship")* | charm, persuade, deceit, command, haggle |
@@ -61,10 +61,10 @@ attribute modifiers exist in code.
 |---|---|---|---|---|---|---|
 | `canid` | wolves | Strength, Willpower | Agility, Charisma | Large | 4 | militaristic Aisling; **Howl** (fear/alarm), **Fangs** |
 | `ermehn` | stoats/ermines | Agility, Dexterity | Strength, Charisma | Average | 5 | stateless exiles; ambush, dagger-duelist, cold-hardened |
-| `felis` | cats | Agility, Intelligence | Strength, Endurance | Average | 5 | Kishar scholars/urbanites; night eyes, claws, lithe |
+| `felis` | cats | Agility, Intelligence | Strength, Constitution | Average | 5 | Kishar scholars/urbanites; night eyes, claws, lithe |
 | `lutren` | otters | Dexterity, Charisma | Strength, Willpower | Average | 3 land / 6 swim | Sunsgrove seafarers/traders; amphibious, nimble hands |
-| `polcan` | marbled polecats | Strength, Endurance | Agility, Charisma | Average | 4 | stateless seaborne raiders; **only** bronze-smiths, sea-legs |
-| `tamian` | red squirrels | Agility, Perception | Strength, Endurance | Small | 4 | Sunsgrove arboreal scouts; climber, Tesque footwork |
+| `polcan` | marbled polecats | Strength, Constitution | Agility, Charisma | Average | 4 | stateless seaborne raiders; **only** bronze-smiths, sea-legs |
+| `tamian` | red squirrels | Agility, Perception | Strength, Constitution | Small | 4 | Sunsgrove arboreal scouts; climber, Tesque footwork |
 | `vulpin` | kit foxes | Charisma, Intelligence | Strength, Willpower | Average | 4 | Navran cosmopolitans/nomads; cunning, keen senses |
 
 Size is meant to be one legible knob for the canon body gap (a canid is roughly 2× an
