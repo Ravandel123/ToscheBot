@@ -1,8 +1,65 @@
-# Combat — the core test, Wounds, Smackdown
+# Combat — the core test, Health, Smackdown
 
 See [README.md](README.md) for the legend. The **d100 test** described here is not
 combat-only — it's the one mechanic every risky action in the game uses (skills.md's skill
 checks, world-travel.md's travel challenges, and combat below all roll the same way).
+
+> **R12 supersedes the old "Wounds" design.** The owner dropped the low WHFRP-style Wounds pool
+> (7–13, confusing — "why did 3 damage nearly kill me?") for a **larger, intuitive Health-points
+> pool with hit locations**. The WHFRP *feel* stays (Soak, opposed rolls, crits, fumbles, gritty
+> and fast); the *number* is legible and the *hit-location* system is the owner's addition. None
+> of the old Wounds design was built, so this costs no migration.
+
+---
+
+## Reference (decided data & math)
+
+**Core test** — roll **d100 ≤ Effective** (skills.md). `01` always hits, `00` always misses.
+`SL = floor(target/10) − floor(roll/10)`. Target clamps to `[5, 95]`.
+
+**Difficulty ladder** (one band, never stack): Very Easy +40 · Easy +20 · Standard 0 ·
+Hard −10 · Very Hard −20 · Punishing −30. (🟡 values)
+
+**Opposed test** — both roll; **highest SL wins**, margin = winner SL − loser SL; ties → higher
+raw skill.
+
+**Criticals & fumbles** ✅ R21 — a **double** (11,22,…,99) is a **critical** on a success / a
+**fumble** on a failure. Crit → bonus effect (extra damage/quality, a location injury); fumble →
+mishap (drop, self-hit, opening). Tosche narrates them **tame / dark-humor**, never gore.
+
+**Health** ✅ direction R12 — **one shared Health pool** (intuitive size, 🟡 e.g. 40–100 from
+frame + Constitution), never split per location. Every hit lands on a rolled/aimed **location**
+(picks the Soak-relevant AV) and adds to that location's **trauma tally**; when a location's
+tally crosses its threshold (limbs ~50%, head/torso ~30%, 🟡) → a **critical injury** there
+(the owner's example: 50 max Health, 25 concentrated in the right hand ⇒ maimed hand), even
+though it's the one shared total — not a per-location pool — that actually ran down. `0` total
+Health = **Downed, never dead** (R8).
+
+**Soak** = `ConstitutionBonus + Armour Value (AV)`. **Always "AV", never "AP"** (AP = Action
+Points). A connecting hit (margin > 0) always deals **≥1 damage**.
+
+**Damage** (melee) = `weapon Damage + net SL + StrengthBonus − Soak` (ranged: + a ranged term,
+not StrengthBonus). `attributeBonus(v) = floor(v/10)`.
+
+**Armour ✕ weapon type** ✅ direction — damage type (slash/pierce/impact) vs armour type
+(cloth/leather/mail/plate) has a **multiplier** (slash ≈ useless vs plate; impact/pierce better).
+
+**Stances** (🟡): Aggressive (+hit/+dmg, −defence) · Balanced · Defensive (+defence, −hit).
+**Initiative** = `AgilityBonus + PerceptionBonus`.
+
+**Resolution mode** ✅ direction R24 — **v1 = auto-resolve**: set stance/style/target in a
+pre-fight menu, one button, the engine rolls every round and narrates with a delay (no
+per-round input). **Manual, turn-by-turn** control is an explicit **later** upgrade, built only
+once v1 proves fun.
+
+**Positioning & terrain** ⬜ future, not v1, R25 — a lightweight grid (adjacent/ranged/flanked)
++ terrain tags (`cramped, uneven, slick, open`) that weapons/styles check against (a cramped room
+blocks two-handed swings; sand hinders a footwork-based style). Designed direction only.
+
+**Fate points** ✅ direction R21 — pool (proposed **2**): reroll a test **or** shrug off a
+knockout. Refresh slowly on rest (not "per session").
+
+**Smackdown modes**: Sparring ✅ (for-fun) · Duel ⬜ (real stakes, consent-gated) · Trial/PvE ⬜.
 
 ---
 
@@ -40,47 +97,117 @@ scales the effect. Ties break to the higher raw characteristic/skill. One struct
 melee, grapples, chases, haggling, deceit-vs-insight — reuse the same code path everywhere
 rather than inventing a bespoke resolution per activity.
 
-### Criticals & fumbles ⬜ not decided *(was P10)*
-Proposed: rolling doubles (11, 22, … 99) is a critical on a success, a fumble on a failure.
-Casual layer gets a flavorful line; deep layer would roll a combat critical on an Injury table.
-Deliberately deferred — it's a whole table to author and balance, not needed to prove the core
-loop.
+### Criticals & fumbles ✅ direction R21 *(was P10 — owner now wants them, WHFRP4-style)*
+Rolling a **double** (11, 22, … 99) is a **critical** on a success and a **fumble** on a failure
+— the WHFRP4 rule the owner asked for, and it costs no extra roll (it reads off the same d100).
+- **Critical (hit)** — bonus effect: extra damage, guaranteed application of the hit-location
+  **critical injury** above, or a bump in crafting quality (skills.md) outside combat. The deep
+  layer can roll on an **Injury/critical table** for a specific consequence (a gash, a cracked
+  rib); the casual layer just gets the effect + a narrated line.
+- **Fumble** — a mishap on top of the miss: drop/foul the weapon, hit yourself/an ally, lose
+  footing (Prone), give the foe an opening (their next attack is Easy). Deep layer may roll a
+  **Fumble table**; casual gets one bad-luck line.
+- **Concentrated-damage crits stack with this** — a called shot piling damage into one location
+  (R12) can *force* a critical injury there without needing a double; a double just makes it
+  cleaner or worse.
+- **Narration tone (locked): Tosche describes crits/fumbles tame or dark-humor, never graphic.**
+  The owner's explicit ask: convey *exactly what happened* (a maimed hand is a maimed hand) but
+  in Tosche's wry, un-gory voice — "well, he won't be counting on that paw for a while, no-no"
+  rather than a splatter of viscera. Same for lethal-looking results (which are Downed, not dead,
+  R8): the outcome is honest, the words are Tosche.
+Balance (crit/fumble frequency ~1-in-10 per die, table contents) is 🟡 — but the rule is in.
 
-### Wounds — low, gritty, not a HP bar ⬜ not decided (formula proposed) *(was P8)*
-Proposed formula: `Wounds = StrengthBonus + 2×ConstitutionBonus + ⌊WillpowerBonus/2⌋ ± Size`,
-typically landing **7–13** — deliberately low (pillar 3 in README.md: fast, consequential
-fights, not HP-bloat attrition). **Willpower is deliberately half-weighted**: it's also the
-governing stat for Stress/Madness resistance (flavor-progression.md), so a *full* weight in
-Wounds too would make it a clean super-stat that out-scales Strength/Constitution for raw
-survivability — halving it keeps "grit toughens the body a little" true without that
-double-dip. At 0 Wounds you're **Downed**, never dead (below). Owner's framing: not committed
-to this exact formula, or even to "Wounds" as the name — could be something other than a
-WHFRP-style Wounds pool; open to a better idea. **Not built** — sparring uses an unrelated
-placeholder `maxHp` (Implementation, below) that predates this design.
+### Health — an intuitive pool with hit locations ✅ direction R12 *(supersedes P8's Wounds)*
+The owner's call (TODO: "drop wounds for less confusing health points"). The old plan was a low
+WHFRP-style **Wounds** pool (7–13). Two problems: a 7–13 pool is *unintuitive* to a casual (small
+numbers make every hit feel lethal in a confusing way), and it can't express the owner's
+hit-location idea. So:
+
+- **One Health pool, a legible size — not partitioned.** A character has **one** Health total
+  (🟡 target ~40–100), derived from **frame (weight/height) + Constitution** (the dropped Size
+  term, character.md R20, folds in here). Every hit, regardless of where it lands, subtracts from
+  this **one** number, and `0` is the **only** thing that means Downed. "You have 63/80" reads
+  instantly — no per-limb bars to parse.
+  **Why not split the pool per location** (my earlier draft of this section did): giving each
+  limb its own little HP pool that *also* has to hit zero raises real questions with no clean
+  answer — does an arm hitting 0 cripple it, Down the whole character, or nothing? Now you need
+  N pools to track and display instead of one, and two "am I dead" conditions to keep in sync.
+  It's also **less** realistic, not more: a person doesn't have independent life totals per limb —
+  a solid hit *anywhere* threatens the whole body through blood loss/shock, which a single shared
+  pool models correctly. This is also how the tabletop systems this project already borrows from
+  handle it (WHFRP4, Dark Heresy/Rogue Trader): **one** Wounds/Wound total; hit location is
+  rolled only to pick *where* on the body a hit lands, for Soak (armour-by-location) and for
+  flavoring a critical — never a second life bar.
+- **Hit location is rolled (or aimed) per hit** and drives two things: which body-location's AV
+  applies to Soak (items-equipment.md's per-location armour), and a **per-location trauma
+  tally** — a small side-counter (not a pool with its own max) tracking how much *unhealed*
+  damage that specific location has taken.
+- **Concentrated damage = a critical injury** — the owner's key mechanic, now hung off the tally
+  instead of a second pool. When one location's tally reaches **≥ a threshold fraction of max
+  Health**, that location suffers a **critical injury** (maimed hand → drop weapon/−Dexterity
+  there; leg → −Movement; head → Stun/Downed) — *even though* it's the shared total, not a
+  location pool, that ran down. The owner's worked example (50 max Health, 25 concentrated in the
+  right hand = 50%) is exactly this tally crossing its threshold.
+  **Realism refinement (mine, on top of the owner's rule):** the threshold shouldn't be a flat
+  50% everywhere — a solid hit to the **head or torso** is disproportionately dangerous compared
+  to the same raw damage to a limb (that's basic anatomy, and it's also why WHFRP-style games
+  treat head/body crits as the scary ones). So: **limbs use the ~50% threshold, head/torso use a
+  lower one (🟡 ~30%)** — a limb can eat a couple of solid hits before it's crippled, a solid hit
+  to the head is serious almost immediately. One shared table (`location → thresholdFraction`),
+  not per-weapon or per-race special-casing.
+  A critical injury clears when the location is **treated/rests** (its tally resets toward 0 as
+  Health heals, or on a Healer/infirmary visit — ties into character.md's `physicalState` and the
+  Downed→recovery flow below) — it doesn't linger forever like a `physicalState` scar would.
+  This gives armour-by-location (items-equipment.md deep layer) a real job and rewards called
+  shots, without needing N independent HP pools or a full WHFRP crit-severity table (though a
+  small effect table per location is still worth authoring as deep-layer garnish, below).
+- **Willpower does not pad Health** (it did in the old Wounds formula, half-weighted). With a
+  legible pool that's unnecessary; Willpower stays the Stress/Madness/Fear stat
+  (flavor-progression.md) and doesn't double-dip into raw survivability.
+- **0 total Health = Downed, never dead** (R8 unchanged). A critical injury to a *vital* location
+  (head/torso) can Down you before the total is gone — fast and decisive, per pillar 3.
+
+**Not built** — sparring uses an unrelated placeholder `maxHp` (Implementation, below) that
+predates this design; when real combat is built, `health` becomes this pool-plus-locations model
+(character.md's `recalculateMaxResources` seam computes the max).
 
 ### Soak, damage, and the anti-stalemate rule ⬜ not decided (shape proposed)
 - **Soak** = `ConstitutionBonus + Armour Value (AV)` — subtracted from every hit's damage.
   **Always call it AV, never "AP"** — "AP" is Action Points (world-travel.md); a character
-  sheet must never abbreviate armour as AP.
+  sheet must never abbreviate armour as AP. In the deep layer AV is **per body location**
+  (items-equipment.md), so a hit's Soak is that location's armour — pairing directly with the
+  hit-location Health model above.
 - **Damage** = `weapon Damage + net SL (the opposed margin) + StrengthBonus` (ranged: weapon +
   net SL + a ranged term — see character.md's open Strength/finesse question), minus Soak.
-- **A connecting hit (margin > 0) always deals ≥1 Wound**, regardless of Soak. This is the
-  deliberate fix for **Soak-stalemates**: two heavily-armoured defensive builds trading 0s for
-  rounds is not fun and not gritty, it's a stall. A long fight should also accrue Fatigue that
-  erodes Soak/defence over time (design intent, not detailed).
-- High **Mastery** or heavy weapons should **partly pierce AV** at the deep-layer tier — not
-  detailed yet.
+- **Armour ✕ weapon type ✅ direction** (the owner's ask: "slashing weapon is very ineffective
+  against plate armor"). A weapon's **damage type** (slash / pierce / impact) meets an armour's
+  **type** (cloth / leather / mail / plate) through a small **effectiveness multiplier** applied
+  to damage (or to the AV it must beat): slashing glances off plate (×≈0.5), impact (maces,
+  hammers) and armour-piercing thrusts do better against it, while slashing shines against the
+  unarmoured. One tiny lookup table (`DAMAGE_TYPE × ARMOUR_TYPE`), not per-item special cases —
+  it makes weapon choice a real rock-paper-scissors read against what your foe is wearing, which
+  is exactly the WHFRP-not-D&D gear-matters goal (items-equipment.md).
+- **A connecting hit (margin > 0) always deals ≥1 damage**, regardless of Soak — the deliberate
+  fix for **Soak-stalemates** (two armoured defensive builds trading 0s for rounds is a stall,
+  not grit). A long fight also accrues **Fatigue** that erodes Soak/defence over time
+  (design intent, not detailed).
+- High **Mastery** or heavy weapons should **partly pierce AV** at the deep-layer tier; this
+  stacks with the type multiplier (a masterful maul crushes plate). Not detailed yet.
 
-**Worked illustration** (numbers illustrative only): an ermehn duellist (Melee-tree Effective
-55, StrengthBonus 2, dagger Damage 3) attacks a canid soldier (Dodge 40, ConstitutionBonus 4,
-leather AV 1, Wounds 13). Attacker rolls 22 → SL +3; defender Dodges, rolls 61 → fail, SL −2.
-Margin +5 → hit. Damage = 3 + 5 + 2 = 10, − Soak (4+1=5) = **5 Wounds**. Canid drops to 8 —
-gritty (not a one-shot), but roughly three clean hits put him Down.
+**Worked illustration** (numbers illustrative only, now on the R12 Health model): an ermehn
+duellist (Melee-tree Effective 55, StrengthBonus 2, dagger Damage 3, slashing) attacks a canid
+soldier (Dodge 40, ConstitutionBonus 4, mail AV 4, Health 80). Attacker rolls 22 → SL +3;
+defender Dodges, rolls 61 → fail, SL −2. Margin +5 → hit to the arm. Raw = 3 + 5 + 2 = 10;
+slash-vs-mail ×0.7 ≈ 7; − Soak (4+4=8) → floored to the **≥1 rule = 1** Health. The dagger
+*pings off* the mail — so the ermehn should thrust (pierce) or aim an unarmoured location, or
+switch approach. Against a leather-clad or unarmoured foe the same swing bites deep. This is the
+gear/type read the multiplier is for; the *numbers* are 🟡.
 
 ### Downed, not dead ⬜ not decided (direction locked) *(R8, was P-recovery)*
 **No permanent death** in the server game (README.md pillar 3) — an async game can't fairly
-kill a character its player couldn't defend in real time. At 0 Wounds a character is
-**Downed** (knocked out/incapacitated), found and carried to the **Deltrada infirmary**, then
+kill a character its player couldn't defend in real time. At 0 Health (or a critical injury to a
+vital location — R12) a character is **Downed** (knocked out/incapacitated), found and carried to
+the **Deltrada infirmary**, then
 **Recovering** for a real-time window (no risky actions; light/social ones may still be
 allowed). The cost of losing should be **downtime + a temporary injury debuff**, explicitly
 **not** confiscated Action Points — taking a week's hoarded AP for one bad fight feels awful
@@ -96,13 +223,33 @@ without turning one bad roll into a grudge. Refreshes slowly on real rest/over t
 "per session," since this is an async game with no sessions. Some races/roles may start with
 +1. Not built.
 
-### Combat flow, casual vs deep ⬜ design only
-The engine should model **Side A vs Side B**, each a list of combatants, so 1v1 duels,
+### Combat resolution mode — v1 is auto-resolve, manual is a later upgrade ✅ direction R24 *(owner-decided)*
+The owner weighed two shapes and picked a build order rather than picking one forever:
+1. **Auto-resolve (v1, build this first).** Before the fight, the player sets up in a small
+   menu — **stance** (Aggressive/Balanced/Defensive), optionally a learned **style** (below), and
+   a **target** — then presses one button. The engine rolls every round **server-side, in one
+   pass**, and the bot narrates the whole fight round-by-round with a short delay between
+   messages (exactly the pattern `/smackdown sparring` already ships — see Implementation below).
+   No per-round player input once the fight starts.
+2. **Manual, turn-by-turn (later, only once v1 proves fun).** Buttons appear **each round** to
+   pick a maneuver/called-shot/stance-change live, turning a fight into a real back-and-forth.
+   Explicitly **not v1** — the owner's instruction is to prove the automatic version feels good
+   first, then layer manual control on top, not build both at once.
+
+**Why this order, not the reverse:** auto-resolve reuses the sparring engine's already-working
+narration pattern (zero new UI risk) and is what an *async* server needs anyway — most fights
+won't have both participants staring at Discord at the same moment, so a manual per-round UI
+would often just be one player clicking through both sides' turns alone. Building the setup-menu
++ style/stance layer first also means **manual mode, when it comes, is additive** — the same
+stance/style/target selection feeds either resolver; a manual round is just "ask before each
+roll instead of rolling them all." No architecture gets built now that manual mode would have to
+tear down.
+
+The engine should still model **Side A vs Side B**, each a list of combatants, so 1v1 duels,
 1-vs-many PvE, and future parties are all the same code path (a party is just more entries on a
-side). Casual UI: pick a **stance** + a **target**, press a button, the bot rolls and narrates
-each round with a short delay. Deep UI: maneuvers, called shots, positioning, individual
-initiative. **Initiative** = `AgilityBonus + PerceptionBonus` (+ optional tiebreak roll); the
-casual layer may use one roll per *side* instead of per combatant for speed.
+side) — this holds for both resolution modes. **Initiative** = `AgilityBonus + PerceptionBonus`
+(+ optional tiebreak roll); the auto-resolve layer uses one roll per *side* instead of per
+combatant for speed and narration brevity.
 
 **Stances** (the casual tactical handle, 🟡): **Aggressive** (+hit/+damage, −defence) ·
 **Balanced** (no modifier) · **Defensive** (+Dodge/Parry, −hit). A stance is meant to be the
@@ -111,11 +258,11 @@ Attack. **Conditions** (small, stacking, shown as an emoji row, 🟡): Bleeding,
 Fatigued, **Shaken** (high Stress — flavor-progression.md), Broken (fled in fear). None of
 this is built (Implementation, below).
 
-A full worked example of this whole flow — a fighting-style duel (Rhett the ermehn duelist,
-finesse damage, Dagger-Dueling maneuvers) and a Brawling spire bout (Bork vs Rhett, striking +
-occasional clinch, ending in a non-lethal KO) — is kept in the archived `RPG/Examples.md`
-(not migrated verbatim; every number there is illustrative, same as the Smithing example in
-skills.md).
+The original design docs carried a full worked example of this whole flow — a fighting-style
+duel (Rhett the ermehn duelist, finesse damage, Dagger-Dueling maneuvers) and a Brawling spire
+bout (Bork vs Rhett, striking + occasional clinch, ending in a non-lethal KO) — illustrative
+only, same spirit as the Smithing example in skills.md; re-author a fresh worked example here
+once styles/moves are actually built rather than resurrecting the old one verbatim.
 
 **Combat is also meant to deepen** (design direction, nothing built): weapon **skill trees**
 (skills.md already ships placeholder Melee/Ranged/Brawling roots for this), learnable
@@ -128,16 +275,83 @@ readable). **Scope discipline, stated explicitly by design:** v1 should be *one*
 *one* style, Brawling with ~3 moves — prove one fight feels good before building the whole
 arsenal.
 
+### Combat styles & counter-play ✅ direction (nothing built) *(owner-requested)*
+The owner wants styles that *interact*, not just flat buffs:
+- **A style shapes the fight, with trade-offs.** The owner's simple example — "a style which can
+  be faster but do less damage" — generalizes to a small set of levers a style tunes: speed/
+  initiative, damage, defence, Fatigue cost, reach preference. A style is the **deep-layer face
+  of a stance**: a casual just picks Aggressive/Balanced/Defensive; a trained fighter picks a
+  *named* style whose maneuvers auto-map onto those stances. Styles are **talents/skill nodes**
+  (skills.md) — learned, ranked, and requirement-gated.
+- **Knowing a style helps you counter it.** The owner's key ask: "if a character knows well
+  combat style X, it can defend/perform better if an enemy uses combat style X." So a style
+  carries a **familiarity** term: fighting *against* a style you know well grants a defence/read
+  bonus (you've trained against those angles). This turns combat into a **metagame of reads** —
+  a duelist who's studied dagger-dueling shuts down another dagger-duelist — and gives learning
+  many styles a real payoff beyond your own offence. Cheap to implement: an opposed-check
+  modifier keyed on `defender.knowsStyle(attacker.activeStyle)`.
+- **Ranged has styles too, thinner.** Per the owner, ranged gets its own shooting styles
+  (aimed/steady vs fast/volley, hold-and-loose) but **deliberately less extensive** than melee —
+  a couple of options, not a school tree. Keeps ranged distinct without doubling the content.
+
+### Named signature moves ✅ direction (nothing built) *(owner-requested, spire-flavored)*
+Distinct from styles: discrete **named techniques** with flavor and a mechanical kick — the
+owner's "special moves with names like in wrestling or MMA (spinning wheel kick, etc.)". These
+are the **Smackdown Spire's** headline color (below): a move is a talent/skill node granting a
+maneuver with a name, a setup condition, and an effect (a big-damage risky strike, a stun, a
+throw, a crowd-pleasing finisher). They read great in Tosche's narration ("and there it is — the
+**Tumbling Otter Slam!**"). Weapon combat gets a soberer version (named strikes/guards tied to a
+style); Brawling gets the flashy wrestling/MMA vocabulary. **Scope:** ~3 Brawling moves in v1,
+per the discipline note above.
+
+### Positioning & terrain ⬜ future consideration, not v1 R25 *(owner-flagged explicitly as later)*
+The owner explicitly wants this on record as a direction, while being explicit it's **not now**:
+- **A lightweight positional grid.** Not a full tactical battle-map — a small abstract
+  representation of where combatants stand relative to each other (adjacent/at range/flanked),
+  enough to matter for reach weapons, ranged vs melee, and multi-combatant fights (Side A vs Side
+  B already assumes a list of combatants, above — position is the natural next axis on that same
+  model, not a new one).
+- **Terrain and obstacles constrain what's viable, not just flavor.** The owner's own examples:
+  a **cramped room** should make a **two-handed weapon** genuinely awkward to swing (a penalty or
+  an outright block on reach/two-handed attacks); **sand/loose footing** should hinder a specific
+  **style** (one that relies on fast footwork loses its edge, a grappling-heavy style might not
+  care). This means terrain needs to be tagged with small, reusable properties (`cramped`,
+  `uneven`, `slick`, `open`) that styles/weapons/maneuvers can check against — the same
+  "one small reusable language, many consumers" shape the project already uses for
+  `LocationCondition` (world-travel.md) and `DAMAGE_TYPE × ARMOUR_TYPE` (above): a lookup, not a
+  simulation.
+- **Why deliberately deferred:** this is real scope — a grid, terrain tags, and every style/
+  weapon's interaction with them is a second combat system layered onto the first. Building it
+  before the R24 auto-resolve v1 (and before styles/moves even exist) would be solving a problem
+  three layers too early. It belongs here so a **future** manual/tactical combat mode (R24's
+  option 2) is designed *with* positioning in mind from day one, rather than retrofitted after
+  the fact and forced to redo styles/maneuvers to account for space.
+
 ### Smackdown Spire — arena modes ✅ sparring / ⬜ duel & trial *(was P-arena)*
 A dedicated fight venue in Deltrada, with three intended modes:
 - **Sparring** — for-fun, no real stakes. **Built** (below).
-- **Duel** — real Wounds, 0 = knockout, an optional wager (currency/item stake).
+- **Duel** — real Health/damage, 0 = knockout, an optional wager (currency/item stake).
 - **Trial / PvE** — fight stronger NPCs for rewards, real stakes (knockout + recovery).
 
 **Consent rule (locked, load-bearing for async fairness):** any fight with real stakes (a Duel
-with real Wounds/wager, or a staked PvE trial) starts **only after the target accepts by
+with real damage/wager, or a staked PvE trial) starts **only after the target accepts by
 button** — a player can never be attacked into real losses while offline. Stakeless Sparring
 needs no consent.
+
+**One engine for the spire and the field ✅ direction** (the owner's ask: "smackdown spire and
+normal combat should use similar combat engine"). The real Duel/Trial modes run on the **same
+opposed-d100 / Health / Soak engine** as any other fight (Side A vs Side B, above) — the spire is
+a *venue and ruleset overlay*, not a separate combat system. What the spire adds on top:
+- **Hand-to-hand *and* weapon bouts** (owner's ask): the spire offers both — a **Brawling** bout
+  (unarmed, the wrestling/MMA flavor) or an **armed** bout (weapons allowed) — the player picks
+  the bout type; the same engine resolves either, just with the Brawling tree vs a weapon tree
+  (skills.md) driving the attack.
+- **Spire-only signature moves** — the named wrestling/MMA techniques above are *especially* a
+  spire thing: unarmed bouts lean into flashy named finishers for crowd appeal and Tosche's
+  commentary, where a grim field skirmish would not. Some moves may be **spire-exclusive**
+  (showboating that only makes sense before a crowd).
+- **Non-lethal by venue rule** — spire knockouts are "dust yourself off," lighter than a
+  battlefield Downing (an open question below is exactly *how* much lighter).
 
 ---
 
@@ -170,7 +384,10 @@ Fights both players' **active characters**, no approval required. Locks both cha
 (`runExclusive`), resolves the whole fight in memory, narrates round-by-round in
 `#smackdown-spire` with delays, and commits only **per-character ELO** at the end — it does
 **not** persist HP (a fantasy match). ELO here is explicitly temporary and will be removed from
-sparring once the serious Duel mode exists (Ruleset above).
+sparring once the serious Duel mode exists (Ruleset above). **This is already the R24 auto-
+resolve shape** (in-memory rounds, one narrated pass, no per-round input) — the real Duel/Trial
+combat engine doesn't need to invent the resolution pattern, only replace what's rolled each
+round (d100/Health/Soak instead of the placeholder d20/maxHp below).
 
 `game/combat/stats.ts` derives **placeholder** combat stats per character:
 `attributeBonus(v) = floor(v/10)`; `maxHp = strengthBonus×5 + willpowerBonus×5 +
@@ -182,19 +399,25 @@ is a **different, older engine** than `checks.ts`'s d100 system, kept only becau
 explicitly fantasy/for-fun and nothing here needs to match the real ruleset. Since D25 gave
 attributes real per-race/point-buy values, sparring outcomes aren't fully random anymore, but
 the maxHp/attack/defense **shape itself is throwaway** — it will be replaced wholesale when the
-Wounds/Soak/opposed-d100 combat above is actually built.
+Health/Soak/opposed-d100 combat above (R12) is actually built.
 
 ### What's missing entirely
-- The Wounds/Soak/Downed formulas above — design only, no `Wounds` field on `Character`, no
-  damage/soak calculation using `checks.ts`.
-- Fate points — no field, no spend path.
-- The serious `/smackdown duel` and `/smackdown trial` — no code; will be the next
-  `ActivitySession` consumer after the travel `challenge` handler (world-travel.md), reusing
-  its crash-safe step-guarded pattern for a turn-based fight.
-- Weapon skill trees beyond the placeholder roots, fighting styles, Brawling moves — none
-  exist; `melee`/`ranged`/`brawling` nodes in `game/data/skills.ts` are unused stubs today.
-- Criticals/fumbles, Initiative, Fatigue, Conditions (Bleeding/Prone/Stunned/Shaken/Broken) —
-  none built.
+- The **Health-pool + hit-location** (R12) / Soak / Downed formulas above — design only, no
+  `health` pool-with-locations on `Character`, no damage/soak calculation using `checks.ts`.
+- The **concentrated-damage critical injury** rule and the **armour ✕ weapon-type** multiplier
+  — design only.
+- **Combat styles + counter-play** (`knowsStyle` defence bonus), **ranged shooting styles**, and
+  **named signature moves** — design only; the `melee`/`ranged`/`brawling` nodes in
+  `game/data/skills.ts` are unused stubs today.
+- **Fate points** — no field, no spend path.
+- The serious `/smackdown duel` and `/smackdown trial` (armed **and** unarmed bouts on the shared
+  engine) — no code; will be the next `ActivitySession` consumer after the travel `challenge`
+  handler (world-travel.md), reusing its crash-safe step-guarded pattern for a turn-based fight.
+- Criticals/fumbles (now decided, R21), Initiative, Fatigue, Conditions (Bleeding/Prone/Stunned/
+  Shaken/Broken) — none built.
+- **The R24 pre-fight setup menu** (stance/style/target picker driving the auto-resolve engine)
+  — no code; sparring today has no stance/style choice at all, it's pure engine-vs-engine.
+- **Positioning & terrain (R25)** — explicitly not started, future-only; no grid, no terrain tags.
 
 ---
 
@@ -202,13 +425,20 @@ Wounds/Soak/opposed-d100 combat above is actually built.
 
 - **Difficulty ladder values** *(P11)* — the 6-step ladder shape (one band at a time, no
   stacking) is settled; the exact `+40…−30` numbers are 🟡 pending playtesting.
-- **Wounds formula & lethality** *(P8)* — is `SB + 2×EB + ⌊WPB/2⌋ ± Size` right, or should the
-  server game use something other than a WHFRP-style Wounds pool entirely? Target: a starting
-  fighter should take ~3 solid hits to go Down.
-- **Fate points** *(P9)* — pool size, refresh rule, which races/roles start with a bonus.
-  Owner: not for now, revisit later.
-- **Criticals/fumbles on doubles** *(P10)* — include from v1 or defer to v1.1 with the Injury
-  table. Owner: not for now.
+- **~~Wounds~~ → Health pool + hit-location trauma tally, resolved (R12):** the *model* is decided
+  (one shared pool, never split; a per-location tally drives critical injuries, limbs ~50%/vitals
+  ~30% thresholds). Open *numbers*: pool size + the frame/Constitution formula, the exact
+  threshold fractions per location, the tally's decay/reset rule (does it shrink with Health regen,
+  or only clear on treatment?), and the target "~3 solid hits to Down."
+- **Armour ✕ weapon-type multipliers** *(R12)* — the `DAMAGE_TYPE × ARMOUR_TYPE` table values
+  (how hard slash glances off plate, how much impact/pierce gains), and whether it scales damage
+  or the AV threshold.
+- **Fate points** *(P9 → R21, owner now wants them)* — pool size (proposed 2), refresh rule
+  (slow on rest, not per-session), which races/roles start with a bonus.
+- **Criticals/fumbles on doubles** *(P10 → R21, owner now wants them)* — the *rule* is in
+  (double = crit on success / fumble on failure). Open: crit & fumble **table** contents, how
+  they interact with the hit-location critical-injury rule, and whether the deep Injury table
+  ships v1 or later.
 - **Recovery specifics** *(P-recovery)* — downtime length, whether a scar is rolled, any coin
   cost, social-action availability while Recovering.
 - **Arena modes** *(P-arena)* — which modes ship for v1; whether an arena knockout triggers
@@ -217,7 +447,52 @@ Wounds/Soak/opposed-d100 combat above is actually built.
   light/heavy as the top branches); how much of "weapon category" lives in the weapon tree vs
   the fighting style; v1 scope (recommendation: one weapon branch, one style, ~3 Brawling
   moves).
-- **Combat UX/automation** *(P15)* — side-initiative vs individual in the casual layer; exact
-  round pacing/automation depth. Depends on P1/P2 (already resolved — see README.md R5/R6).
+- **Combat styles & counter-play** *(R12/owner)* — the launch style list and each one's levers
+  (speed/damage/defence/Fatigue trade-offs); how big the `knowsStyle`-vs-attacker defence bonus
+  is; how many ranged styles (kept deliberately thin).
+- **Named signature moves** *(owner)* — the ~3 v1 Brawling moves (names + setup + effect); which
+  are spire-exclusive; how a move is unlocked (talent/skill node) and triggered (auto by the bot
+  vs a picked maneuver in the deep layer).
+- **Spire bout parity** *(owner)* — armed vs unarmed bouts on the one engine: do weapons simply
+  win unarmed bouts (realistic) so the spire mostly runs Brawling, or is there matchmaking/
+  handicapping; how spire knockout ("dust yourself off") differs from a field Downing.
+- **~~Combat UX/automation~~ → resolved (P15 → R24):** v1 is auto-resolve (pre-fight menu, one
+  narrated pass), manual/turn-by-turn is later. Still open: exact round pacing/delay, and
+  side-initiative vs individual within the auto-resolve narration.
 - **Armour/bronze weight** *(P16)* — v1 = one global AV per armour set? Bronze as one quality
   tier up, gated by rarity/cost (item-equipment.md's economy tie-in).
+
+---
+
+## Expansion ideas & risks
+
+**Risks:**
+- **Surface area is large for a button-driven game.** Hit-location trauma tallies + armour ✕
+  weapon-type + criticals/fumbles + styles + counter-play (`knowsStyle`) + named moves is a lot of
+  interacting systems. Individually each is simple; a casual fight resolving **all of them at
+  once** in one narrated pass risks being unreadable ("why did I lose that?"). Mitigation already
+  in the design: auto-resolve (R24) means the player never has to *track* this live — the bot
+  narrates the outcome in plain language ("your dagger skids off his mail — try a thrust next
+  time") rather than showing the math. Keep that discipline as more of this gets built: the
+  narration is the UI, the numbers stay backstage.
+- **`knowsStyle` counter-play punishes new players asymmetrically.** A veteran who's learned 5
+  styles gets a defence bonus against all 5; a fresh character has learned none and gets none —
+  which is fine as a progression reward, but could feel like "I lose before I even swing" in an
+  early PvP encounter. Consider a small flat baseline read-bonus for *any* trained combat skill
+  (not just a matching style) so a novice isn't defenceless against styles they've never seen.
+- **Spire named moves risk becoming the only build that matters** if a handful of flashy Brawling
+  finishers heavily outperform sober weapon combat — v1's ~3-move scope limit is the right
+  guardrail; re-check balance before adding move #4.
+
+**Expansion ideas:**
+- **A "scouting" mechanic for counter-play** — let a character safely observe/spar an NPC known
+  to use a particular style (npcs.md) purely to learn its tells (a small `knowsStyle` credit)
+  without adopting the style themselves — gives the counter-play system a non-grindy on-ramp and
+  another reason to visit NPC trainers.
+- **Crowd/reputation flavor for the Spire** — once factions.md's reputation exists, a popular
+  fighter's bouts could draw a bigger in-character "crowd reaction" line, and wins/losses could
+  nudge a small local-reputation value with the Spire's regulars — cheap narrative payoff reusing
+  existing systems, no new mechanics.
+- **A Fate-point flavor hook** — spending a Fate point to shrug off a knockout could optionally
+  trigger a one-line "against all odds" chronicle post (world-travel.md's chronicle channel) —
+  makes a clutch moment visible to the server, not just the fighter.

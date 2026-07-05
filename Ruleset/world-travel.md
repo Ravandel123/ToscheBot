@@ -4,6 +4,36 @@ See [README.md](README.md) for the legend.
 
 ---
 
+## Reference (decided data & math)
+
+**Action Points** — `{current, totalEarned}`, **no cap**, `+AP_REGEN_PER_HOUR = 1`/hr (🟡),
+accrue **even while busy**. Atomic `spendActionPoints` (filter-guarded `≥ cost`).
+`TRAVEL_AP_COST = 0` 🟡; other per-action costs undecided.
+
+**Locations** (`game/data/locations.ts`) — undirected, test-validated graph; today
+`spire ↔ plaza ↔ tavern`, `plaza ↔ riverbank`. Optional `climate`, `features` (discoverable),
+`baseStats`. **`resourceNodes`** (⬜, professions.md) name a place's fishing/forage/plot tables.
+
+**LocationState** (`db/models/locationState.ts`, D31) — one lazy doc/location:
+`weather{kind,since,until}`, `events[]`, server-wide `discoveredFeatureIds[]`,
+`stats{danger,prosperity}` (`adjustStat` seam), `visits`.
+
+**Presence** — never stored; `characterService.atLocation` queries `Character.locationId`
+(approved players + NPCs). NPC movement (npcs.md) makes it change hourly.
+
+**Game clock & conditions** (`world/{time,conditions}.ts`) — `timeOfDay` = morning/day/evening/
+night on `GAME_UTC_OFFSET_HOURS`. `LocationCondition{ timeOfDay?, weather?, duringEvent?,
+requiresDiscovery?, minTraits? }` gates hub actions / encounters / event starts.
+
+**Travel encounter** — chance = `TRAVEL_ENCOUNTER_CHANCE_PERCENT + destination danger` (🟡).
+Kinds: `flavor` (line + move) · `activity` (durable **challenge** session). **Conversations
+(R14) are a third encounter payload** — a `dialogue` session (conversations.md).
+
+**Chronicle** (`game/chronicle.ts`) — best-effort in-character lines to
+`settings.channels.chronicle`; never pings, never fails the action.
+
+---
+
 ## Ruleset
 
 ### Action Points — the async heartbeat ✅ shape / 🟡 numbers
@@ -71,9 +101,24 @@ should post a short in-character line to a public log channel. This keeps game c
 being spammed by solo play while still giving the server a shared "what's happening in the
 world" feed.
 
----
-
-## Implementation
+### What the new systems hook into the world ✅ direction (cross-refs)
+This batch of design changes lands its gameplay *here*, in the world/hub — the world is the stage
+the other files perform on:
+- **Conversations (R14, conversations.md)** are a **third encounter payload** beside `flavor` and
+  `activity`: an `activity`-shaped `dialogue` session. NPCs standing on the hub's presence list
+  become **talk targets**, and an encounter can *start* a conversation on the road.
+- **NPCs (R18, npcs.md)** populate presence and move hourly along this same graph, so "who's
+  standing here" finally changes without a player acting. NPC movement reuses the location graph +
+  `spendActionPoints`-style discipline; merchant NPCs make a location a **shop** (economy.md).
+- **Professions (R16, professions.md)** attach to locations via **`resourceNodes`**: a riverbank's
+  fish table, a woodland's forage table, a plot for gardening. The hub's placeholder local-action
+  buttons (`hubActions.ts`) are exactly where forage/fish/tend become real (a catalog flip + one
+  handler — the long-promised "each location has its own things to do").
+- **Living-location stats finally get drivers** — professions harvest and NPC/event activity are
+  the `adjustStat` callers that were missing (danger/prosperity actually move), and weather can
+  bias profession + encounter tables (a storm churns rarer fish, hides forage).
+- **AP costs** — travel is a placeholder 0; foraging/fishing/crafting/talking-with-a-check are the
+  first real AP sinks to price (still 🟡).
 
 ### Action Points — `characterService.spendActionPoints` ✅ rule / 🟡 rate
 `actionPoints: {current, totalEarned}`, no cap. `regenAll`/`regenAllBusy`/`regen` (the hourly
@@ -180,10 +225,12 @@ market, spire duels, riverbank fishing…) is actually built yet.
 
 - **NPC seeding + movement** (root `CLAUDE.md`'s Phase 6C) — NPCs are `Character` docs with
   `ownerId: null`; nothing populates or moves them along the graph yet, so "who's standing
-  here" is currently always players.
+  here" is currently always players. **Now designed → npcs.md (R18)** (seeding script + hourly
+  behavior CRON); this file just provides the graph they move on.
 - **Location activity tables** — turning each `hubActions.ts` placeholder into a real activity
   (a catalog flip + one handler case each) is the concrete next step per the design constraint
-  above.
+  above. **The first real ones are designed → professions.md (R16)** (forage/fish/tend via
+  `resourceNodes`) and conversations.md (R14) (talk to an NPC).
 - **World-state drivers** — what actually nudges `danger`/`prosperity` (`adjustStat` has no
   caller yet), weather-modified check difficulty, per-character (not just server-wide)
   discoveries, more weathers/events/features, event-driven encounter pools.
@@ -193,3 +240,30 @@ market, spire duels, riverbank fishing…) is actually built yet.
   whether AP ever needs a cap after all (currently: no).
 - **Ambient/random events** — the account-level `activeGame` opt-out flag (character.md) has no
   consumer yet; this is its natural home (root `CLAUDE.md`'s backlog "Ambient events" idea).
+
+---
+
+## Expansion ideas & risks
+
+**Risks:**
+- **Hub button overload as systems land.** The `/play` hub is the single surface where travel,
+  local actions, NPC presence/talk, and (once built) profession gather-buttons all converge. Each
+  addition is individually cheap (a catalog entry), but the hub screen itself has a real ceiling
+  on how many buttons/selects it can show before it stops being "a simple screen" (README pillar
+  6) — see the cross-cutting risk in README.md. Worth budgeting hub real estate explicitly once
+  professions + NPC talk both want a button at the same location.
+- **`adjustStat` (danger/prosperity) has no driver yet, and several new systems assume one.**
+  NPCs (patrols reducing danger), factions (a faction's local strength), and professions
+  (over-harvesting depleting a node) are all plausible future callers — deciding which one writes
+  first, and whether they can conflict (an NPC patrol lowering danger while a faction raid raises
+  it) is worth thinking through before multiple uncoordinated callers exist.
+
+**Expansion ideas:**
+- **Weather as a genuine mechanical modifier**, not just flavor — a storm reducing visibility
+  (Perception checks), rain hindering Fire-based crafting, could give the already-built weather
+  system (D31) real teeth instead of only coloring hub text and travel-encounter chance.
+  Currently ⬜ (this file's "World-state drivers" question already flags this).
+- **A "notable location" ticker** — once discoveries (`discoveredFeatureIds`) and events exist
+  in volume, a lightweight periodic chronicle post ("the jetty at the riverbank has been
+  discovered!") is basically free narrative reuse of infrastructure that already exists (D24's
+  chronicle), turning quiet backend state changes into visible server moments.

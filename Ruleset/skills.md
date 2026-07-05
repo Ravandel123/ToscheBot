@@ -6,6 +6,41 @@ crafting and combat.
 
 ---
 
+## Reference (decided data & math)
+
+**Core sum** — `Effective = attributeBlend(weighted) + Σ points(every node root→leaf) [+ extraNodes]`.
+Uncapped; the **roll** clamps to a d100 % `[5,95]` (combat.md), not Effective.
+
+**Attribute blend** — a node's `attributes: {STR:0.25, CHA:0.25,…}`, **inherited** from the
+nearest ancestor that declares one, **overridable** per node.
+
+**Mastery** — every **+20 Effective over 100 = +1 banked Success Level** (quality/damage) and
+cancels difficulty. Below 100 a point is worth ~2× a point above 100. `SKILL_NODE_CAP = 100`.
+
+**Storage** — `Character.progression.skills: Partial<Record<SkillNodeId,{points,progress}>>` —
+**sparse** (absent = 0), embedded (bounded + hot-path, D32). `progression` also holds (⬜)
+`talents`, `points`, and the R13 `xp` / attribute-raise state.
+
+**Growth (learn-by-doing)** — one meaningful use → `creditUse` credits +1 use to **every node on
+the path**, each converting uses→points at its `GROWTH_PROFILES` rate (🟡: root 10→50→200,
+branch 10→30→100, leaf 5→20→60 uses/pt; steepens with points). "Meaningful" = contested / had a
+real cost.
+
+**Attribute growth (R13)** — skills don't raise attributes directly; **using attribute-tied
+skills unlocks buying that attribute with XP**. Only attributes fed by trained skills unlock.
+XP also buys **talents**. (Cost curve 🟡; must be steep — attribute double-dip, character.md.)
+
+**Talent requirement types (R13/owner)** — a talent may gate on any of: **skill node ≥ N**,
+**attribute ≥ N**, **race**, **deed-trait ≥ N** (flavor-progression.md), **faction rep**
+(factions.md), or an **in-game achievement/flag**.
+
+**Prototype trees shipped** — Smithing, Metallurgy, Speechcraft, Athletics (real, used); Melee/
+Ranged/Brawling roots (stubs, unused). Content + numbers all 🟡.
+
+**Target breadth** — ~30 top-level trees, Basic vs Advanced (Advanced needs ≥1 point to attempt).
+
+---
+
 ## Ruleset
 
 ### Skills are trees, not flat levels ✅ model *(was P-skilltree — locked & built)*
@@ -71,28 +106,57 @@ enough to start playing, with the bot filling starting skills/gear from the role
 growth-rate/cap bonus is; whether "civic" roles (Tavern Keeper, Craftsman) and "adventuring"
 roles (Soldier, Scout) are one list or two axes a character can hold at once.
 
-### Points — the deliberate min-max layer ⬜ not built *(was P13)*
-Earned from skill-ups, quests and milestones — **not from each individual use**, which would
-just reward farming trivial actions. Spent on:
+### Points / XP — the deliberate min-max layer ✅ direction R13 *(was P13, sharpened by the owner)*
+Earned as **experience points (XP)** from skill-ups, quests and milestones — **not from each
+individual use** (that would reward farming trivial actions; learn-by-doing already rewards use
+via skill *progress*). XP is spent on two things:
+
 - **Talents** (below) — the main sink.
-- **Attribute bumps** — attributes don't rise by use (character.md); this would be their only
-  growth path. ⚠️ **Must be priced steeply** (or milestone-gated) — an attribute feeds every
-  tree rooted on it *and* derived combat stats, so if it's cheap it becomes the only rational
-  spend and every build converges (character.md's "attribute double-dip" warning).
+- **Attribute raises — but gated by skill use (the owner's model).** Attributes don't rise by
+  use directly; instead **training skills tied to an attribute unlocks the option to raise that
+  attribute with XP**, and *only* those attributes. Concretely: each attribute tracks the skill
+  progress feeding it (via the nodes' attribute blends — a node with `{STR:0.25,AGI:0.25}` feeds
+  both); once the character has trained STR/AGI-rooted skills past a threshold, the character
+  panel opens a **"+Strength / +Agility"** button, and spending XP there raises the attribute.
+  A character who has only ever talked and read cannot buy Strength — they haven't earned the
+  *right* to, only the mind stats they've exercised.
+  - **Why this is the right shape:** it answers the ⚠️ **attribute double-dip** warning
+    (character.md) not by pricing alone but by **gating** — you can't just dump XP into the
+    globally-best attribute; you must have *played* into it. A blacksmith gets stronger, a
+    duelist quicker, a scholar sharper. XP raises must **still be priced steeply / thresholded**
+    on top (raising an attribute is a big deal), but the gate is the primary defence against
+    every build converging on "buy Agility."
+  - Implementation sketch: `progression` gains `xp` and a per-attribute **unlock/threshold**
+    derived from the summed points on that attribute's tree(s); a `characterService.raiseAttribute`
+    seam checks unlock + XP, then bumps `attributeAllocation` (reusing the existing rebase-safe
+    field, character.md) atomically.
 
-Casual: a **"Recommended"** button one-click-spends points on role-appropriate talents — never
-touch a number. Deep: hand-pick talents, plan attribute bumps, chase caps.
+Casual: a **"Recommended"** button one-click-spends XP on role-appropriate talents (and the
+obvious attribute raises) — never touch a number. Deep: hand-pick talents, plan which attributes
+to unlock and raise, chase caps.
 
-### Talents ⬜ not built
-Discrete, mostly one-line perks (some ranked), bought with points, cheaper if they fit a
-role. Each must be legible from one tooltip line — no "+2% in a sub-case" noise. Sample
-direction (all 🟡 illustrative, not authored content): **Hardy** (+Consitution Bonus to Wounds),
+### Talents & their requirements ⬜ not built *(requirement types locked by the owner, R13)*
+Discrete, mostly one-line perks (some ranked), bought with XP, cheaper if they fit a role. Each
+must be legible from one tooltip line — no "+2% in a sub-case" noise. Sample direction (all 🟡
+illustrative, not authored content): **Hardy** (+Constitution Bonus to Health — R12),
 **Marksman** (+Ranged / steadier aim), **Combat Reflexes** (+Initiative), **Resolute** (+resist
 Fear/Intimidate, slower Stress gain), **Dual Wielder**, **Field Dressing** (stabilize a Downed
-ally), **Trapper**, **Fleet Footed**, **Lettered/Linguist**, **Stout Heart** (Madness buffer).
-Talents may also **gate on node thresholds** (e.g. *Master's Eye* — requires Smithing ≥40 AND
-any leaf ≥60 — +1 quality tier chance, −1 AP to forge on that leaf) — this makes the points
-economy a richer "unlock" layer, not just flat stat buys. Not built.
+ally), **Trapper**, **Fleet Footed**, **Lettered/Linguist**, **Stout Heart** (insanity buffer).
+
+**Requirements to take a talent** — the owner's full list (a talent may require **any/all** of):
+| requirement | example |
+|---|---|
+| **skill node ≥ N** | *Master's Eye* needs Smithing ≥40 AND any leaf ≥60 |
+| **attribute ≥ N** | *Powerful Build* needs Strength ≥45 |
+| **race** | *Amphibious Master* — lutren only |
+| **deed-trait ≥ N** (flavor-progression.md) | *Merciless* needs Cruelty ≥5; *Paragon* needs Honor ≥8 — possibly several at once (Mercy 5 **and** Empathy 8) |
+| **faction rep** (factions.md) | a faction-taught technique needs Honored standing |
+| **in-game achievement / quest flag** | *Spire Champion* needs a won Duel; a style unlocked by a quest |
+
+This makes the XP economy a rich **unlock web**, not flat stat buys — talents are how deed traits,
+reputation, race and deeds finally *pay off mechanically* (the whole point of tracking them,
+flavor-progression.md/factions.md). Requirements reuse the shared condition language
+(`world/conditions.ts`) wherever possible. Not built.
 
 ### The intended breadth — ~30 top-level trees 🟡 *(was P14)*
 Only four top-level trees are prototyped in code today (below). The design target is roughly
@@ -118,6 +182,18 @@ real trees (vs. staying flat leaves under a thin root), the final count/grouping
 Smithing/Metallurgy/Speechcraft/Athletics/combat (the shipped prototypes) map onto or replace
 entries here, is still open.
 
+### The skill panel — viewing a character's trees ⬜ not built *(owner-requested)*
+The owner wants a **panel to show a character's skill trees**. A stateless ephemeral panel (the
+`/inventory` / `/play` pattern — root `CLAUDE.md`'s component model): a top-level list of the
+character's touched trees → drill into one tree → see its nodes with **points**, **Effective**
+contribution, progress-to-next-point bar, cap, and the **governing attribute blend**; nodes the
+character hasn't touched show as faint/locked (Advanced ones show their entry requirement). This
+is also the natural home for the **attribute-raise unlock buttons** (R13 above — "+Strength"
+appears here once earned) and for showing which **talents** a node's points would unlock. Reads
+purely from `progression` + the static catalog, so like every other panel it's restart-proof and
+never desyncs. Design surface (`/skills` or a tab on `/character view`), the deep-layer
+counterpart to the casual "just play and grow." Not built.
+
 ### Magic stance ✅ (low fantasy, no exceptions)
 **No player spellcasting** — canon backs this (rich religion and myth per race, but nobody
 casts). Herbalism, Alchemy and Medicine are the mundane, skill-based way the setting handles
@@ -127,8 +203,7 @@ Stress treatment). Any true mysticism (omens, relics, "old powers") is rare, dan
 strictly an Imperator/quest-authored tool — never a player-facing mechanic.
 
 ### Worked example — Smithing (crafting reads the sum as quality)
-See the full walkthrough in the old `RPG/Examples.md` (kept for reference, not migrated
-verbatim here since it's illustrative, not a rule). Short version: a lutren smith with
+The short version of the original design-docs walkthrough (illustrative, not a rule): a lutren smith with
 Dexterity 44, Smithing 70, Weaponsmithing 55, Bladesmithing 40 has **Effective 187** forging a
 sword (`AttrTerm 20 + 70 + 55 + 40`), but only **112** forging plate armour (his neglected
 armour branch) — the shared parents carry over into every leaf, but the trained leaf still
@@ -202,10 +277,17 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
 - ✅ `game/checks.ts` (combat.md) consumes `effectiveSkill`/`checkTarget` for travel challenges.
 - ✅ `characterService.creditSkillUse` exists as a seam.
 - ⬜ No live action calls `creditUse` yet — skills currently never grow in play.
-- ⬜ Roles, the points economy, and talents are pure design (above) — nothing in `game/` or
+- ⬜ Roles, the XP/points economy, and talents are pure design (above) — nothing in `game/` or
   `db/` yet.
+- ⬜ **XP + skill-gated attribute raises (R13)** — no `xp` field, no per-attribute unlock
+  tracking, no `raiseAttribute` seam.
+- ⬜ **Talent requirements** — the requirement-type gating (skill/attribute/race/trait/rep/
+  achievement) has no data model; reuses `world/conditions.ts` when built.
+- ⬜ **The skill panel** — no `/skills` surface yet.
 - ⬜ Practice-source quality-gated caps (home/workshop/commission) — only the flat diminishing-
   returns bands exist.
+- 🟡 **First `creditUse` consumer** is likely **foraging** (professions.md) — the peaceful
+  professions are the natural place skills first grow in play.
 
 ---
 
@@ -213,15 +295,58 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
 
 - **Roles** *(P12)* — launch list + special actions; growth-modifier size; one axis or two
   (civic vs adventuring).
-- **Points economy** *(P13)* — the use→progress math tuning beyond the shipped bands; point
-  yields from quests/milestones; talent prices; how steeply attribute bumps must be priced.
+- **XP / points economy** *(P13 → R13, direction set)* — the *model* is decided (XP buys talents;
+  attribute raises are **skill-use-gated**, only unlockable attributes, then XP-bought & steep).
+  Open *numbers*: XP yields from quests/milestones/skill-ups; the per-attribute unlock threshold;
+  the attribute-raise cost curve; talent prices.
+- **Talent requirements** *(R13)* — data-modeling the requirement types (skill/attribute/race/
+  deed-trait/faction-rep/achievement) on the talent catalog; how they render in the skill panel.
+- **The skill panel** *(owner)* — `/skills` vs a `/character view` tab; how much of the tree to
+  show a casual (probably: only touched trees + "recommended" hints) vs the full deep view.
 - **Skill & talent catalog breadth** *(P14)* — target ~30 top-level trees (fits a Discord
   select); which ones beyond the four prototypes; the launch talent list beyond the ten
   sketched above.
-- **First `creditUse` consumer** — crafting or combat, whichever ships first, is what makes
-  skills actually grow; currently nothing calls it.
+- **First `creditUse` consumer** — **foraging/professions** (professions.md) is the likely first,
+  ahead of combat; whichever ships first is what finally makes skills grow in play.
 - **Item required-sum gates + quality-from-surplus** — the crafting-quality half of the
   Smithing example isn't implemented; today's per-instance item quality (items-equipment.md)
   is set at acquisition, not derived from a check.
 - Attribute weight `w` per tree, and per-node growth/cap tuning generally — all 🟡, meant to be
   revisited once there's real play data.
+
+---
+
+## Expansion ideas & risks
+
+**Risks:**
+- **The XP-gated attribute raise (R13) can build a wall, not just friction.** If a character has
+  only ever trained, say, Speechcraft, they can never unlock Strength — full stop, no matter how
+  much XP they bank — because the gate is "have you trained a feeding skill," and they haven't.
+  This is fine as an incentive to specialize, but if a player *wants* to pivot their character's
+  concept later (a talker who decides to become a fighter), there's currently no path back short
+  of grinding Strength-rooted skills from a raw-attribute disadvantage. Needs at least one release
+  valve — see character.md's matching risk entry for a proposed "training montage" one-off.
+- **~30 top-level trees is a lot of Discord-select real estate.** Even at "fits a select," a
+  player choosing among 30 sibling trees with only a handful trained needs strong sorting/
+  filtering (role-recommended first, touched-trees pinned) or the skill panel becomes a wall of
+  text instead of the "casual glance, deep drill-down" it's meant to be.
+- **`creditUse`'s "meaningful use" rule is a judgment call per consumer.** Every future system
+  that credits skill use (professions, crafting, combat) has to independently decide what counts
+  as "had a real cost or a chance of failure" — inconsistent judgment across consumers could make
+  growth feel arbitrary in one system and generous in another. Worth a one-line house rule stated
+  once here rather than re-litigated per file: *if a check was rolled and could have failed, it
+  counts; free/auto actions never do.*
+
+**Expansion ideas:**
+- **The skill panel could double as a "next step" recommender** — beyond showing points/progress,
+  a small "you're 12 uses from your next Bladesmithing point" or "training Athletics would unlock
+  +Agility" hint turns the panel from a status screen into active guidance, which matters a lot
+  for a casual player who doesn't know the tree exists otherwise.
+- **Skill decay for truly abandoned trees** — not currently proposed anywhere, and probably not
+  worth it (adds anxiety, contradicts the "no forced login" AP philosophy), but worth explicitly
+  rejecting on the record: skills should **not** decay from disuse, only grow. Consistent with
+  world-travel.md's uncapped-AP "come back whenever" design.
+- **Cross-tree "prestige" nodes** — once several trees are real, a rare top-level node requiring
+  Mastery in two *unrelated* trees (e.g. Smithing **and** Speechcraft, for a master weaponsmith
+  who's also a legendary haggler) could reward genuinely unusual builds without a new mechanic —
+  just an `extraNodes`-style cross-reference on a single special leaf.
