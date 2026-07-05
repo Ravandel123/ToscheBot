@@ -39,8 +39,11 @@ export const accountService = {
       return accountSettings(account);
    },
 
-   /** Flips one account setting. Returns the updated settings (with defaults). */
-   async updateSetting(userId: string, key: keyof AccountSettings, value: boolean): Promise<AccountSettings> {
+   /** Sets one account setting (any type — boolean toggle, unit system, country,
+    *  timezone). Returns the updated settings (with defaults). The account is
+    *  expected to exist already (the panel that surfaces these controls creates
+    *  it first via getOrCreate). */
+   async updateSetting<K extends keyof AccountSettings>(userId: string, key: K, value: AccountSettings[K]): Promise<AccountSettings> {
       const account = await Account.findOneAndUpdate(
          { _id: userId },
          { $set: { [`settings.${key}`]: value } },

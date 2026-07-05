@@ -6,6 +6,7 @@ import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
 import { baseAttributes, effectiveAttributes, type AttributeAllocation } from '../../game/character/attributes.js';
 import { creditUse, type SkillLevelUp } from '../../game/character/skills.js';
+import type { CharacterBody } from '../../game/character/body.js';
 import { ATTRIBUTE_KEYS } from '../../game/data/attributes.js';
 import type { SkillNodeId } from '../../game/data/skills.js';
 import type { CurrencyKey } from '../../game/data/currencies.js';
@@ -101,6 +102,12 @@ export const characterService = {
          { _id: characterId },
          { $set: { attributeAllocation: allocation, attributes: effectiveAttributes(race, allocation) } },
       );
+   },
+
+   /** Persists the character's physical frame (R20; validated/clamped by the
+    *  caller via game/character/body.ts). Callers gate with `canEdit` first. */
+   async setBody(characterId: string, body: CharacterBody): Promise<void> {
+      await Character.updateOne({ _id: characterId }, { $set: { body } });
    },
 
    /** Adds signed deed-trait deltas, clamping each to >= 0 atomically. */

@@ -11,9 +11,14 @@ import { EQUIPMENT_SLOTS } from '../../../game/data/equipmentSlots.js';
 import { locationName } from '../../../game/data/locations.js';
 import { displayName, isHttpUrl, STATUS_LABEL } from '../../../game/character/identity.js';
 import { equipmentAttributeModifiers, equippedItems, itemDisplayName, totalEquippedArmor } from '../../../game/character/inventory.js';
+import { ageBandName, bodyOf, bodyShapeName, moveSpeed } from '../../../game/character/body.js';
+import { cmToImperial, kgToImperial } from '../../../lib/units.js';
+import type { UnitSystem } from '../../../db/models/account.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
 
-export function buildCharacterSheet(character: CharacterDoc): EmbedBuilder {
+/** The character sheet. `units` is the VIEWER's preference (R19) — the frame is
+ *  stored metric and shown imperial only when the viewer asked for it. */
+export function buildCharacterSheet(character: CharacterDoc, units: UnitSystem = 'metric'): EmbedBuilder {
    const resources = Object.entries(RESOURCES)
       .map(([key, def]) => {
          const state = character.resources[key as keyof typeof RESOURCES];
@@ -52,6 +57,16 @@ export function buildCharacterSheet(character: CharacterDoc): EmbedBuilder {
 
    const race = character.identity.race ? RACES[character.identity.race].name : 'Unknown';
 
+   // Frame (R20): stored metric, shown per the viewer's unit preference. Shape
+   // and move speed are derived (never stored).
+   const body = bodyOf(character);
+   const height = units === 'imperial' ? cmToImperial(body.heightCm) : `${body.heightCm} cm`;
+   const weight = units === 'imperial' ? kgToImperial(body.weightKg) : `${body.weightKg} kg`;
+   const bodyValue = [
+      `**Height:** ${height} · **Weight:** ${weight} · **Build:** ${bodyShapeName(body)}`,
+      `**Age:** ${body.age} (${ageBandName(body.age)}) · **Move:** ${moveSpeed(character.identity.race, character.attributes)}`,
+   ].join('\n');
+
    const embed = new EmbedBuilder()
       .setTitle(displayName(character))
       .setDescription(`${STATUS_LABEL[character.approvalStatus]} · ${race} · 📍 ${locationName(character.locationId)}`)
@@ -59,6 +74,7 @@ export function buildCharacterSheet(character: CharacterDoc): EmbedBuilder {
          { name: 'Action Points', value: `${character.actionPoints.current}`, inline: false },
          { name: 'Vitals', value: resources, inline: true },
          { name: 'Currencies', value: currencies, inline: true },
+         { name: 'Body', value: bodyValue },
          { name: 'Attributes', value: attributes },
          ...(gear ? [{ name: `Equipment · 🛡️ Armor ${totalEquippedArmor(character)}`, value: gear }] : []),
          ...(traits ? [{ name: 'Traits', value: traits }] : []),

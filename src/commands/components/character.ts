@@ -12,9 +12,10 @@ import { accountService } from '../../db/services/accountService.js';
 import { canEdit, canSubmit, MAX_CHARACTERS_PER_ACCOUNT } from '../../game/character/rules.js';
 import { creationStep, firstIncompleteStep, type CreationStep } from '../../game/character/creationSteps.js';
 import { adjustAllocation, allocationFrom, effectiveAttributes, emptyAllocation, type AttributeAllocation } from '../../game/character/attributes.js';
+import { bodyOf, parseBody } from '../../game/character/body.js';
 import { ATTRIBUTES, type AttributeKey } from '../../game/data/attributes.js';
 import { resolveGuildChannel } from '../../lib/discord.js';
-import { readIdentityModal, buildIdentityModal, buildRejectReasonModal } from './_characterModals.js';
+import { readIdentityModal, buildIdentityModal, buildBodyModal, readBodyModal, buildRejectReasonModal } from './_characterModals.js';
 import { buildDecidedDecree, buildDecreeButtons, buildDecreeEmbed } from './_characterDecree.js';
 import { buildCharacterPanel, buildCharacterStepView } from './_characterPanel.js';
 import type { CharacterDoc } from '../../db/models/character.js';
@@ -36,6 +37,7 @@ export default {
       if (interaction.isModalSubmit()) {
          if (action === 'create') return handleCreateModal(client, interaction);
          if (action === 'panel-save') return handlePanelSave(interaction, rest[0]);
+         if (action === 'panel-save-body') return handleBodySave(interaction, rest[0]);
          if (action === 'reject-reason') return handleRejectReason(client, interaction, rest[0], rest[1]);
          return;
       }
@@ -88,8 +90,11 @@ async function openStep(
    step: CreationStep,
 ): Promise<void> {
    if (step.kind === 'modal') {
-      // All modal steps currently share the identity modal; give each future
-      // modal step its own builder + `panel-save`-style action when it lands.
+      if (step.id === 'body') {
+         await interaction.showModal(buildBodyModal({ customId: `character:panel-save-body:${character._id}`, prefill: bodyOf(character) }));
+         return;
+      }
+      // The 'details' step (name/epithet/bio/avatar) shares the identity modal.
       await interaction.showModal(buildIdentityModal({
          customId: `character:panel-save:${character._id}`,
          title: 'Edit your character',
@@ -243,6 +248,21 @@ async function handlePanelSave(interaction: ModalSubmitInteraction, characterId:
    const identity = readIdentityModal(interaction);
    await characterService.updateIdentity(characterId, identity);
    const updated: CharacterDoc = { ...character, identity: { ...character.identity, ...identity } };
+
+   if (interaction.isFromMessage())
+      await interaction.update(buildCharacterPanel(updated));
+   else
+      await interaction.reply({ ...buildCharacterPanel(updated), ...ephemeral });
+}
+
+async function handleBodySave(interaction: ModalSubmitInteraction, characterId: string): Promise<void> {
+   const character = await ownedEditable(interaction, characterId);
+   if (!character)
+      return;
+
+   const body = parseBody(readBodyModal(interaction), bodyOf(character));
+   await characterService.setBody(characterId, body);
+   const updated: CharacterDoc = { ...character, body };
 
    if (interaction.isFromMessage())
       await interaction.update(buildCharacterPanel(updated));

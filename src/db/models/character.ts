@@ -6,6 +6,7 @@ import { TRAITS, type TraitKey } from '../../game/data/traits.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
 import { effectiveAttributes, emptyAllocation, type AttributeAllocation } from '../../game/character/attributes.js';
 import { emptyProgression, type CharacterProgression } from '../../game/character/skills.js';
+import { defaultBody, type CharacterBody } from '../../game/character/body.js';
 import type { ItemInstance } from '../../game/character/inventory.js';
 import type { RaceId } from '../../game/data/races.js';
 
@@ -47,6 +48,10 @@ export interface CharacterDoc {
    // landed on each attribute. Kept separate from `attributes` so a race change
    // mid-wizard rebases cleanly instead of corrupting the player's spend.
    attributeAllocation: AttributeAllocation;
+   // Physical frame (R20): stored METRIC (kg/cm). Body-shape and move speed are
+   // DERIVED from these (game/character/body.ts), never stored. Age is stored
+   // but not yet wired to any stat curve (🟡).
+   body: CharacterBody;
    // Deed traits (courage, cowardice…), grown by choices in encounters. Rising
    // meters from 0; nothing gates on them yet (Phase 7).
    traits: Record<TraitKey, number>;
@@ -105,6 +110,11 @@ const characterSchema = new Schema({
    },
    attributes: fromKeys(Object.keys(ATTRIBUTES), { type: Number, required: true }),
    attributeAllocation: fromKeys(Object.keys(ATTRIBUTES), { type: Number, required: true, default: 0 }),
+   body: {
+      heightCm: { type: Number, required: true },
+      weightKg: { type: Number, required: true },
+      age: { type: Number, required: true },
+   },
    traits: fromKeys(Object.keys(TRAITS), { type: Number, required: true, default: 0 }),
    // Sparse skill-tree map (D34) — a plain object keyed by node id, like
    // `equipment`; the tree/relationships live in code, never here.
@@ -119,7 +129,7 @@ export const Character = model('Character', characterSchema) as unknown as Model
 /** Catalog-derived stat block for a fresh character (identity/owner set by the caller).
  *  Attributes start at the racial base with an untouched allocation — the wizard's
  *  point-buy step (and any later race change) recomputes them via the service. */
-export function defaultCharacterStats(race: RaceId | null = null): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'attributeAllocation' | 'traits' | 'progression' | 'currencies' | 'inventory' | 'equipment'> {
+export function defaultCharacterStats(race: RaceId | null = null): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'attributeAllocation' | 'body' | 'traits' | 'progression' | 'currencies' | 'inventory' | 'equipment'> {
    return {
       resources: Object.fromEntries(
          Object.entries(RESOURCES).map(([key, def]) => [key, { current: def.defaultMax, max: def.defaultMax }]),
@@ -127,6 +137,7 @@ export function defaultCharacterStats(race: RaceId | null = null): Pick<Characte
       actionPoints: { current: 0, totalEarned: 0 },
       attributes: effectiveAttributes(race, emptyAllocation()),
       attributeAllocation: emptyAllocation(),
+      body: defaultBody(race),
       traits: Object.fromEntries(
          Object.keys(TRAITS).map((key) => [key, 0]),
       ) as Record<TraitKey, number>,

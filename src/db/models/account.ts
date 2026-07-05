@@ -5,6 +5,14 @@ import { Schema, model, type Model } from 'mongoose';
 // Account-level SETTINGS live here too (D27): they describe the player, not a
 // character, so they survive switching/rerolling characters.
 
+// How measurements (weight/height/temperature) are SHOWN to this player (R19).
+// The database always stores metric; imperial is computed on the fly at display
+// time — one canonical stored unit, per-player presentation.
+export type UnitSystem = 'metric' | 'imperial';
+
+// Account settings are SERVER-WIDE, not game-only (R19): they describe the
+// player, so they survive switching/rerolling characters and affect normal
+// server use too (units, timezone).
 export interface AccountSettings {
    // Master opt-out for random/ambient game events targeting this player (the
    // ambient-events system from the backlog checks it; nothing else consumes it
@@ -12,12 +20,29 @@ export interface AccountSettings {
    activeGame: boolean;
    // Whether the bot may DM this player (approval verdicts, future pings).
    dmNotifications: boolean;
+   // Display unit system (R19). Stored metric always; imperial is a view.
+   units: UnitSystem;
+   // The player's country — server flavour/roleplay (and a sensible default
+   // timezone). Free text; null until set.
+   country: string | null;
+   // IANA timezone (e.g. 'Europe/Warsaw'). Affects server + game time features,
+   // not only the game (R19). Validated on set; null until then.
+   timezone: string | null;
 }
 
 export const DEFAULT_ACCOUNT_SETTINGS: AccountSettings = {
    activeGame: true,
    dmNotifications: true,
+   units: 'metric',
+   country: null,
+   timezone: null,
 };
+
+// The boolean subset of settings — the ones the `/profile` panel renders as
+// simple ON/OFF toggles. Non-boolean settings (units/country/timezone) get their
+// own controls. Kept as a typed tuple so adding a boolean setting is one edit.
+export const BOOLEAN_SETTING_KEYS = ['activeGame', 'dmNotifications'] as const;
+export type BooleanSettingKey = (typeof BOOLEAN_SETTING_KEYS)[number];
 
 export interface AccountDoc {
    _id: string; // Discord user id
@@ -35,6 +60,9 @@ const accountSchema = new Schema({
    settings: {
       activeGame: { type: Boolean, required: true, default: DEFAULT_ACCOUNT_SETTINGS.activeGame },
       dmNotifications: { type: Boolean, required: true, default: DEFAULT_ACCOUNT_SETTINGS.dmNotifications },
+      units: { type: String, required: true, default: DEFAULT_ACCOUNT_SETTINGS.units },
+      country: { type: String, default: DEFAULT_ACCOUNT_SETTINGS.country },
+      timezone: { type: String, default: DEFAULT_ACCOUNT_SETTINGS.timezone },
    },
 }, { timestamps: true, minimize: false });
 

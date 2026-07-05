@@ -7,6 +7,7 @@ import { displayName, STATUS_LABEL } from '../../../game/character/identity.js';
 import { RACES } from '../../../game/data/races.js';
 import { buildIdentityModal } from '../../components/_characterModals.js';
 import { buildCharacterPanel } from '../../components/_characterPanel.js';
+import { buildSkillOverview } from '../../components/_skillPanel.js';
 import { buildCharacterSheet } from './_characterSheet.js';
 import type { ToscheClient } from '../../../client.js';
 
@@ -32,6 +33,7 @@ export default {
             ),
       )
       .addSubcommand((sub) => sub.setName('list').setDescription('List the characters you command.'))
+      .addSubcommand((sub) => sub.setName('skills').setDescription("Inspect your active character's skill trees."))
       .addSubcommand((sub) =>
          sub
             .setName('switch')
@@ -46,6 +48,7 @@ export default {
          case 'create': return createOrEditCharacter(interaction);
          case 'view': return viewCharacter(interaction);
          case 'list': return listCharacters(interaction);
+         case 'skills': return viewSkills(interaction);
          case 'switch': return switchCharacter(client, interaction);
       }
    },
@@ -109,7 +112,9 @@ async function viewCharacter(interaction: ChatInputCommandInteraction): Promise<
       return;
    }
 
-   await interaction.reply({ embeds: [buildCharacterSheet(character)] });
+   // The frame is shown in the VIEWER's unit preference (R19), not the target's.
+   const { units } = await accountService.getSettings(interaction.user.id);
+   await interaction.reply({ embeds: [buildCharacterSheet(character, units)] });
 }
 
 async function listCharacters(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -132,6 +137,19 @@ async function listCharacters(interaction: ChatInputCommandInteraction): Promise
       .setDescription(lines.join('\n'));
 
    await interaction.reply({ embeds: [embed], ...ephemeral });
+}
+
+/** The deep-layer skill-tree viewer for your active character (D34). Ephemeral +
+ *  personal; navigation lives in the `charskills` component handler. */
+async function viewSkills(interaction: ChatInputCommandInteraction): Promise<void> {
+   const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
+
+   if (!character) {
+      await interaction.reply({ content: 'You have no active character. Draft one with `/character create`.', ...ephemeral });
+      return;
+   }
+
+   await interaction.reply({ ...buildSkillOverview(character), ...ephemeral });
 }
 
 async function switchCharacter(client: ToscheClient, interaction: ChatInputCommandInteraction): Promise<void> {

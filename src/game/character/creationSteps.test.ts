@@ -36,9 +36,16 @@ describe('CREATION_STEPS catalog', () => {
 
    it('summarizes current values with an em-dash fallback', () => {
       const c = character({ name: '', race: null, gender: '' }, {});
-      for (const step of CREATION_STEPS.filter((s) => s.id !== 'attributes'))
+      // 'attributes' and 'body' are always populated (a point pool / a default
+      // frame), so they never fall back to '—'.
+      for (const step of CREATION_STEPS.filter((s) => s.id !== 'attributes' && s.id !== 'body'))
          expect(step.summary(c)).toBe('—');
       expect(creationStep('attributes')!.summary(c)).toBe(`0/${CREATION_ATTRIBUTE_POINTS} points assigned`);
+      // The body step summarizes the (defaulted) frame, not '—'.
+      const bodySummary = creationStep('body')!.summary(c);
+      expect(bodySummary).toContain('cm');
+      expect(bodySummary).toContain('kg');
+      expect(bodySummary).toContain('age');
    });
 });
 

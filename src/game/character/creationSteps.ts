@@ -1,5 +1,6 @@
 import { GENDER_CHOICES, NAME_MIN_LENGTH } from './identity.js';
 import { CREATION_ATTRIBUTE_POINTS, allocationFrom, isAllocationComplete, pointsSpent } from './attributes.js';
+import { bodyOf, bodyShapeName } from './body.js';
 import { RACES } from '../data/races.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
@@ -53,6 +54,20 @@ export const CREATION_STEPS: readonly CreationStep[] = [
       required: true,
       isComplete: (c) => GENDER_CHOICES.some((g) => g.value === c.identity.gender),
       summary: (c) => GENDER_CHOICES.find((g) => g.value === c.identity.gender)?.label ?? '—',
+   },
+   {
+      // Physical frame (R20): height/weight/age. Optional — a fresh character
+      // starts at its race's default frame, so this is always "done"; players
+      // open it only to tweak. Body-shape/move speed derive from these.
+      id: 'body',
+      title: 'Frame',
+      kind: 'modal',
+      required: false,
+      isComplete: () => true,
+      summary: (c) => {
+         const body = bodyOf(c);
+         return `${body.heightCm} cm · ${body.weightKg} kg · age ${body.age} (${bodyShapeName(body)})`;
+      },
    },
    {
       // The creation point-buy (D25): distribute CREATION_ATTRIBUTE_POINTS on

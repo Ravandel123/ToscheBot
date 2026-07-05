@@ -131,9 +131,31 @@ export type SkillNodeId = keyof typeof SKILL_NODES;
 
 export const SKILL_NODE_IDS = Object.keys(SKILL_NODES) as SkillNodeId[];
 
+/** The tree roots (each the top of its own tree), in catalog order — the top
+ *  level the skill panel lists. */
+export const SKILL_ROOT_IDS = SKILL_NODE_IDS.filter((id) => SKILL_NODES[id].parent === null);
+
 /** Type guard for an id read off a DB doc / customId (D10 rule 3). */
 export function isSkillNodeId(id: string): id is SkillNodeId {
    return id in SKILL_NODES;
+}
+
+/** Direct children of a node, in catalog order (empty for a leaf). */
+export function childrenOf(id: SkillNodeId): SkillNodeId[] {
+   return SKILL_NODE_IDS.filter((child) => SKILL_NODES[child].parent === id);
+}
+
+/** A node and all its descendants, depth-first (parent before its children) —
+ *  the natural display order for a whole tree. */
+export function subtreeIds(rootId: SkillNodeId): SkillNodeId[] {
+   const out: SkillNodeId[] = [];
+   const walk = (id: SkillNodeId): void => {
+      out.push(id);
+      for (const child of childrenOf(id))
+         walk(child);
+   };
+   walk(rootId);
+   return out;
 }
 
 /** A node widened to `SkillNode` — `as const satisfies` narrows each literal and

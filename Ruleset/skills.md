@@ -182,17 +182,19 @@ real trees (vs. staying flat leaves under a thin root), the final count/grouping
 Smithing/Metallurgy/Speechcraft/Athletics/combat (the shipped prototypes) map onto or replace
 entries here, is still open.
 
-### The skill panel — viewing a character's trees ⬜ not built *(owner-requested)*
-The owner wants a **panel to show a character's skill trees**. A stateless ephemeral panel (the
-`/inventory` / `/play` pattern — root `CLAUDE.md`'s component model): a top-level list of the
-character's touched trees → drill into one tree → see its nodes with **points**, **Effective**
-contribution, progress-to-next-point bar, cap, and the **governing attribute blend**; nodes the
-character hasn't touched show as faint/locked (Advanced ones show their entry requirement). This
-is also the natural home for the **attribute-raise unlock buttons** (R13 above — "+Strength"
-appears here once earned) and for showing which **talents** a node's points would unlock. Reads
-purely from `progression` + the static catalog, so like every other panel it's restart-proof and
-never desyncs. Design surface (`/skills` or a tab on `/character view`), the deep-layer
-counterpart to the casual "just play and grow." Not built.
+### The skill panel — viewing a character's trees ✅ built *(owner-requested; `/character skills`)*
+The owner wanted a **panel to show a character's skill trees**, **under `/character`** ("skille
+powinny być pod /character skills bo to część postaci"). **Built** (`commands/components/
+_skillPanel.ts` + the `charskills` component handler): a stateless ephemeral panel (the `/profile`
+pattern — personal, clicker = owner, no ids in the customIds, restart-proof), reached via
+**`/character skills`**. Overview → every **tree root** with the character's trained points +
+governing attribute blend + a select to open one; tree view → the whole tree as a monospace table
+(each node's **points**, the **Effective** a check would roll, and **progress toward the next
+point**) + a Back button and the same select to jump around. Reads purely from `progression` + the
+static catalog. **Still ⬜** (deferred with their systems): nodes don't show faint/locked or
+Advanced entry requirements yet (Advanced skills aren't modeled); the **attribute-raise unlock
+buttons** (R13) and **talent-unlock hints** land here once those economies exist — the panel is
+the seam they'll hang off.
 
 ### Magic stance ✅ (low fantasy, no exceptions)
 **No player spellcasting** — canon backs this (rich religion and myth per race, but nobody
@@ -283,7 +285,7 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
   tracking, no `raiseAttribute` seam.
 - ⬜ **Talent requirements** — the requirement-type gating (skill/attribute/race/trait/rep/
   achievement) has no data model; reuses `world/conditions.ts` when built.
-- ⬜ **The skill panel** — no `/skills` surface yet.
+- ✅ **The skill panel** — `/character skills` (`_skillPanel.ts` + `charskills` handler), read-only.
 - ⬜ Practice-source quality-gated caps (home/workshop/commission) — only the flat diminishing-
   returns bands exist.
 - 🟡 **First `creditUse` consumer** is likely **foraging** (professions.md) — the peaceful
@@ -301,8 +303,9 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
   the attribute-raise cost curve; talent prices.
 - **Talent requirements** *(R13)* — data-modeling the requirement types (skill/attribute/race/
   deed-trait/faction-rep/achievement) on the talent catalog; how they render in the skill panel.
-- **The skill panel** *(owner)* — `/skills` vs a `/character view` tab; how much of the tree to
-  show a casual (probably: only touched trees + "recommended" hints) vs the full deep view.
+- **The skill panel** *(owner)* — ✅ built as `/character skills` (the owner's placement). Still
+  open: how much to show a casual (only touched trees + "recommended" hints?) vs the full deep
+  view; adding the R13 attribute-raise buttons + talent-unlock hints once those economies exist.
 - **Skill & talent catalog breadth** *(P14)* — target ~30 top-level trees (fits a Discord
   select); which ones beyond the four prototypes; the launch talent list beyond the ten
   sketched above.

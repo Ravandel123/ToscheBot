@@ -12,6 +12,7 @@ import {
 } from '../../game/character/identity.js';
 import type { CharacterIdentity } from '../../db/models/character.js';
 import type { EditableIdentity } from '../../db/services/characterService.js';
+import type { CharacterBody } from '../../game/character/body.js';
 
 const REASON_MAX_LENGTH = 300;
 
@@ -60,6 +61,31 @@ export function readIdentityModal(interaction: ModalSubmitInteraction): Editable
       epithet: interaction.fields.getTextInputValue('epithet').trim(),
       bio: interaction.fields.getTextInputValue('bio').trim(),
       avatarUrl: interaction.fields.getTextInputValue('avatarUrl').trim(),
+   };
+}
+
+/** Body (frame) modal — the creation step's height/weight/age fields (R20). All
+ *  metric; the panel prefills current values (a fresh draft has race defaults).
+ *  The caller owns the `customId` (`character:panel-save-body:<id>`). */
+export function buildBodyModal(opts: { customId: string; prefill: CharacterBody }): ModalBuilder {
+   const b = opts.prefill;
+
+   return new ModalBuilder()
+      .setCustomId(opts.customId)
+      .setTitle('Physical frame')
+      .addComponents(
+         row(textInput('heightCm', 'Height (cm)', TextInputStyle.Short, { required: true, max: 4, value: String(b.heightCm) })),
+         row(textInput('weightKg', 'Weight (kg)', TextInputStyle.Short, { required: true, max: 4, value: String(b.weightKg) })),
+         row(textInput('age', 'Age (years)', TextInputStyle.Short, { required: true, max: 4, value: String(b.age) })),
+      );
+}
+
+/** Reads the raw body strings back; game/character/body.ts parseBody clamps them. */
+export function readBodyModal(interaction: ModalSubmitInteraction): Record<'heightCm' | 'weightKg' | 'age', string> {
+   return {
+      heightCm: interaction.fields.getTextInputValue('heightCm'),
+      weightKg: interaction.fields.getTextInputValue('weightKg'),
+      age: interaction.fields.getTextInputValue('age'),
    };
 }
 
