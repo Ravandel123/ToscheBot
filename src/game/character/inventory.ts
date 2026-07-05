@@ -172,14 +172,10 @@ export function canAddItems(character: EquipSubject, itemId: string, definition:
 
 /** Mints a fresh instance with a short id unique within the owning pack. */
 export function createItemInstance(itemId: string, definition: ItemDefinition, quality: ItemQualityId, quantity: number, existingIds: ReadonlySet<string>): ItemInstance {
-   let instanceId = shortInstanceId();
-   while (existingIds.has(instanceId))
-      instanceId = shortInstanceId();
-
    const durabilityMax = maxDurability(definition, quality);
 
    return {
-      instanceId,
+      instanceId: mintInstanceId(existingIds),
       itemId,
       quality,
       quantity,
@@ -190,6 +186,16 @@ export function createItemInstance(itemId: string, definition: ItemDefinition, q
 
 // 8 hex chars of a v4 uuid — short enough for customIds, unique enough within
 // one character's ≤ INVENTORY_STACK_LIMIT entries (collisions are re-rolled).
+/** A short instance handle not present in `existingIds` (re-rolled on collision).
+ *  Reused for pack instances AND for a withdrawn item's fresh pack id (D33). */
+export function mintInstanceId(existingIds: ReadonlySet<string>): string {
+   let instanceId = shortInstanceId();
+   while (existingIds.has(instanceId))
+      instanceId = shortInstanceId();
+
+   return instanceId;
+}
+
 function shortInstanceId(): string {
    return randomUUID().slice(0, 8);
 }

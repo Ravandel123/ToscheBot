@@ -5,7 +5,9 @@ import { activitySessionService } from './activitySessionService.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
 import { baseAttributes, effectiveAttributes, type AttributeAllocation } from '../../game/character/attributes.js';
+import { creditUse, type SkillLevelUp } from '../../game/character/skills.js';
 import { ATTRIBUTE_KEYS } from '../../game/data/attributes.js';
+import type { SkillNodeId } from '../../game/data/skills.js';
 import type { CurrencyKey } from '../../game/data/currencies.js';
 import type { TraitKey } from '../../game/data/traits.js';
 import type { RaceId } from '../../game/data/races.js';
@@ -116,6 +118,25 @@ export const characterService = {
          return;
 
       await Character.updateOne({ _id: characterId }, setStage(fields), PIPELINE);
+   },
+
+   /**
+    * Credits ONE meaningful use of the given skills (learn-by-doing, D34): +1 use
+    * to every node on their paths, converting banked progress to points at each
+    * node's own rate. Read-modify-write over the sparse map — the CALLER must
+    * hold the character lock (like inventory mutations); the single-process
+    * assumption makes the whole-map $set safe. Returns the nodes that ranked up
+    * (for the "you improved!" line). No live consumer yet — the seam the first
+    * crafting/combat action wires into.
+    */
+   async creditSkillUse(characterId: string, nodeIds: SkillNodeId[]): Promise<SkillLevelUp[]> {
+      const character = await this.get(characterId);
+      if (!character)
+         return [];
+
+      const { progression, levelUps } = creditUse(character.progression?.skills ?? {}, nodeIds);
+      await Character.updateOne({ _id: characterId }, { $set: { 'progression.skills': progression } });
+      return levelUps;
    },
 
    // The three status transitions are guarded on the CURRENT status (not just

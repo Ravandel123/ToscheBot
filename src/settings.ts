@@ -12,7 +12,7 @@ export const settings = {
       // Where smackdown fights are narrated.
       smackdownSpire: 'smackdown-spire',
       // Owner-only channel for character-approval requests / Imperial decrees.
-      imperialDecrees: 'imperial-decrees',
+      imperialDecrees: 'imperial-decrees2',
       // Where arrivals and departures are announced (welcomes & farewells).
       gate: 'main-gate',
       // Public game log: noteworthy character actions (travel, cleared obstacles,

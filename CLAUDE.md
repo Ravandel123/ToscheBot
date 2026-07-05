@@ -25,16 +25,15 @@ Planned future module (design for it, don't build yet): a **separate pen-and-pap
 RPG campaign** run by the bot — *not* tied to the server RPG or its characters. It will be
 its own domain module with its own data models.
 
-> **`RPG_SYSTEM.md`** (repo root) is the living spec of the server-RPG model *as
-> implemented* — entities, catalogs, concrete values, and which parts are real vs
-> placeholder. Keep it in sync with the code whenever the RPG model changes.
-
-> **`RPG/`** (repo root) is the **Phase 7 ruleset design project** — a sibling workspace
-> with its own `CLAUDE.md`, `Ruleset.md` and `Propositions.md`, where the real game rules
-> (d100 roll-under, roles + learn-by-doing skills, Wounds, Stress→Madness…) are designed
-> with the owner *before* any mechanics are coded here (D14). Its decisions (R1+, P-forks)
-> govern what will replace this bot's placeholder attributes/skills/combat. Read it before
-> touching anything RPG-mechanical; keep ids/conventions aligned both ways.
+> **`Ruleset/`** (repo root) is the **single source of truth for the server-RPG** — both the
+> design (what the rule should be, and why) and the implementation (what's actually built).
+> One file per topic (`character.md`, `skills.md`, `combat.md`, `world-travel.md`,
+> `items-equipment.md`, `economy.md`, `flavor-progression.md`), each with a Ruleset section, an
+> Implementation section, and Open questions. **Read the relevant topic file before touching
+> anything RPG-mechanical**; keep it in sync with the code in the same change whenever the RPG
+> model changes. `RPG_SYSTEM.md` and the `RPG/` design workspace (its `CLAUDE.md`, `Ruleset.md`,
+> `Propositions.md`, `Examples.md`) are now **archived** — folded into `Ruleset/`, left in place
+> for history, no longer the source of truth. Don't add new content to them.
 
 ## Working agreement with the owner (Ravandel)
 
@@ -168,6 +167,9 @@ match these.
 | D29 | **Production launches through a `bot.js` shim at the repo root, not a changed startup command.** Sparkedhost's startup-command template is fixed to (effectively) `node bot.js` unless a support ticket changes it. `bot.js` is hand-written, not compiled: it calls tsx's own `register()` export (`import { register } from 'tsx/esm/api'`) to install tsx's loader hook on the already-running `node` process, then `await import('./src/index.ts')`. It sits outside `src/` (not type-checked by `npm run build`, excluded from `eslint.config.mjs`'s lint set alongside `eslint.config.mjs` itself) since it's hosting glue, not domain code. | Calling raw `node:module`'s `register('tsx/esm', parentURL)` directly is **not** enough and throws ("tsx must be loaded with `--import` instead of `--loader`") — tsx's `initialize` hook requires a `data` payload that only tsx's own `register()` wrapper supplies. Verified with a repo-local smoke test before relying on it. Avoids a support ticket entirely and keeps D11 (no `dist/`, tsx everywhere) intact. |
 | D30 | **`/play` is the game's single entry point — a location-centric hub — and the standalone `/travel` is folded into it.** `/play` opens an ephemeral, stateless hub (`play` component namespace, panel in `_playPanel.ts`) showing the active character's place (name/description), vitals (HP/AP) and two kinds of interaction: a **"Travel to…" select** of the connected locations and a **button per local action**. The travel select carries the whole execution that used to be the `/travel` command (validate → spend AP → roll encounter → move-or-start-challenge); a plain arrival **re-renders the hub at the destination** so the play loop continues, an 'activity' encounter hands the message to the challenge activity exactly as before. Local actions come from a **data-driven catalog** (`game/data/hubActions.ts`: id, label, emoji, `locations` filter `'anywhere'`|ids, `comingSoon` line — the backlog's "locations = activity tables" made concrete and **test-validated** against `LOCATIONS`); **every one is a PLACEHOLDER today** (button → in-character "coming soon" ephemeral, hub stays up). Opening `/play` while mid-activity re-enters the current step (D22). The standalone `/travel` slash command is **removed** (its pure rules in `game/world/travel.ts` and the encounter/challenge stack are unchanged). | The owner wants one discoverable "default to the game" surface instead of a scatter of slash commands, and the hub is where the "each location has its own things to do" constraint (backlog) actually lands — turning a placeholder into a real activity is one catalog flip + one handler case. Folding travel in avoids two parallel travel entry points; reviving `/travel` is a one-file restore if ever wanted. |
 | D31 | **Locations live: static catalog + a dynamic `LocationState` collection + DERIVED presence.** The static half stays in code (D10): `locations.ts` gains `climate` (weather-weight overrides), discoverable `features` and `baseStats`; new catalogs `weather.ts`, `locationEvents.ts`, `locationStats.ts` (danger, prosperity) — extending any of them = one entry, no migration. The dynamic half is the **`LocationState`** collection (one doc per location, **lazily created on first read** by `locationStateService.getFresh`): the current **weather spell** (re-rolled by a filter-guarded update once `until` lapses), **running events** (started by guarded rolls on qualifying arrivals — `game/world/events.ts` — and swept on read), **server-wide `discoveredFeatureIds`**, clamped **stats** (danger biases the travel-encounter chance via `travelEncounterChance`; `adjustStat` is the write seam) and a `visits` counter. **Presence is never stored**: "who is here" = an indexed query over `Character.locationId` (`characterService.atLocation` — approved characters + NPCs; benched alts count, drafts don't), shown on the hub. One typed **condition language** (`game/world/conditions.ts`: `timeOfDay`/`weather`/`duringEvent`/`requiresDiscovery`/`minTraits`, evaluated against a `WorldContext` snapshot; the game clock in `world/time.ts` runs on the owner's timezone via a fixed UTC offset) gates **hub actions** (closed-with-reason 🔒 and disabled, or `hidden` until discovered), **encounters** (the owner's "walk in and if a criterion holds, something happens" — also the first trait consumer) and **event starts**; flavor encounters and challenge outcomes may `discovers` a feature (revealed + chronicled exactly once — `revealFeature`). Every LocationState write is an atomic filter-guarded single-doc update and travel still re-reads the character under its lock, so N stale `/play` panels race safely; `play:act` clicks **re-validate location AND availability at click time**. The hub view moved to `commands/components/_hubView.ts` (shared by `_playPanel` and the challenge finalize/retreat, which now return the player TO the hub). | The owner wants living places — weather, events, secrets, "who is standing here" — that stay one-catalog-line extensible. His instinct (a locations collection) is right for location-OWNED state, but storing presence there too would mean two writes per move and drift under concurrency; deriving it from the already-authoritative `Character.locationId` (+1 index) is one cheap query that cannot lie. Server-wide (not per-character) discoveries fit a ~10-person co-op server: one scout unlocks the jetty for everyone and the chronicle gets a story; a per-character scope can be added later as another condition field. |
+| D32 | **Persistence follows access pattern, not document size: embed bounded + hot-path state, split unbounded state into its own collection.** The deciding axis is NOT "big vs small" but (a) is it read *together with the character on the hot path* (every check / combat / `/play`) and (b) is it *bounded* (finite by a code catalog)? **Both yes ⇒ embed** on `Character`; **either no ⇒ its own collection.** So **skills, talents and progression are embedded** — bounded by the catalogs and read on every d100 check — stored **sparse** (only non-zero nodes; an absent key = 0) under a **`progression`** subdoc (`{ skills, talents, points }`); the current dense 6×`{level,progress}` skills map becomes this sparse node map when `RPG/`'s P-skilltree lands. The unbounded counterpart is D33 (owned items split out). | A separate skills/talents collection would break the architecture's single-document atomicity (D5/D6/D28: one lock → one re-read → one filter-guarded write) and bolt a hot-path join onto every check, for data that is small and always needed with the character. Sparse storage keeps hundreds of catalog nodes off a fresh character (M0-friendly, D10). It is the same bounded-vs-unbounded line CLAUDE already draws with "avoid unbounded arrays" (the old `gFishing.fish[]`): skill *state* is bounded ⇒ embed; an append-only skill-*use log* (if ever built) is unbounded ⇒ its own collection. |
+| D33 | **Owned items are two-tier: an embedded carried pack + a separate per-instance `Item` collection for storage; equip goes through the pack only.** The **carried pack** stays embedded (`Character.inventory[]`, capped by `INVENTORY_STACK_LIMIT`/encumbrance) with the `equipment` slot→instanceId map — it feeds challenge check targets (D28), so it must be one cheap read with the character and every equip/use/drop stays a single-doc atomic write under the lock. **Owned-but-not-carried** items (home chest, bank, future property — a hoard can reach thousands, i.e. **unbounded** per D32) live in a separate **`Item` collection: one document per instance/stack** (never one-doc-per-character — that just recreates the giant embedded array), `_id = instanceId` (8-char, D28 — a free unique index ⇒ idempotent transfers), indexed `{ ownerId, container }`, browsed **server-side paginated + aggregated** (a normal character read never touches it; the `/inventory` renderer is reused, only the data source paginates/sorts/counts in Mongo). **Transfers** (deposit/withdraw) run under the character lock, crash-safe by insert-then-remove idempotent on the unique `instanceId` (dedup-on-read prefers the `Item` copy); withdraw re-checks encumbrance (the pack has a carry limit, the stash does not). **Equip is only ever from the pack** — the `equipment` map may reference only embedded pack instances (equipped gear feeds hot-path checks ⇒ must be embedded), so **direct equip-from-stash is out (owner, 2026-07-05)**: withdraw to the pack, then equip (a one-click "withdraw+equip" convenience may wrap the two later, but must not break the "equipment references the pack" invariant). | 2000 items on one character fit under Mongo's 16 MB doc cap but would tax *every* character read (checks/combat/`/play` all hydrate the whole doc) and make array mutation/sort expensive — the classic large-embedded-array trap. Row-per-item lets a browse fetch a *page* (~25 docs) instead of a ~250 KB doc; "one big document" forces loading everything, always, and Mongo can't cheaply page *into* an embedded array. Keeping carried/equipped gear embedded preserves every D28 guarantee (atomic single-doc equip, busy-freeze, honest challenge targets) that a cross-collection equip would wreck. **Built 2026-07-05:** `db/models/item.ts` + `itemService` + `game/data/containers.ts` (one container, `home_chest`) + `/stash` (server-side paged browse, reusing the `/inventory` renderers) + a 🗄️ **Store** button on the `/inventory` item card. **One divergence from the literal `_id = instanceId`:** the 8-char pack `instanceId` is unique only *within one pack*, so as a global `_id` two characters could collide (silently clobbering an item), and a full-uuid handle overflows the 100-char customId budget beside the character id — so `Item._id` is a fresh uuid and a separate short `instanceId` (re-minted unique within the owner's stash) rides customIds. Transfers aren't transactional (D5/D6 stay single-doc atomic), so each **inserts the destination copy before removing the source** — a crash mid-transfer yields a recoverable **duplicate, never a lost item**; a double-click is serialized by the character lock; withdraw lands as a fresh pack entry (no auto-merge — keeps it idempotent). Category browse filters on the catalog's `itemId $in` set (kind is NOT stored — derived from itemId), so no denormalization violates D10. |
+| D34 | **Skills are arbitrary-depth TREES in code; a character stores a SPARSE FLAT node map (`progression.skills`).** This is the owner's nested-vs-flat DB question answered: the tree (parent links, per-node attribute blends, growth curves) is **static content** (`game/data/skills.ts`, D10) — a character persists only `{ nodeId → {points, progress} }` for nodes they've **touched**, so adding a branch or a whole new tree is a catalog edit with **zero migration** and a fresh character stores `{}` (M0-friendly). **Effective (the summed R10 model, `game/character/skills.ts`)** = the primary node's **weighted attribute blend** (`{strength:0.25, charisma:0.25}` = 50% STR + 50% CHA; **inherited** from the nearest ancestor that declares one, **overridable** per node — set CHA once on Speechcraft, override only on Intimidate) **+ Σ points on every unique node root→leaf** (parents give a baseline, the leaf makes the master), **+ `extraNodes`** material cross-paths (a longsword sums the smithing path AND iron-metallurgy). `checkEffective` is **UNCAPPED** (surplus = future crafting quality / combat Mastery); `checkTarget` shapes it by difficulty + race affinity and clamps to a d100 % `[5,95]`. **Learn-by-doing (`creditUse`)**: one meaningful use credits **+1 use to every node on the path**, each converting uses→points at its **growth profile**'s rate (named `GROWTH_PROFILES` root/branch/leaf, band tables of uses-per-point that steepen with points — the owner's numbers: leaf 5→20, branch 10→30, root 10→50; default tier derived from depth, per-node override allowed). Replaces the old dense 6-skill `{level,progress}` placeholder and the flat `level×5` skill term in checks; `combat/stats.ts` reads node points. **Built 2026-07-05** (owner-designed): the engine + prototype trees (smithing + metallurgy, speechcraft, athletics, placeholder combat roots) + the `checks.ts` integration + a `characterService.creditSkillUse` seam — but **no live action credits skill use yet** (crafting/combat is the next consumer), and all tree *content* + *numbers* stay 🟡. | A per-character nested skill tree would bloat M0 and let relationships drift; the tree is **content**, so it lives in code once (D10) and the character stores only the sparse delta — the owner's "flat + mark relationships in code" instinct, made concrete, and the cheapest possible extensibility (new depth/tree = zero migration). **Per-node weighted blends** make "what a skill depends on" one edit (his explicit ask); **summing the path** yields the generalist-does-basics / specialist-does-masterwork feel with no extra rules; **named growth profiles** encode the diminishing-returns curve in one place instead of on every node. Realizes `RPG/` R10 + P-skilltree + D32 in code, superseding the D14 "skills are placeholder" stance for the *model* (the *numbers* still wait on `RPG/`, exactly as D25 did for attributes). |
 
 ## Target architecture
 
@@ -195,12 +197,15 @@ src/
     models/*.ts         mongoose schemas + exported TS types
     services/*.ts       all DB access goes through services (accountService, characterService,
                         smackdownService, activitySessionService, inventoryService,
-                        locationStateService — D31)
+                        locationStateService — D31; itemService — D33, the stored-item (stash) collection)
   game/                 server-RPG domain logic, Discord-agnostic where possible
-    checks.ts           the d100 roll-under test engine (target/SL/race affinity — D26)
+    checks.ts           the d100 roll-under test engine (Effective from skill nodes or a bare
+                        attribute; SL/difficulty/race affinity — D26/D34)
     character/          pure rules + identity helpers (canCharacterAct/canEdit/canSubmit, limits)
                         + creationSteps.ts (the wizard step catalog — D20)
                         + attributes.ts (racial bases + creation point-buy math — D25)
+                        + skills.ts (the skill-tree engine: sparse progression, path sum,
+                          attribute-blend resolution, effectiveSkill, learn-by-doing — D34)
                         + inventory.ts (item instances, stacking, encumbrance, equip planning,
                           equipment attribute modifiers, browse state — D28)
     combat/             combat engine (engine/stats/elo pure + testable, flavor data)
@@ -212,7 +217,7 @@ src/
     chronicle.ts        Discord adapter (marked): posts noteworthy actions to the public log (D24)
     data/               static content catalogs (locations, weather, locationEvents,
                         locationStats, encounters, hubActions, traits, items, equipment
-                        slots, fish...) — see D10
+                        slots, containers, fish...) — see D10
     ...
   lexicon.ts            GENERAL flavour vocabulary (adjectives, adverbs, nouns, terms…) — reused
                         by fun, the RPG and real commands; NOT fun-only (ported from dataSpeech.js).
@@ -283,15 +288,17 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
   throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
   must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Seven consumers
+  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Eight consumers
   so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
   D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details modal,
   Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
   `activity` (the generic durable-activity router — D22: resolves the session by id, verifies
   the clicker owns a participant, dispatches to the `_activities/` registry by session type),
   `profile` (the D27 account-settings toggles), `inventory` (the D28 pack/equipment
-  panel), and `play` (the D30/D31 game hub — travel select + condition-gated local-action
-  buttons; the shared hub VIEW + context loader live in `_hubView.ts`).
+  panel + the D33 Store transfer), `stash` (the D33 withdraw panel over the `Item`
+  collection — reuses the `/inventory` renderers), and `play` (the D30/D31 game hub —
+  travel select + condition-gated local-action buttons; the shared hub VIEW + context
+  loader live in `_hubView.ts`).
   All are fully
   **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
@@ -469,8 +476,9 @@ methods (`setStage` in `characterService`).
 
 ## MongoDB modeling notes
 
-> The authoritative, always-current model lives in `RPG_SYSTEM.md`. This section keeps the
-> *design rationale* (why the shapes are as they are); look there for concrete fields/values.
+> The authoritative, always-current model lives in `Ruleset/` (one topic file per system).
+> This section keeps the *design rationale* (why the shapes are as they are); look there for
+> concrete fields/values.
 
 - Two collections (6A, D12): **`Account`** (one per Discord user, keyed by user id —
   settings + `activeCharacterId`) and **`Character`** (the game entity, keyed by its own
@@ -487,13 +495,25 @@ methods (`setStage` in `characterService`).
 - Only the two regenerating vitals (`health`, `stamina`) ship so far. Meters that *rise*
   over time (hunger, stress, etc. from the old schema) have inverted tick semantics and
   get their own job later; add them to `resources.ts` when built.
-- **`attributes` are real since D25** (racial base + creation point-buy, consumed by the
-  D26 check engine and shown on `/character view`); **`skills` remain modeled ahead of
-  their consumer** (owner's decision, 2026-06-15) — only the placeholder flat bonus in
-  `checks.ts` and the combat formula read them. Do NOT "tidy them away" as unused — the
-  Phase 7 ruleset (P-skilltree) will consume them properly.
+- **`attributes` are real since D25** (racial base + creation point-buy); **`skills` are
+  real since D34** — the **skill-tree model** (`game/data/skills.ts` trees + the
+  `game/character/skills.ts` engine): a **sparse node map under `progression`**, consumed by
+  the D34 check engine (per-node attribute blend + Σ path points) and the combat placeholder.
+  What is still 🟡 is the tree *content* and *numbers* (weights, growth), and there is **no
+  live action crediting skill use yet** (`creditSkillUse` is the seam; crafting/combat is the
+  next consumer). The old dense `{level,progress}` field map is **gone** (replaced, not
+  tidied away).
 - Free tier M0: 512 MB storage, shared cluster. Avoid per-message writes, avoid
   unbounded arrays (the old `gFishing.fish[]` grew without limit — cap or aggregate).
+- **Persistence follows access pattern, not size (D32/D33).** Embed state that is
+  *bounded* (finite by a code catalog) AND *read on the hot path* with the character
+  (every check / combat / `/play`): skills, talents and progression (sparse, under a
+  `progression` subdoc) and the **carried inventory pack + equipment**. Split state that is
+  *unbounded* OR *read rarely and separately* into its own collection — **owned/stored
+  items** are the reference case: a per-instance **`Item`** collection (one doc per
+  instance/stack, `_id = instanceId`, indexed `{ownerId, container}`, paginated + aggregated
+  server-side), so a stash of thousands never taxes a normal character read. The `equipment`
+  map may reference only embedded pack instances (equip-from-stash goes through the pack — D33).
 - The old schema in `OldBot/Tosche/modules/schematicsGuild.js` remains the **reference**
   for what the game tracked; redesign freely — it's a starting point, not a contract.
 
@@ -564,7 +584,7 @@ Rules:
 Proposals from the 2026-07-02 design review. **None of these is decided.** Each needs an
 explicit owner "yes" before any work starts; when accepted, move it into the roadmap (and
 the decision log if it sets a rule); when rejected, delete it here with a one-line why.
-Several overlap the `RPG/` design project — coordinate there instead of deciding twice.
+Several overlap topics designed in `Ruleset/` — coordinate there instead of deciding twice.
 
 - **Ambient events** — rare, hard-throttled random encounters hooked into normal chat
   (a scuffle, a find, a Tosch challenge; reuses the ambient-AI seam + `silentChannels`).
@@ -574,16 +594,16 @@ Several overlap the `RPG/` design project — coordinate there instead of decidi
   week, weekend battle, everyone contributes actions (atomic `$inc` into an event doc);
   co-op vs environment beats PvP at this player count (no simultaneous presence needed).
   Also the natural **rate-limited AP sink** that keeps uncapped AP (D15) harmless.
-  *(Overlaps `RPG/` P-arena "Trial/PvE" — same muscle, design once.)*
+  *(Overlaps `Ruleset/combat.md`'s "Trial/PvE" arena mode — same muscle, design once.)*
 - **Titles/achievements** — an earned `titles[]` list displayed beside the self-chosen
   epithet ("the Carp-Slayer", "Punching Bag of Deltrada"). Social visibility is the best
   reward currency on a friends server and costs zero balance work. Pairs with the planned
   sparring-Elo removal (D16): rework the leaderboard to W/L + streaks + funny stats.
 - **Tosch as a game actor** — feed game events (duel results, arena outcomes) and approved
   character bios into the AI persona so Tosch comments on and "knows" the cast; later,
-  NPC dialogue with location context. AI stays flavor-only, never outcomes (`RPG/` R6).
+  NPC dialogue with location context. AI stays flavor-only, never outcomes (`Ruleset/README.md` R6).
 - **Tavern gambling** — a dice game vs the house in the Sunken Tankard (canon has
-  *Mearog* — see `RPG/` §11); small self-running coin sink, a reason to travel, and a
+  *Mearog* — see `Ruleset/flavor-progression.md`); small self-running coin sink, a reason to travel, and a
   simpler first `canCharacterAct` consumer than the duel.
 - **Locations = activity tables** — treat as a 6C design constraint: travel is only worth
   building if each location has its own things to do (tavern = gambling/rest, plaza =
@@ -627,12 +647,14 @@ discoveries, danger/prosperity stats, visits), presence derived from the indexed
 (market closed at night, secrets hidden until found), conditional travel encounters
 (first trait consumer) and event starts — all rendered on the hub; challenge endings now
 return the player to the hub.
-**290 tests, build + lint green.** The owner has smoke-tested `/profile` and `/smackdown`
-live; the bot has not yet been run end-to-end against a live Atlas cluster (needs `.env` +
-`npm run deploy` — required again: `/play` is a NEW command and `/travel` was REMOVED, plus
-`/inventory`/`/item` are new and `/profile`/`/character` definitions changed earlier; D31
-itself added NO new slash commands, so it forces no extra redeploy). See
-`RPG_SYSTEM.md` for the concrete game model and what is still placeholder.
+Newest: the **stash (D33)** — a per-instance `Item` collection for owned-but-not-carried
+items, browsed server-side by the new **`/stash`** command and filled by a 🗄️ **Store**
+button on the `/inventory` item card; transfers run under the character lock,
+favor-duplicate-over-loss. **300 tests, build + lint green.** The owner has smoke-tested
+`/profile` and `/smackdown` live; the bot has not yet been run end-to-end against a live
+Atlas cluster (needs `.env` + `npm run deploy` — **`/stash` is a NEW command so a redeploy
+is required again**; the D33 Store button + `Item` collection add NO other slash changes).
+See `Ruleset/` for the concrete game model (one file per topic) and what is still placeholder.
 
 **What works today:**
 
@@ -650,7 +672,9 @@ itself added NO new slash commands, so it forces no extra redeploy). See
   approval; `view` is the public character sheet with attributes, **equipment** + traits),
   `profile` (the account panel: active character, settings toggles — D27), `inventory`
   (the D28 pack/equipment panel: hub → category browser with sort/pages → item card with
-  equip/unequip/use/drop), `item grant` (ownerOnly: conjure catalog items into a player's
+  equip/unequip/use/**store**/drop), `stash` (D33 — browse + withdraw the active
+  character's stored items from the per-instance `Item` collection, server-side paged),
+  `item grant` (ownerOnly: conjure catalog items into a player's
   active character — the prototype's loot source), `smackdown sparring`
   (round-by-round in `#smackdown-spire`, commits Elo only), `play` (the D30/D31 game hub —
   the default entry point: the location's weather/time/danger/prosperity, running events,
@@ -670,7 +694,9 @@ itself added NO new slash commands, so it forces no extra redeploy). See
 - **Component handlers** — `character` (creation wizard incl. attribute point-buy +
   approval petition), `comic` (browser), `activity` (generic durable-activity router +
   `_activities/` registry; first activity: `challenge`), `profile` (account-settings
-  toggles), `inventory` (the D28 panel — lock-guarded, busy-gated gear mutations),
+  toggles), `inventory` (the D28 panel — lock-guarded, busy-gated gear mutations, incl.
+  the D33 Store transfer), `stash` (D33 — the withdraw side: server-side paged browse of
+  the `Item` collection + lock-guarded withdraw),
   `play` (the D30/D31 game hub — travel select + condition-gated local-action buttons,
   re-validated at click time).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
@@ -715,10 +741,15 @@ itself added NO new slash commands, so it forces no extra redeploy). See
             item + slot catalogs (WHFRP weapon properties, craftsmanship quality tiers,
             materials, reach), per-character instances + slot map, `/inventory` panel
             (browse/sort/equip/use/drop under the character lock, busy-gated), `/item grant`,
-            equipment attribute modifiers → challenge checks + `/character view`. Still ⬜:
-            loot sources (fishing/shops/loot tables), durability damage + repair, partial-
-            stack drops, ground piles/trading, ranged weapons + ammo, a starting-kit wizard
-            step, auto-equip-best (`RPG/` §14 simple layer), selling (economy — P17).
+            equipment attribute modifiers → challenge checks + `/character view`.
+            **Player storage landed (D33, 2026-07-05):** the two-tier `Item` collection
+            (`itemService`) — `/stash` browses it server-side (paged/sorted), the 🗄️ **Store**
+            button on the `/inventory` card deposits, transfers under the character lock
+            (favor-duplicate-over-loss); equip-from-stash still goes through the pack. Still
+            ⬜: loot sources (fishing/shops/loot tables), a second/location-gated container +
+            withdraw+equip wrapper, durability damage + repair, partial-stack transfers/drops,
+            ground piles/trading, ranged weapons + ammo, a starting-kit wizard step,
+            auto-equip-best (`RPG/` §14 simple layer), selling (economy — P17).
       - [x] **6F — living locations** (D31, owner-requested 2026-07-04): the `LocationState`
             collection (lazy docs: weather spells, running location events, server-wide
             feature discoveries, danger/prosperity stats, visit counter), presence derived
@@ -728,12 +759,24 @@ itself added NO new slash commands, so it forces no extra redeploy). See
             outcome-driven discoveries, challenge endings returning to the hub. Still ⬜:
             real consumers for `adjustStat` (event/outcome stat deltas), weather-modified
             check difficulty, per-character discoveries, NPC presence (needs 6C seeding).
+      - [x] **6G — skill trees** (D34, owner-designed 2026-07-05): skills are arbitrary-depth
+            **trees in code** (`game/data/skills.ts`) with per-node **weighted attribute
+            blends** (Intimidate = 50% STR + 50% CHA, inherited/overridable) and named
+            **growth profiles**; a character stores a **sparse node map** under `progression`
+            (zero-migration to add depth/trees). The `game/character/skills.ts` engine sums
+            the path + blend into an UNCAPPED **`effectiveSkill`** (checks clamp it to a d100
+            %) and grows nodes by **learn-by-doing** (`creditUse` — +1 use to every path node
+            at its own rate). Wired into `checks.ts`; `creditSkillUse` service seam ready.
+            Still ⬜: a live **consumer that credits use** (crafting/combat), item required-sum
+            gates + crafting quality, quality-gated practice caps, Mastery >100, talents +
+            the points economy (`RPG/` P13/P14) — and all tree content/numbers stay 🟡.
       - [ ] **6C** — NPC seeding + NPC-movement cron along the graph (NPC = `Character` with
             `ownerId: null`); more locations + per-location activity tables (see backlog).
-- [ ] **Phase 7 — RPG ruleset** — being **designed in `RPG/`** (d100 roll-under, roles +
-      learn-by-doing skills, Wounds, Stress; see `RPG/Ruleset.md` + its decision log/forks).
+- [ ] **Phase 7 — RPG ruleset** — being **designed in `Ruleset/`** (d100 roll-under, roles +
+      learn-by-doing skills, Wounds, Stress; see each topic file's Open questions for the live forks).
       Code nothing until the relevant fork locks (D14); shipping it replaces the placeholder
-      attributes/skills/combat and unblocks the serious `/smackdown duel`.
+      attributes/combat and unblocks the serious `/smackdown duel`. **The skill-tree half is
+      built ahead (D34/6G)** — its content + growth numbers still tune here.
 - [ ] **Phase 8 — pen-and-paper RP module** (separate `rp/` domain — D9).
 
 When a phase lands, tick it here and note any decisions that changed. Detailed per-change

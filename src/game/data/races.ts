@@ -15,37 +15,37 @@ export interface RaceDefinition {
 export const RACES = {
    canid: {
       name: 'Canid',
-      description: 'Wolves of Aisling — disciplined, martial.',
+      description: 'Soldiers of militaristic Aisling — disciplined, martial.',
       attributeModifiers: { strength: 5, willpower: 5, agility: -5, charisma: -5 },
    },
    ermehn: {
       name: 'Ermehn',
-      description: 'Ermine of the Northern Wastes — tattooed, kingdomless, hardy.',
+      description: 'Exiles of the frozen Northern Wastes — tattooed, tribal, hardy.',
       attributeModifiers: { agility: 5, dexterity: 5, strength: -5, charisma: -5 },
    },
    felis: {
       name: 'Felis',
-      description: 'Cats of Kishar — clever, neutral.',
+      description: 'Scholars of Kishar — clever, aloof.',
       attributeModifiers: { agility: 5, intelligence: 5, strength: -5, endurance: -5 },
    },
    lutren: {
       name: 'Lutren',
-      description: 'Otters of coastal Lutra — water-loving.',
+      description: 'Seafarers of coastal Lutra — proud, devout.',
       attributeModifiers: { dexterity: 5, charisma: 5, strength: -5, willpower: -5 },
    },
    polcan: {
       name: 'Polcan',
-      description: 'Polecats — seafaring, greedy, useful.',
+      description: 'Stateless exiles of the Western Sea — piratical, bronze-clad.',
       attributeModifiers: { strength: 5, endurance: 5, agility: -5, charisma: -5 },
    },
    tamian: {
       name: 'Tamian',
-      description: 'Squirrels of forest Terria — agile, tree-loving.',
+      description: 'Treetop dwellers of forest Terria — agile, industrious.',
       attributeModifiers: { agility: 5, perception: 5, strength: -5, endurance: -5 },
    },
    vulpin: {
       name: 'Vulpin',
-      description: 'Kit foxes of desert Navran — accommodating, sly.',
+      description: 'Cosmopolitans of desert Navran — accommodating, worldly.',
       attributeModifiers: { charisma: 5, intelligence: 5, strength: -5, willpower: -5 },
    },
 } as const satisfies Record<string, RaceDefinition>;

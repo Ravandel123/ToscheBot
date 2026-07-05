@@ -189,7 +189,7 @@ export const ENCOUNTERS = {
             label: 'Dive in after them',
             emoji: '🏊',
             description: 'Swim out and drag them back to shore.',
-            check: { attribute: 'agility', skill: 'swimming', raceAffinity: { lutren: 1.5 } },
+            check: { node: 'swimming', raceAffinity: { lutren: 1.5 } },
             success: {
                result: 'proceed',
                lines: ['You cut through the current, catch them by the collar and haul them, coughing, onto the bank.'],

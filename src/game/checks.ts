@@ -1,22 +1,28 @@
 import { randomInt } from '../lib/random.js';
+import { effectiveSkill } from './character/skills.js';
 import type { AttributeKey } from './data/attributes.js';
-import type { SkillKey } from './data/skills.js';
+import type { SkillNodeId } from './data/skills.js';
 import type { RaceId } from './data/races.js';
 import type { CharacterDoc } from '../db/models/character.js';
 
 // The core resolution mechanic: d100, roll-under, with Success Levels — the
-// shape locked in RPG/'s R1 (WHFRP-style). A check's target is the governing
-// attribute, plus a placeholder skill bonus, plus a difficulty modifier, then
-// scaled by any racial affinity (a lutren swims at ×1.5) and clamped so nothing
-// is ever certain. 🟡 The skill term is a stopgap until RPG/'s P-skilltree
-// locks the real Effective formula (w·attribute + Σ tree nodes); the check
-// SHAPE (target %, roll-under, SL) is the stable part consumers build on.
+// shape locked in RPG/'s R1 (WHFRP-style). A check draws on either a SKILL-TREE
+// node (its blend gives the attribute term, its path is summed — the R10 sum
+// model, game/character/skills.ts) or a bare attribute (untrained checks like
+// climbing a fallen tree). The raw Effective is then shaped into a d100 % by a
+// difficulty modifier and any racial affinity (a lutren swims at ×1.5), and
+// clamped so nothing is ever certain.
 
 export interface CheckDefinition {
-   /** The governing attribute — the bulk of the target. */
-   attribute: AttributeKey;
-   /** Optional trained skill: adds level × SKILL_CHECK_BONUS_PER_LEVEL. */
-   skill?: SkillKey;
+   /** The primary skill node: its attribute blend is the attribute term AND its
+    *  path (root→leaf) is summed into the Effective. Omit for an untrained check. */
+   node?: SkillNodeId;
+   /** Extra skill paths this check also sums (a craft: material + technique). */
+   extraNodes?: readonly SkillNodeId[];
+   /** Bare governing attribute — used when there is no `node` (an untrained test). */
+   attribute?: AttributeKey;
+   /** Weight on `attribute` when used directly (default 1 — the whole attribute). */
+   attributeWeight?: number;
    /** Difficulty ladder step (RPG/Ruleset.md §2): +20 easy … −30 punishing. */
    modifier?: number;
    /** Racial chance multipliers (1.5 = 50% better odds), applied to the target. */
@@ -31,21 +37,34 @@ export interface CheckResult {
    successLevels: number;
 }
 
-/** 🟡 Placeholder flat bonus per skill level until the P-skilltree math lands. */
-export const SKILL_CHECK_BONUS_PER_LEVEL = 5;
 /** Roll-under floor/cap: nothing is impossible, nothing is guaranteed (R1). */
 export const CHECK_MIN_TARGET = 5;
 export const CHECK_MAX_TARGET = 95;
 
-export type CheckSubject = Pick<CharacterDoc, 'attributes' | 'skills'> & {
+export type CheckSubject = Pick<CharacterDoc, 'attributes' | 'progression'> & {
    identity: Pick<CharacterDoc['identity'], 'race'>;
 };
 
-/** The d100 target this character rolls under for `check`. Pure. */
+/**
+ * The raw Effective (capability) for a check: a skill node's `attribute blend +
+ * Σ path points`, or a bare weighted attribute. UNCAPPED — surplus is Mastery /
+ * crafting quality (RPG/ §2). checkTarget shapes and clamps it into a d100 %.
+ */
+export function checkEffective(subject: CheckSubject, check: CheckDefinition): number {
+   if (check.node)
+      // `?? {}` tolerates a pre-D34 character doc with no progression (lean reads
+      // don't apply the schema default) — an untrained sum, never a crash.
+      return effectiveSkill(subject.attributes, subject.progression?.skills ?? {}, { node: check.node, extraNodes: check.extraNodes });
+   if (check.attribute)
+      return (check.attributeWeight ?? 1) * subject.attributes[check.attribute];
+   return 0;
+}
+
+/** The d100 target this character rolls under: Effective shaped by difficulty and
+ *  racial affinity, clamped to [5, 95]. Pure. */
 export function checkTarget(subject: CheckSubject, check: CheckDefinition): number {
-   const skillBonus = check.skill ? subject.skills[check.skill].level * SKILL_CHECK_BONUS_PER_LEVEL : 0;
    const affinity = (subject.identity.race && check.raceAffinity?.[subject.identity.race]) || 1;
-   const target = (subject.attributes[check.attribute] + skillBonus + (check.modifier ?? 0)) * affinity;
+   const target = (checkEffective(subject, check) + (check.modifier ?? 0)) * affinity;
 
    return Math.max(CHECK_MIN_TARGET, Math.min(CHECK_MAX_TARGET, Math.round(target)));
 }

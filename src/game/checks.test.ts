@@ -1,40 +1,64 @@
 import { describe, expect, it } from 'vitest';
-import { CHECK_MAX_TARGET, CHECK_MIN_TARGET, SKILL_CHECK_BONUS_PER_LEVEL, checkTarget, rollAgainst, type CheckSubject } from './checks.js';
+import { CHECK_MAX_TARGET, CHECK_MIN_TARGET, checkEffective, checkTarget, rollAgainst, type CheckSubject } from './checks.js';
+import { ATTRIBUTE_KEYS, type AttributeKey } from './data/attributes.js';
+import type { SkillNodeId } from './data/skills.js';
 import type { RaceId } from './data/races.js';
 
-function subject(overrides: { race?: RaceId | null; agility?: number; swimmingLevel?: number } = {}): CheckSubject {
-   return {
-      identity: { race: overrides.race ?? null },
-      attributes: { agility: overrides.agility ?? 30 },
-      skills: { swimming: { level: overrides.swimmingLevel ?? 1, progress: 0 } },
-   } as unknown as CheckSubject;
+function subject(o: {
+   race?: RaceId | null;
+   agility?: number;
+   points?: Partial<Record<SkillNodeId, number>>;
+} = {}): CheckSubject {
+   const attributes = Object.fromEntries(
+      ATTRIBUTE_KEYS.map((k) => [k, k === 'agility' ? (o.agility ?? 30) : 30]),
+   ) as Record<AttributeKey, number>;
+   const skills = Object.fromEntries(
+      Object.entries(o.points ?? {}).map(([id, p]) => [id, { points: p, progress: 0 }]),
+   );
+
+   return { identity: { race: o.race ?? null }, attributes, progression: { skills } };
 }
 
 describe('checkTarget', () => {
-   it('uses the governing attribute alone for a raw check', () => {
+   it('uses the whole attribute for an untrained (bare-attribute) check', () => {
       expect(checkTarget(subject(), { attribute: 'agility' })).toBe(30);
    });
 
-   it('adds the placeholder skill bonus per level', () => {
-      expect(checkTarget(subject({ swimmingLevel: 2 }), { attribute: 'agility', skill: 'swimming' }))
-         .toBe(30 + 2 * SKILL_CHECK_BONUS_PER_LEVEL);
+   it('weights a bare attribute when asked', () => {
+      expect(checkTarget(subject({ agility: 40 }), { attribute: 'agility', attributeWeight: 0.5 })).toBe(20);
+   });
+
+   it('sums a skill node: attribute blend + trained path points', () => {
+      // swimming's blend is agility×1 (30); its path is athletics → swimming.
+      expect(checkTarget(subject(), { node: 'swimming' })).toBe(30);
+      expect(checkTarget(subject({ points: { swimming: 8 } }), { node: 'swimming' })).toBe(38);
+      expect(checkTarget(subject({ points: { athletics: 5, swimming: 8 } }), { node: 'swimming' })).toBe(43);
    });
 
    it('applies the difficulty modifier', () => {
-      expect(checkTarget(subject(), { attribute: 'agility', modifier: -10 })).toBe(20);
+      expect(checkTarget(subject(), { node: 'swimming', modifier: -10 })).toBe(20);
       expect(checkTarget(subject(), { attribute: 'agility', modifier: 20 })).toBe(50);
    });
 
    it('multiplies the chance for a race with an affinity (the lutren swimmer)', () => {
-      const check = { attribute: 'agility', skill: 'swimming', raceAffinity: { lutren: 1.5 } } as const;
-      expect(checkTarget(subject({ race: 'lutren' }), check)).toBe(Math.round((30 + 5) * 1.5));
-      expect(checkTarget(subject({ race: 'canid' }), check)).toBe(35); // no affinity, no boost
-      expect(checkTarget(subject(), check)).toBe(35); // raceless
+      const check = { node: 'swimming', raceAffinity: { lutren: 1.5 } } as const;
+      expect(checkTarget(subject({ race: 'lutren' }), check)).toBe(Math.round(30 * 1.5));
+      expect(checkTarget(subject({ race: 'canid' }), check)).toBe(30); // no affinity, no boost
+      expect(checkTarget(subject(), check)).toBe(30); // raceless
    });
 
    it('clamps so nothing is impossible or guaranteed', () => {
       expect(checkTarget(subject({ agility: 10 }), { attribute: 'agility', modifier: -30 })).toBe(CHECK_MIN_TARGET);
       expect(checkTarget(subject({ agility: 90 }), { attribute: 'agility', modifier: 40 })).toBe(CHECK_MAX_TARGET);
+   });
+});
+
+describe('checkEffective', () => {
+   it('is uncapped (surplus is Mastery / crafting quality) while the target clamps', () => {
+      const master = subject({ points: { smithing: 20, weaponsmithing: 30, bladesmithing: 60 } });
+      const effective = checkEffective(master, { node: 'bladesmithing' });
+      expect(effective).toBeGreaterThan(100);
+      expect(checkTarget(master, { node: 'bladesmithing' })).toBe(CHECK_MAX_TARGET); // 95, clamped
    });
 });
 

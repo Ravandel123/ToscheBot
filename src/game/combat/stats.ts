@@ -1,3 +1,4 @@
+import { nodePoints } from '../character/skills.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
 export interface CombatStats {
@@ -26,7 +27,11 @@ export function combatStatsFromCharacter(character: CharacterDoc): CombatStats {
    const end = attributeBonus(character.attributes.endurance);
    const wp = attributeBonus(character.attributes.willpower);
    const agi = attributeBonus(character.attributes.agility);
-   const weaponSkill = character.skills.melee.level + character.skills.unarmed.level;
+   // Placeholder weapon competence: whatever the character has trained in the
+   // melee / brawling roots (sparring predates the real combat trees — P-combat).
+   // `?? {}` tolerates a pre-D34 doc with no progression (untrained → 0).
+   const skills = character.progression?.skills ?? {};
+   const weaponSkill = nodePoints(skills, 'melee') + nodePoints(skills, 'brawling');
 
    return {
       name: character.identity.name,

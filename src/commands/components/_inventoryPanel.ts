@@ -258,7 +258,10 @@ export function buildSlotChooser(character: CharacterDoc, instanceId: string, st
    return { embeds: [embed], components: [row] };
 }
 
-function detailEmbed(character: CharacterDoc, item: ResolvedItem, note?: string): EmbedBuilder {
+/** The item stat card. Exported so the stash panel (D33) reuses the exact same
+ *  renderer — a stashed item shows an identical card (it is never equipped, so
+ *  no 'Equipped' line appears). */
+export function detailEmbed(character: CharacterDoc, item: ResolvedItem, note?: string): EmbedBuilder {
    const def = item.definition;
    const quality = ITEM_QUALITIES[qualityOf(item.instance)];
    const slot = slotOfInstance(character, item.instance.instanceId);
@@ -357,6 +360,11 @@ function detailButtons(character: CharacterDoc, item: ResolvedItem, state: Brows
    if (def.kind === 'consumable')
       buttons.push(new ButtonBuilder().setCustomId(`inventory:use:${suffix}`).setLabel('Use').setEmoji('🍽️').setStyle(ButtonStyle.Primary));
 
+   // Stow into the stash (D33) — only when not worn (unequip first); a fresh
+   // read on the click side re-checks. Whole entry moves; open it in `/stash`.
+   if (!equippedSlot)
+      buttons.push(new ButtonBuilder().setCustomId(`inventory:store:${suffix}`).setLabel('Store').setEmoji('🗄️').setStyle(ButtonStyle.Secondary));
+
    buttons.push(
       new ButtonBuilder().setCustomId(`inventory:drop:${suffix}`).setLabel('Drop').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`inventory:list:${character._id}:${packBrowseState(state)}`).setLabel('Back').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
@@ -376,8 +384,9 @@ function actionSuffix(characterId: string, instanceId: string, state: BrowseStat
    return `${characterId}:${instanceId}:${packBrowseState(state)}`;
 }
 
-/** One-line stat summary for list rows and select descriptions. */
-function lineSummary(item: ResolvedItem): string {
+/** One-line stat summary for list rows and select descriptions. Exported for
+ *  the stash panel to render identical rows (D33). */
+export function lineSummary(item: ResolvedItem): string {
    const def = item.definition;
 
    if (def.kind === 'weapon')

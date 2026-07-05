@@ -12,9 +12,13 @@ Legend:
   placeholder values as balance.
 - ⬜ **planned** — not built yet.
 
-_Last updated: 2026-07-04 (D31: living locations — the `LocationState` collection
-(weather, events, discoveries, stats), derived presence, the game clock + condition
-language gating hub actions and conditional encounters)._
+_Last updated: 2026-07-05 (D34 **BUILT**: the **skill-tree system** — skills are now
+arbitrary-depth **trees** in code (`game/data/skills.ts`), a character stores a **sparse
+flat node map** under a `progression` subdoc, checks sum the path + a **per-node weighted
+attribute blend** (Intimidate = 50% STR + 50% CHA), and **learn-by-doing** credits every
+node on a path at its own growth rate. Replaces the old dense 6-skill placeholder; content
+& numbers stay 🟡. Prior: D33 the stash — a per-instance `Item` collection browsed by
+`/stash`, filled by the 🗄️ Store button.)_
 
 ---
 
@@ -40,6 +44,13 @@ language gating hub actions and conditional encounters)._
   loot source. Equipped gear shifts **effective attributes** (consumed by challenge checks
   and the sheet). 🟡 All numbers (damage, weights, penalties) are placeholders; nothing
   damages durability yet.
+- 🟢 **Persistence model (D32/D33/D34)**: embed *bounded + hot-path* state, split *unbounded*
+  state. **Stash BUILT**: owned/stored items (home chest — potentially thousands) live in a
+  per-instance **`Item` collection**, browsed server-side by **`/stash`** and filled by the
+  **🗄️ Store** button in `/inventory`; the **carried pack + equipment stay embedded** (D28)
+  and equip only ever references the pack (equip-from-stash deferred — items go through the
+  pack first). **Skills BUILT (D34)**: bounded + hot-path ⇒ embedded — a **sparse node map**
+  under the `progression` subdoc (talents/points join it later).
 - ✅ **Account settings** (D27): `activeGame`, `dmNotifications` — `/profile` toggles them.
 - ✅ **Living locations (D31)**: each location has dynamic state in the `LocationState`
   collection — **weather**, **running events**, **server-wide discoveries**, **stats**
@@ -48,7 +59,11 @@ language gating hub actions and conditional encounters)._
   closed at night", secrets hidden until discovered) and conditional encounters.
   🟡 All weights/durations/chances are placeholder flavor.
 - ✅ **Chronicle**: gameplay is ephemeral; noteworthy outcomes go to a public log channel (D24).
-- 🟡 Skills, resource values, combat formula, AP regen rate, encounter stakes — placeholders.
+- ✅ **Skill trees (D34)**: the model is real (trees, per-node attribute blends, summed
+  Effective, sparse storage, learn-by-doing growth); the tree *content* and all *numbers*
+  (attribute weights, growth rates) stay 🟡, and no live action *credits* skill use yet
+  (the `creditSkillUse` seam awaits the first crafting/combat consumer).
+- 🟡 Resource values, combat formula, AP regen rate, encounter stakes — placeholders.
 - ⬜ NPC seeding + movement (6C), the full RPG ruleset (Phase 7).
 
 An account owns up to **`MAX_CHARACTERS_PER_ACCOUNT = 3`** characters, all made
@@ -94,9 +109,9 @@ the `/profile` panel's toggle buttons (`profile:toggle:<key>`).
 | `attributes` | 8 × number | ✅ shape / 🟡 balance | **effective = racial base + allocation** (D25); stored, recomputed on race/allocation change |
 | `attributeAllocation` | 8 × number | ✅ | the creation point-buy (0–20 each, Σ = 50); kept separate so a race switch rebases cleanly |
 | `traits` | 6 × number | ✅ shape | deed traits (D26), start 0, clamp ≥0; accrued by encounter choices, nothing gates on them yet |
-| `skills` | 6 × {level,progress} | 🟡 | placeholder, level 1 |
+| `progression.skills` | sparse `{ nodeId → {points,progress} }` | ✅ shape / 🟡 content (D34) | **skill-tree progression** — only trained nodes stored; the tree/relationships live in code (`game/data/skills.ts`), never in the DB, so adding a branch or tree is zero-migration. Stored as a plain object (Mixed) so `progression` can gain talents/points with no schema change (D32) |
 | `currencies` | 1 × number | ✅ per-character | `deltradaCoins`, start 0 (D19) |
-| `inventory` | ItemInstance[] | ✅ shape / 🟡 numbers | owned items (D28): `{ instanceId (8-char, rides in customIds), itemId → catalog, quality, quantity, durability?, acquiredAt }`; capped at `INVENTORY_STACK_LIMIT` (50) entries |
+| `inventory` | ItemInstance[] | ✅ shape / 🟡 numbers | the **carried pack** (D28): `{ instanceId (8-char, rides in customIds), itemId → catalog, quality, quantity, durability?, acquiredAt }`; capped at `INVENTORY_STACK_LIMIT` (50) entries. Owned/stored items (thousands possible) live in the separate `Item` collection (D33 — **built**) |
 | `equipment` | { slotId → instanceId } | ✅ | worn/wielded gear; plain object keyed by `equipmentSlots.ts` ids — adding a slot needs no migration |
 
 ### SmackdownRecord — `db/models/smackdownRecord.ts` ✅
@@ -121,6 +136,48 @@ static half is the code catalog (`game/data/locations.ts`).
 indexed query over `Character.locationId` (`characterService.atLocation` — approved
 characters, active or benched, plus every NPC; drafts are not in the world yet). One
 source of truth — nothing to drift under concurrent moves.
+
+### Item (owned / stored) — ✅ built (D33) — `db/models/item.ts`
+The **two-tier item model**. The **carried pack** stays embedded on `Character`
+(`inventory[]`, capped, + the `equipment` slot map — D28) because it feeds hot-path
+challenge checks and every equip/use/drop is a single-doc atomic write under the lock.
+**Owned-but-not-carried** items (home chest, future bank/property — a hoard can reach
+thousands, i.e. **unbounded**) live in this collection instead, **one document per
+instance/stack** (never one doc per character — that only rebuilds the giant embedded array):
+
+| Field | Type | Notes |
+|---|---|---|
+| `_id` | string | a fresh **uuid** (global doc identity) |
+| `ownerId` | string | → `Character._id`; indexed with `container` |
+| `container` | string | where it's stored: `home_chest` \| … (→ `StorageContainerId`) |
+| `instanceId` | string | 8-char handle, unique **within the owner's stash** — rides in customIds |
+| `itemId` | string | → `game/data/items.ts` catalog (D10) |
+| `quality` | string | per-instance (D28) |
+| `quantity` | number | stackable kinds > 1 (a whole stack = ONE doc); a unique instance = 1 |
+| `durability` | number? | equippable kinds only |
+| `acquiredAt` | Date | preserved across pack ↔ stash transfers |
+
+**`_id` diverges from D33's literal "_id = instanceId"** (owner-noted rationale): the pack's
+8-char `instanceId` is unique only *within one character's pack*, so as a global `_id` two
+characters could collide (silently overwriting each other's item), and a full-uuid handle
+would overflow the 100-char customId budget beside the 36-char character id. So `_id` is a
+uuid and `instanceId` is a short handle re-minted unique within the owner's stash.
+
+Indexed `{ ownerId, container }`; the stash UI (**`/stash`**) **reuses the `/inventory`
+renderers** (`detailEmbed`/`lineSummary` — categories/sort/pages/card) but **paginates +
+counts server-side**: category = the catalog's `itemId $in` set (kind is NOT stored — it
+derives from `itemId`), page = `find().sort({acquiredAt}).skip().limit()`, counts = a
+`$group` roll-up (≤ catalog-size rows) — the whole stash never loads; the browse-state
+`container.kind.sort.page` rides in the customId. A normal character read never touches
+this collection. **Transfers** run under the character lock, and — since cross-collection
+writes aren't transactional (the codebase stays single-doc atomic, D5/D6) — each transfer
+**inserts the destination copy BEFORE removing the source**, so a crash mid-transfer leaves
+a recoverable **duplicate, never a lost item** (favor-duplicate-over-loss; a double-click is
+already serialized by the lock). **Deposit** = 🗄️ Store on the `/inventory` item card (whole
+entry → the container; vacates any slot it referenced). **Withdraw** re-checks encumbrance
+(the pack has a carry limit; the stash does not) and lands as a fresh pack entry (no
+auto-merge — keeps the transfer simple). **Equip only ever references the embedded pack** —
+you withdraw to the pack, then equip; direct equip-from-stash is deferred (owner, 2026-07-05).
 
 ---
 
@@ -155,10 +212,27 @@ walk on → +cowardice). Applied via `characterService.applyTraitDeltas` (atomic
 Shown on `/character view` when nonzero. ⬜ Nothing *gates* on thresholds yet — trait-gated
 options/titles/stress interplay come with Phase 7.
 
-### Skills — `game/data/skills.ts` 🟡 placeholder
-General: `cooking, fishing, swimming`. Weapon: `melee, ranged, unarmed`. Each `{level:1,
-progress:0}`. Checks read them as a 🟡 flat `level × SKILL_CHECK_BONUS_PER_LEVEL (5)`
-bonus until `RPG/`'s P-skilltree locks the real math.
+### Skills — `game/data/skills.ts` ✅ model (D34) / 🟡 content & numbers
+Skills are **arbitrary-depth TREES**, not flat levels (`RPG/` P-skilltree, owner-designed
+2026-07-05). A `SkillNode` = `{ name, parent (id|null), attributes? (weighted blend),
+growth? (profile), cap?, description? }`; the shape lives entirely in code (D10). Starter
+trees (all 🟡 content): **smithing** (→ weapon-/armour-smithing → blades/axes/haft, light/
+heavy) + a **metallurgy** material tree (the cross-path a recipe also sums); **speechcraft**
+(persuade / **intimidate** [0.25 STR + 0.25 CHA] / deceit — the cross-attribute blend demo);
+**athletics** (→ swimming/climbing); placeholder combat roots (**melee** → 1H/2H → leaves,
+**ranged**, **brawling** → striking).
+
+- **Governing attribute is per-node** and **inherited** from the nearest ancestor that
+  declares one (set CHA once on Speechcraft; override only on Intimidate). Weights are literal
+  multipliers on the raw attribute — "what a skill depends on" is one edit.
+- **Growth profiles** (`GROWTH_PROFILES`: root/branch/leaf, or per-node override) are band
+  tables of **uses-per-point** that steepen with points (the owner's numbers: a leaf 5→20,
+  a branch 10→30, a root 10→50). Default tier is derived from depth.
+- The engine (`game/character/skills.ts`, pure + tested) turns points-on-nodes into the two
+  things the game reads: **`effectiveSkill`** (attribute blend + Σ path points, UNCAPPED so
+  surplus is Mastery/quality) and **`creditUse`** (learn-by-doing: +1 use to every node on a
+  path, each converting to points at its own rate — one "forge a sword" lifts the leaf fast,
+  the root slowly). `SKILL_NODE_CAP = 100` (Mastery >100 via special sources is future).
 
 ### Currencies — `game/data/currencies.ts` ✅ (per-character)
 **One currency: `deltradaCoins`** — starts 0, clamped `>= 0`. The lore's regional per-race
@@ -296,22 +370,36 @@ catalog entry + items that use it — no migration**. Weapons declare which slot
 (a dagger fits either hand → the panel offers a slot choice); **two-handed** weapons live
 in `mainHand` and freeze `offHand`.
 
+### Storage containers — `game/data/containers.ts` ✅ (D33)
+Where stashed items live. One so far: `home_chest` (`{ name, emoji, description }`).
+`DEFAULT_CONTAINER = home_chest` is what the 🗄️ Store button targets. **Adding a container**
+(bank, saddlebags…) **= one entry** (+ wherever it becomes reachable); ids are append-only
+(D10) and stored on `Item` docs. Not location-gated yet — every container is reachable via
+`/stash` (tying a container to a place/hub action is a future step).
+
 ---
 
 ## Rules
 
-### Checks — the d100 core test — `game/checks.ts` ✅ shape (D26) / 🟡 numbers
+### Checks — the d100 core test — `game/checks.ts` ✅ shape (D26/D34) / 🟡 numbers
 The resolution mechanic locked in `RPG/` (R1): **roll d100, succeed on roll ≤ target.**
 
 ```
-target = round((attribute + skillLevel×5 + modifier) × raceAffinity), clamped to [5, 95]
-SL     = tens(target) − tens(roll)     (Success Levels; negative on a failure)
+Effective = Σ(weight·attribute)  (primary node's blend)  +  Σ(points on the path root→leaf)
+                                                          (+ any extraNodes: material paths)
+target    = round((Effective + modifier) × raceAffinity), clamped to [5, 95]
+SL        = tens(target) − tens(roll)     (Success Levels; negative on a failure)
 ```
 
-- `modifier` is the difficulty-ladder step (🟡 values pending `RPG/` P11).
-- `raceAffinity` is a per-check chance multiplier (e.g. `{ lutren: 1.5 }` on swim checks).
-- The [5, 95] clamp keeps nothing impossible and nothing guaranteed.
-- The 🟡 flat skill term is a stopgap; `RPG/`'s P-skilltree Effective formula replaces it.
+- A check draws on a **skill node** (`node` + optional `extraNodes`) — the summed-tree model
+  (D34) — **or** a bare **`attribute`** (untrained feats like climbing a fallen tree; optional
+  `attributeWeight`, default the whole attribute).
+- **`checkEffective`** returns the raw, UNCAPPED capability (surplus over an item's required
+  sum is future crafting quality / combat Mastery); **`checkTarget`** shapes it by difficulty
+  + affinity and clamps to a d100 %.
+- `modifier` is the difficulty-ladder step (🟡 values pending `RPG/` P11); `raceAffinity` a
+  per-check chance multiplier (`{ lutren: 1.5 }` on swim). The [5, 95] clamp keeps nothing
+  impossible/guaranteed.
 - Consumers roll via `rollAgainst(target)` — challenge panels **store per-option targets in
   session state at creation**, so the shown % and the rolled % always agree.
 
@@ -420,8 +508,14 @@ filter-guarded.
   counts) → **category list** (sort by name / weight / value / newest, 10 per page) →
   **item card** (kind-specific stat block, durability, requirements ✓/✗, quality/material/
   weight/value) with contextual actions: Equip (slot choice when several fit) / Unequip /
-  Use / Drop (explicit confirm). Browse state (`kind.sort.page`) rides in customIds —
-  stateless, restart-proof.
+  Use / **Store** (→ the stash, when not worn) / Drop (explicit confirm). Browse state
+  (`kind.sort.page`) rides in customIds — stateless, restart-proof.
+- **`/stash`** — the retrieval side of the two-tier item model (D33): an ephemeral panel
+  reusing the `/inventory` renderers over the **`Item` collection** (owned-but-not-carried
+  items). Hub (per-category counts) → category list (server-side, `acquiredAt`
+  newest/oldest, paged) → item card → **Withdraw**. Deposit is the 🗄️ **Store** button
+  above; withdraw re-checks the pack's entry cap + carry capacity. Both transfers run under
+  the character lock and are refused while busy. See the `Item` collection for crash-safety.
 - **Equip rules** (pure, `game/character/inventory.ts → planEquip`): legal slot ·
   requirements vs **base** attributes · broken gear refused · a two-handed weapon vacates
   the off hand and blocks it while wielded · equipping into an occupied slot displaces the
@@ -442,10 +536,14 @@ filter-guarded.
   🟡 carry capacity (= strength in kg; over-capacity blocks acquisition only — no movement
   penalty yet). Unapproved characters CAN manage gear — it's sheet-building, not a
   character action (same stance as the creation wizard; `canCharacterAct` untouched).
+- ✅ **Player storage** — the two-tier `Item` collection is **built** (D33): `/stash` +
+  the 🗄️ Store button; equip-from-stash stays deferred (items go through the pack first).
 - ⬜ Not built (by design, prototype scope): loot sources (fishing/shops/loot tables/
-  starting kit), durability damage + repair, partial-stack drops, ground piles + player
-  trading, ranged weapons + ammunition, auto-equip-best (the `RPG/` §14 simple layer),
-  selling (economy, P17), quality×damage interplay (Phase 7).
+  starting kit), a second container + location-gated access (bank, home), a
+  withdraw+equip convenience wrapper, durability damage + repair, partial-stack
+  transfers/drops, ground piles + player trading, ranged weapons + ammunition,
+  auto-equip-best (the `RPG/` §14 simple layer), selling (economy, P17),
+  quality×damage interplay (Phase 7).
 
 ### Durable activities — ✅ scaffold + registry + first consumer (D17/D22)
 Long, interactive, multi-step activities (turn-based duel, obstacles, exploration) are made
@@ -544,7 +642,9 @@ Future `/smackdown duel`: requires **approved** characters, uses real HP/attribu
   setAttributeAllocation (persists point-buy + recomputed attributes),
   submitForApproval/approve/reject (status-guarded, return false on a stale transition),
   applyResourceDeltas (clamp [0,max]), applyCurrencyDeltas (clamp ≥0), applyTraitDeltas
-  (clamp ≥0 — D26), spendActionPoints (atomic), setLocation, atLocation (derived presence
+  (clamp ≥0 — D26), creditSkillUse (learn-by-doing, D34 — read-modify-write on the sparse
+  map under the caller's lock; returns the nodes that ranked up; no live consumer yet),
+  spendActionPoints (atomic), setLocation, atLocation (derived presence
   over the indexed `locationId` — D31), regenAll/regenAllBusy/regen (the D23 busy split).
 - `locationStateService` (D31) — getFresh (lazy create + guarded weather re-roll + event
   sweep), tryStartEvent (guarded: one starter among concurrent arrivals), discoverFeature
@@ -555,6 +655,11 @@ Future `/smackdown duel`: requires **approved** characters, uses real HP/attribu
   checks), removeStack (drop + vacate referencing slots, one write), applyEquipPlan /
   clearEquipmentSlot, consumeItem (quantity-guarded decrement + resource effects). All
   callers hold the character's lock; every write is filter-guarded besides (D28).
+- `itemService` (D33) — the stash (`Item` collection): countByKind + browseStash (both
+  server-side, never load the whole hoard), getStashItem, deposit (pack → container:
+  insert-then-pull, vacate slot), withdraw (container → pack: capacity re-check, push
+  fresh-pack-instance-then-delete). Transfers hold the character's lock;
+  favor-duplicate-over-loss on a crash mid-transfer (cross-collection, non-transactional).
 - `smackdownService` — getOrCreate, recordResult (Elo), getLeaderboard.
 - `activitySessionService` — create, getActiveForParticipant, activeParticipantIds (the
   durable busy set), advance (step-guarded), complete, abandon. The durability layer for
@@ -571,8 +676,14 @@ the wizard/approve/reject flows, `activity.ts` routes durable activities to the
 
 - ~~What attributes exist~~ → **decided (D25)**; balance of racial bases / pool / caps
   stays 🟡 pending `RPG/` P6 (Strength/finesse) and playtesting.
-- What skills actually exist and what they *do*; the check engine's flat skill bonus is a
-  stopgap for `RPG/`'s P-skilltree Effective formula (w·attribute + Σ nodes).
+- ~~What the check engine's skill term is~~ → **the summed skill-tree model is BUILT (D34)**:
+  `effectiveSkill` = per-node attribute blend + Σ path points; storage is a sparse node map
+  under `progression` (D32). **Remaining 🟡:** the tree *content* (only prototype trees ship),
+  all *numbers* (attribute weights `w`, growth rates, caps), quality-gated practice-source
+  caps (home < workshop < commission — `RPG/` §7), Mastery >100, talents + the points economy
+  (`RPG/` P13/P14), and **wiring `creditSkillUse` into a live action** (crafting/combat) so
+  skills actually grow. Item **required-sum** gates + crafting quality (`RPG/` Examples) are
+  the natural first consumer.
 - Difficulty-ladder values on checks (`RPG/` P11) and where race affinities vs racial
   *traits* (Amphibious…) draw the line.
 - Real combat math (opposed d100, Wounds/Soak — `RPG/` §9/R10), max-HP / regen formulas
@@ -592,4 +703,6 @@ the wizard/approve/reject flows, `activity.ts` routes durable activities to the
   consequences (movement/AGI penalties vs the current acquisition-only gate); item checks
   as challenge approaches (`RPG/` P-challenges: a rope trivializes the fallen tree);
   partial-stack drops, ground piles, player-to-player trading; ranged weapons + ammo;
-  the auto-equip-best button (`RPG/` §14 simple layer).
+  the auto-equip-best button (`RPG/` §14 simple layer). Player **storage** (home chest/
+  bank) is **built** — the two-tier `Item` collection (D33), `/stash` + Store, equip
+  through the pack; a second/location-gated container and a withdraw+equip wrapper remain.

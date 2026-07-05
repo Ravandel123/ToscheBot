@@ -2,7 +2,9 @@ import { MessageFlags, type ButtonInteraction, type StringSelectMenuInteraction 
 import { ComponentHandler } from '../../types/interactions.js';
 import { characterService } from '../../db/services/characterService.js';
 import { inventoryService } from '../../db/services/inventoryService.js';
+import { itemService } from '../../db/services/itemService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
+import { DEFAULT_CONTAINER, STORAGE_CONTAINERS } from '../../game/data/containers.js';
 import { ATTRIBUTES } from '../../game/data/attributes.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { isEquipmentSlotId, type EquipmentSlotId } from '../../game/data/equipmentSlots.js';
@@ -51,6 +53,7 @@ export default {
          if (action === 'equipto') return handleEquipTo(client, interaction, rest[0], rest[1], rest[2], parseBrowseState(rest[3]));
          if (action === 'unequip') return handleUnequip(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          if (action === 'use') return handleUse(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
+         if (action === 'store') return handleStore(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          if (action === 'dropc') return handleDropConfirmed(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          return;
       }
@@ -182,6 +185,27 @@ async function handleUse(client: ToscheClient, interaction: ButtonInteraction, c
       return result.depleted
          ? buildInventoryList(updated, state, note)
          : detailOrList(updated, instanceId, state, note);
+   });
+}
+
+/** Stows a whole pack entry into the character's stash (D33). The item leaves
+ *  the pack, so we land back on the category list with a note; open `/stash` to
+ *  retrieve it. Deposit targets the single container for now (DEFAULT_CONTAINER);
+ *  a container chooser joins here when a second one lands. */
+async function handleStore(client: ToscheClient, interaction: ButtonInteraction, characterId: string, instanceId: string, state: BrowseState): Promise<void> {
+   await mutate(client, interaction, characterId, instanceId, state, async (fresh) => {
+      const item = findItem(fresh, instanceId);
+      const result = await itemService.deposit(fresh._id, DEFAULT_CONTAINER, instanceId);
+      if (!result.ok) {
+         const note = result.reason === 'unknown-container' ? 'There is nowhere to store that.' : STALE_ITEM_NOTE;
+         return buildInventoryList(fresh, state, note);
+      }
+
+      const updated = await characterService.get(fresh._id) ?? fresh;
+      const name = item ? itemDisplayName(item) : 'it';
+      const quantity = item && item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : '';
+      const container = STORAGE_CONTAINERS[DEFAULT_CONTAINER];
+      return buildInventoryList(updated, state, `${container.emoji} Stored **${name}**${quantity} in your **${container.name}**. Fetch it with \`/stash\`.`);
    });
 }
 
