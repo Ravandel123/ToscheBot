@@ -2,7 +2,7 @@
 // "Set country" / "Set timezone" buttons (R19). A single text field each; the
 // submit routes to `profile:set-<field>`, which validates + saves and repaints
 // the panel in place. Underscore prefix → loader skips it.
-import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { LabelBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 
 export const COUNTRY_MAX_LENGTH = 56; // longest real country name fits comfortably
 export const TIMEZONE_MAX_LENGTH = 64;
@@ -18,7 +18,6 @@ export function buildSettingModal(field: SettingField, current: string | null): 
    const meta = FIELD[field];
    const input = new TextInputBuilder()
       .setCustomId('value')
-      .setLabel(meta.label)
       .setStyle(TextInputStyle.Short)
       .setRequired(false) // empty clears the setting
       .setMaxLength(meta.max)
@@ -29,5 +28,5 @@ export function buildSettingModal(field: SettingField, current: string | null): 
    return new ModalBuilder()
       .setCustomId(`profile:set-${field}`)
       .setTitle(meta.title)
-      .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+      .addLabelComponents(new LabelBuilder().setLabel(meta.label).setTextInputComponent(input));
 }

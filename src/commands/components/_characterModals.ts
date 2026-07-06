@@ -2,7 +2,7 @@
 // create`, both for a brand-new draft and for resuming an editable one) and
 // the reject-reason modal, and reads their submitted values back. Modals only
 // host text inputs — race is a separate wizard step (no select menus inside modals).
-import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, type ModalSubmitInteraction } from 'discord.js';
+import { LabelBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, type ModalSubmitInteraction } from 'discord.js';
 import {
    AVATAR_URL_MAX_LENGTH,
    BIO_MAX_LENGTH,
@@ -16,21 +16,19 @@ import type { CharacterBody } from '../../game/character/body.js';
 
 const REASON_MAX_LENGTH = 300;
 
-function row(input: TextInputBuilder): ActionRowBuilder<TextInputBuilder> {
-   return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
-}
-
-function textInput(
+// One labelled text field (the post-action-row modal shape: a Label component
+// carries the caption, the text input rides inside it).
+function field(
    id: string,
    label: string,
    style: TextInputStyle,
    opts: { required?: boolean; min?: number; max?: number; value?: string },
-): TextInputBuilder {
-   const input = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(opts.required ?? false);
+): LabelBuilder {
+   const input = new TextInputBuilder().setCustomId(id).setStyle(style).setRequired(opts.required ?? false);
    if (opts.min !== undefined) input.setMinLength(opts.min);
    if (opts.max !== undefined) input.setMaxLength(opts.max);
    if (opts.value) input.setValue(opts.value); // skip empty — setValue('') is pointless and noisy
-   return input;
+   return new LabelBuilder().setLabel(label).setTextInputComponent(input);
 }
 
 /**
@@ -45,11 +43,11 @@ export function buildIdentityModal(opts: { customId: string; title: string; pref
    return new ModalBuilder()
       .setCustomId(opts.customId)
       .setTitle(opts.title)
-      .addComponents(
-         row(textInput('name', 'Name', TextInputStyle.Short, { required: true, min: NAME_MIN_LENGTH, max: NAME_MAX_LENGTH, value: p?.name })),
-         row(textInput('epithet', 'Epithet (e.g. "the Tavern Keep")', TextInputStyle.Short, { max: EPITHET_MAX_LENGTH, value: p?.epithet })),
-         row(textInput('bio', 'Short description', TextInputStyle.Paragraph, { max: BIO_MAX_LENGTH, value: p?.bio })),
-         row(textInput('avatarUrl', 'Avatar image URL (optional)', TextInputStyle.Short, { max: AVATAR_URL_MAX_LENGTH, value: p?.avatarUrl })),
+      .addLabelComponents(
+         field('name', 'Name', TextInputStyle.Short, { required: true, min: NAME_MIN_LENGTH, max: NAME_MAX_LENGTH, value: p?.name }),
+         field('epithet', 'Epithet (e.g. "the Tavern Keep")', TextInputStyle.Short, { max: EPITHET_MAX_LENGTH, value: p?.epithet }),
+         field('bio', 'Short description', TextInputStyle.Paragraph, { max: BIO_MAX_LENGTH, value: p?.bio }),
+         field('avatarUrl', 'Avatar image URL (optional)', TextInputStyle.Short, { max: AVATAR_URL_MAX_LENGTH, value: p?.avatarUrl }),
       );
 }
 
@@ -73,10 +71,10 @@ export function buildBodyModal(opts: { customId: string; prefill: CharacterBody 
    return new ModalBuilder()
       .setCustomId(opts.customId)
       .setTitle('Physical frame')
-      .addComponents(
-         row(textInput('heightCm', 'Height (cm)', TextInputStyle.Short, { required: true, max: 4, value: String(b.heightCm) })),
-         row(textInput('weightKg', 'Weight (kg)', TextInputStyle.Short, { required: true, max: 4, value: String(b.weightKg) })),
-         row(textInput('age', 'Age (years)', TextInputStyle.Short, { required: true, max: 4, value: String(b.age) })),
+      .addLabelComponents(
+         field('heightCm', 'Height (cm)', TextInputStyle.Short, { required: true, max: 4, value: String(b.heightCm) }),
+         field('weightKg', 'Weight (kg)', TextInputStyle.Short, { required: true, max: 4, value: String(b.weightKg) }),
+         field('age', 'Age (years)', TextInputStyle.Short, { required: true, max: 4, value: String(b.age) }),
       );
 }
 
@@ -94,5 +92,5 @@ export function buildRejectReasonModal(characterId: string, messageId: string): 
    return new ModalBuilder()
       .setCustomId(`character:reject-reason:${characterId}:${messageId}`)
       .setTitle('Reject petition')
-      .addComponents(row(textInput('reason', 'Reason for rejection', TextInputStyle.Paragraph, { required: true, max: REASON_MAX_LENGTH })));
+      .addLabelComponents(field('reason', 'Reason for rejection', TextInputStyle.Paragraph, { required: true, max: REASON_MAX_LENGTH }));
 }
