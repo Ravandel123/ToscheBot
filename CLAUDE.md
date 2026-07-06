@@ -409,6 +409,20 @@ PrefixCommand`. Adding a new *response* to an existing command is just one array
    connection to it exactly like production `connectDb`, and wipes every collection
    between tests. No Atlas, no network, no secrets, no risk to live data — plain
    `npm test` runs them. Do **not** put DB tests on a shared cloud database.
+   Covered so far: `characterService`, `accountService`, `activitySessionService`,
+   `itemService`, `smackdownService` (Elo swing + tallies, the `$max`-monotonic
+   `trialRung` D37 guard, the dynamic-`sortField` leaderboard D36) and
+   `locationStateService` (lazy-upsert defaults, filter-guarded weather re-roll +
+   event sweep on read, the `$ne`/`$addToSet` dedup guards, the pipeline stat clamp
+   with `$ifNull` fallback — D31). **mongod caveat found while writing these:** on the
+   in-memory `mongod` (v8.x), `updateOne` reports `modifiedCount: 1` even for a NO-OP
+   `$set`/`$addToSet` (setting a field to its existing value / re-adding a present
+   element). So a "did this actually change?" boolean derived from `modifiedCount` is
+   **not reliable** — the robust dedup pattern is a **filter guard** (`tryStartEvent`'s
+   `'events.eventId': { $ne: eventId }` → matchedCount 0 on a dupe), NOT reading
+   `modifiedCount` after an unconditional `$addToSet` (`locationStateService.discoverFeature`
+   does the latter, so its "newly-found" return can double-fire under this behaviour —
+   worth converting to a filter guard if a double chronicle/announce ever bites).
 3. **Interaction-flow tests** (`*.flow.test.ts`) — drive a component handler end-to-end
    (click → handler → service → in-memory DB → repaint) with the fake interactions from
    `src/testing/fakeInteraction.ts` (`fakeButton` / `fakeSelect` / `fakeModalSubmit`,
@@ -693,7 +707,7 @@ return the player to the hub.
 Newest: the **stash (D33)** — a per-instance `Item` collection for owned-but-not-carried
 items, browsed server-side by the new **`/stash`** command and filled by a 🗄️ **Store**
 button on the `/inventory` item card; transfers run under the character lock,
-favor-duplicate-over-loss. **300 tests, build + lint green.** The owner has smoke-tested
+favor-duplicate-over-loss. **424 tests, build + lint green.** The owner has smoke-tested
 `/profile` and `/smackdown` live; the bot has not yet been run end-to-end against a live
 Atlas cluster (needs `.env` + `npm run deploy` — **`/stash` is a NEW command so a redeploy
 is required again**; the D33 Store button + `Item` collection add NO other slash changes).
