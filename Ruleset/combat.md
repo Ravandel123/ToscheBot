@@ -50,7 +50,9 @@ not StrengthBonus). `attributeBonus(v) = floor(v/10)`.
 **Resolution mode** ✅ direction R24 — **v1 = auto-resolve**: set stance/style/target in a
 pre-fight menu, one button, the engine rolls every round and narrates with a delay (no
 per-round input). **Manual, turn-by-turn** control is an explicit **later** upgrade, built only
-once v1 proves fun.
+once v1 proves fun. **Built (D35):** the auto-resolve v1 engine + the consent-gated `/smackdown
+duel` (`game/combat/duel.ts` + `profile.ts`, no pre-fight stance/style menu yet — v1 resolves as
+'balanced').
 
 **Positioning & terrain** ⬜ future, not v1, R25 — a lightweight grid (adjacent/ranged/flanked)
 + terrain tags (`cramped, uneven, slick, open`) that weapons/styles check against (a cramped room
@@ -59,7 +61,7 @@ blocks two-handed swings; sand hinders a footwork-based style). Designed directi
 **Fate points** ✅ direction R21 — pool (proposed **2**): reroll a test **or** shrug off a
 knockout. Refresh slowly on rest (not "per session").
 
-**Smackdown modes**: Sparring ✅ (for-fun) · Duel ⬜ (real stakes, consent-gated) · Trial/PvE ⬜.
+**Smackdown modes**: Sparring ✅ (for-fun) · Duel ✅ (real stakes, consent-gated, D35) · Trial/PvE ✅ (Spire ladder, D37).
 
 ---
 
@@ -401,22 +403,91 @@ attributes real per-race/point-buy values, sparring outcomes aren't fully random
 the maxHp/attack/defense **shape itself is throwaway** — it will be replaced wholesale when the
 Health/Soak/opposed-d100 combat above (R12) is actually built.
 
+### Duel — `/smackdown duel` + the real engine ✅ v1 / 🟡 numbers *(D35)*
+The serious tier (owner-requested, superseding the D14 "no combat mechanics" stance for the *v1
+model*, as D25/D34 did for attributes/skills). Three pieces:
+- **`game/combat/duel.ts`** — the pure resolver. Each exchange is an **opposed d100** (both roll
+  their own `checks.ts` test; the higher Success Level connects, skill-tiebreak else defender);
+  damage = `weapon + net SL + StrengthBonus − Soak`, floored to the **≥1 connecting-hit** rule;
+  auto-resolved in one alternating-exchange pass (the sparring narration shape on real math).
+  Fields for the deferred layers (`damageType`, `stance`) are carried but **inert**, and
+  `computeDamage` has commented insertion points for the armour✕type multiplier and the
+  crit/hit-location step — so each layer is a fill-in, not a reshape (owner: "start WITHOUT
+  styles/named-moves/location-crits, but take them into account").
+- **`game/combat/profile.ts`** — derives a `CombatProfile` from the REAL systems: equipment-
+  modified attributes (D28), the melee/brawling skill-tree Effective (D34), worn **AV** into
+  `Soak = ConstitutionBonus + AV`, and the character's **actual `resources.health`** as the pool
+  (no frame/Constitution max recompute yet — the R12 pool-with-locations is the next layer; v1
+  uses the stored pool, which reads fine for the unarmed Spire). `isDowned` = Health ≤ 0.
+- **`commands/components/duel.ts` + `_duelView.ts`** — the **consent-gated** flow (combat.md's
+  locked async-fairness rule): `/smackdown duel` posts a card with the fight uncommitted; only the
+  **challenged** player's Accept starts it, so nobody loses Health offline (approved characters
+  only, D16). The bout runs under both characters' lock, narrates each blow, then **persists real
+  damage to BOTH** via atomic clamped `applyResourceDeltas` deltas (it does not mend at once —
+  slow hourly regen is the only recovery). **0 Health = Downed** → `canCharacterAct` already
+  reports `incapacitated`, so no new field; **no other cost** (no AP loss, no permadeath — a KO is
+  "wake with a dented pride"). It's a **short action** (D5 rule 1: resolve in memory, commit once),
+  not an ActivitySession — **manual turn-by-turn** (R24 option 2) is the documented next layer over
+  the same profile/engine; wagers, a duel W/L record, and Trial/PvE are the other seams.
+- **Numbers stay 🟡**: attack/defence bases, unarmed damage, the pool size (still the flat 20 from
+  `resources.ts`, not the R12 frame+Constitution pool).
+
+### Bout modes — the ruleset layer ✅ v1 / seams *(D36)*
+`game/combat/bouts.ts` is the data-driven **bout catalog** (D10) — the customization surface the
+Spire grows into, since it's meant to be a big feature. A `BoutMode` is everything that shapes a
+fight *before* the engine rolls. `/smackdown duel [mode]` shows the modes as choices; the pick
+rides in the challenge card (so the target consents to *those* rules) and the accept customId.
+- **Consumed today — `loadout`:** **Full Gear** (`geared`, default — fight as equipped, D28) and
+  **Bare-Knuckle** (`bare` — gear is set aside at the door: bare attributes, fists, no AV, no
+  equip penalties; the pack itself is untouched). `combatProfile(character, { loadout })` applies it.
+- **Designed SEAMs (typed + authored, mechanics deferred):** `arena` (terrain tags + obstacles —
+  R25, the owner's "sandy arena with obstacles"), `allowedWeaponKinds` (a weapons-only / future
+  "axes only" bout), `opponent` (`'player'` = consent PvP today, `'npc'` = a PvE Trial), and
+  `stakes` (`'real'` duel vs `'fantasy'` — lets sparring fold in later). A future mode
+  **`sand_axes`** ("Sands of the Axe": axes-only on shifting sand with cover) already exists in the
+  catalog as `selectable: false` — proof the shape holds end-to-end; flip the flag once the R25
+  arena + weapon-filter mechanics are built, no other wiring changes.
+- **Leaderboard categories** (`game/combat/leaderboards.ts`) — `/leaderboard [category]` ranks the
+  one record set by a catalog-chosen field (**Ranking** = ELO, **Most Victories** = wins today);
+  adding a board is a catalog entry (+ a record field if it needs new data). **SEAM:** a *per-mode*
+  ladder (a separate Bare-Knuckle or PvE-Trial board) adds a `mode` dimension to `SmackdownRecord`
+  and a filter here; the picker shape already fits it.
+### PvE — the Spire ladder ✅ v1 / 🟡 content *(D37)*
+`/smackdown trial` (owner's #PvE: "10 fighters, each stronger, you beat them, then a reward").
+`game/combat/spireLadder.ts` is a fixed gauntlet of **Spire-only champions** — hand-authored
+`CombatProfile` stat blocks (D10), **not world/town NPCs and not DB characters** (the owner ruled
+town-NPC dueling out): the engine already takes two profiles, so a champion is a stat block with
+no owner and **no consent** needed. A character's cleared rung lives on `SmackdownRecord.trialRung`
+(`$max`, monotonic); `/smackdown trial` fights the **next unbeaten** champion — a win advances the
+rung once and pays its **one-time reward** (Deltrada Coins today; a title/item/reputation is the
+SEAM), a loss costs **real Health** (persisted like a duel, D35 — you can be Downed, then must heal
+before trying again). **Rematches** (`/smackdown trial opponent:<already-beaten champion>`) let you
+re-fight any champion you've cleared — still real Health at stake, but **no reward and no rung
+change**, so the climb's rewards can't be farmed (reward fires only on beating your *next* unbeaten
+rung; a champion above your progress is refused). Fought **as-equipped**; the champion is always at
+full Health, the player at their current pool. Ranked on
+its own **`🏟️ Spire Ladder`** leaderboard category. 🟡 The roster + every stat/reward is a
+placeholder. SEAMs: a per-rung bout mode (bare-knuckle trials), boss loot, and — if ever wanted —
+the separate world/town-NPC duel (`opponent: 'npc'`, consent rolled) the owner flagged as "maybe
+later, not now".
+
 ### What's missing entirely
-- The **Health-pool + hit-location** (R12) / Soak / Downed formulas above — design only, no
-  `health` pool-with-locations on `Character`, no damage/soak calculation using `checks.ts`.
-- The **concentrated-damage critical injury** rule and the **armour ✕ weapon-type** multiplier
-  — design only.
+- The **hit-location trauma tally** + **concentrated-damage critical injury** (R12) and the
+  frame+Constitution **Health max** (the pool is the flat stored `health` for now, not split per
+  location) — design only; the duel above uses one shared pool with no locations.
+- The **armour ✕ weapon-type** multiplier — design only (the `computeDamage` seam is marked).
 - **Combat styles + counter-play** (`knowsStyle` defence bonus), **ranged shooting styles**, and
   **named signature moves** — design only; the `melee`/`ranged`/`brawling` nodes in
   `game/data/skills.ts` are unused stubs today.
 - **Fate points** — no field, no spend path.
-- The serious `/smackdown duel` and `/smackdown trial` (armed **and** unarmed bouts on the shared
-  engine) — no code; will be the next `ActivitySession` consumer after the travel `challenge`
-  handler (world-travel.md), reusing its crash-safe step-guarded pattern for a turn-based fight.
-- Criticals/fumbles (now decided, R21), Initiative, Fatigue, Conditions (Bleeding/Prone/Stunned/
-  Shaken/Broken) — none built.
+- `/smackdown duel` **built (D35)** and `/smackdown trial` (PvE Spire ladder) **built (D37)**; still
+  missing: **wagers**, a duel W/L record, boss loot / titles as trial rewards, and the **manual
+  turn-by-turn** mode (R24 option 2 — the auto-resolve v1 is a short in-memory action, not yet an
+  `ActivitySession`).
+- Criticals/fumbles (now decided, R21), **Initiative is used** (first strike; D35), Fatigue,
+  Conditions (Bleeding/Prone/Stunned/Shaken/Broken) — the rest none built.
 - **The R24 pre-fight setup menu** (stance/style/target picker driving the auto-resolve engine)
-  — no code; sparring today has no stance/style choice at all, it's pure engine-vs-engine.
+  — no code; the duel resolves as 'balanced' with no stance/style choice yet.
 - **Positioning & terrain (R25)** — explicitly not started, future-only; no grid, no terrain tags.
 
 ---

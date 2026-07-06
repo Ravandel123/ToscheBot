@@ -80,7 +80,7 @@ starting point):
 | Attribute | Governs |
 |---|---|
 | **Strength** | melee damage, carrying, breaking |
-| **Constitution** *(was "Toughness")* | soak, wounds, resistance to disease/poison/fatigue |
+| **Constitution** *(was "Toughness")* | soak, health points, resistance to disease/poison/fatigue |
 | **Agility** | speed/reflexes, melee to-hit, Dodge, initiative |
 | **Dexterity** | fine work, ranged to-hit, crafts, sleight, locks |
 | **Charisma** *(was "Fellowship")* | charm, persuade, deceit, command, haggle |

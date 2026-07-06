@@ -9,6 +9,9 @@ export interface SmackdownRecordDoc {
    eloRating: number;
    wins: number;
    losses: number;
+   /** Highest PvE Spire-ladder rung cleared = the next rung to fight (D37).
+    *  Absent on pre-D37 records → read as 0. */
+   trialRung: number;
    createdAt: Date;
    updatedAt: Date;
 }
@@ -19,6 +22,7 @@ const smackdownRecordSchema = new Schema({
    eloRating: { type: Number, required: true, default: DEFAULT_ELO },
    wins: { type: Number, required: true, default: 0 },
    losses: { type: Number, required: true, default: 0 },
+   trialRung: { type: Number, required: true, default: 0 },
 }, { timestamps: true });
 
 export const SmackdownRecord = model('SmackdownRecord', smackdownRecordSchema) as unknown as Model<SmackdownRecordDoc>;

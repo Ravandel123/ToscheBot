@@ -55,6 +55,7 @@ Topic files:
 | [conversations.md](conversations.md) | **Dialogue** as a durable multi-step event: options gated on / awarding traits/rep/checks, memory, quests |
 | [professions.md](professions.md) | **Foraging** (identification + misidentification), **fishing**, **gardening**, **cooking** (flavor/texture/likes) |
 | [npcs.md](npcs.md) | **NPCs** = `ownerId:null` Characters: seeding script, hourly behavior CRON, trade, teaming, conversation |
+| [images.md](images.md) | **Optional art** for events/places/characters: text-first with graceful fallback, place variants keyed on weather/time-of-day (presentation, not a mechanic) |
 
 Engineering conventions that are *not* game rules (tech stack, concurrency model, file layout,
 how commands/components/services are wired) stay in the root [`CLAUDE.md`](../CLAUDE.md) —
@@ -210,6 +211,7 @@ it; this table is the chronological master list.
 | R23 | **Item quality is a universal 0–4 tier NUMBER; the display NAME is resolved per item family** (a sword's "Masterwork" ≠ a fish's "Prize Catch"). | items-equipment.md |
 | R24 | **Combat resolution v1 = auto-resolve** (pre-fight stance/style/target menu, one narrated pass, no per-round input); **manual turn-by-turn control is a later, additive upgrade**, not v1. | combat.md |
 | R25 | **Positioning grid + terrain tags** (cramped rooms block 2H weapons, sand hinders footwork styles) — designed direction, explicitly deferred until after R24's manual mode exists. | combat.md |
+| R26 | **Images are optional art** for events/places/characters — code renders text-first and includes an image only if it resolves (never breaks when absent); places carry **variants keyed on weather + time-of-day** (D31 world state), picked most-specific-first with graceful fallback; the id→image mapping is a code catalog (D10), not filenames in the DB. | images.md |
 
 New decisions get the next free number in whichever series makes sense (a design call →
 next `R#`; keep this table and the topic file in sync in the same change) and are recorded in

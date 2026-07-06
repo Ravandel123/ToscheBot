@@ -46,7 +46,21 @@ export const smackdownService = {
       };
    },
 
-   async getLeaderboard(limit = 10): Promise<SmackdownRecordDoc[]> {
-      return SmackdownRecord.find().sort({ eloRating: -1 }).limit(limit).lean<SmackdownRecordDoc[]>();
+   /** Top records ranked by `sortField` (descending). The field comes from the
+    *  leaderboard-category catalog (game/combat/leaderboards.ts), so adding a
+    *  board is a catalog edit, not a service change. */
+   async getLeaderboard(sortField: keyof SmackdownRecordDoc = 'eloRating', limit = 10): Promise<SmackdownRecordDoc[]> {
+      return SmackdownRecord.find().sort({ [sortField]: -1 }).limit(limit).lean<SmackdownRecordDoc[]>();
+   },
+
+   /** Advances a character's PvE Spire-ladder progress to `rung` (D37). `$max`
+    *  makes it monotonic — a replay/double never regresses it. Safe under the
+    *  caller's character lock (like recordResult). */
+   async advanceTrial(characterId: string, characterName: string, rung: number): Promise<void> {
+      await SmackdownRecord.updateOne(
+         { _id: characterId },
+         { $set: { characterName }, $max: { trialRung: rung }, $setOnInsert: { eloRating: DEFAULT_ELO, wins: 0, losses: 0 } },
+         { upsert: true },
+      );
    },
 };
