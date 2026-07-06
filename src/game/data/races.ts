@@ -26,7 +26,7 @@ export const RACES = {
    felis: {
       name: 'Felis',
       description: 'Scholars of Kishar — clever, aloof.',
-      attributeModifiers: { agility: 5, intelligence: 5, strength: -5, consitution: -5 },
+      attributeModifiers: { agility: 5, intelligence: 5, strength: -5, constitution: -5 },
    },
    lutren: {
       name: 'Lutren',
@@ -36,12 +36,12 @@ export const RACES = {
    polcan: {
       name: 'Polcan',
       description: 'Stateless exiles of the Western Sea — piratical, bronze-clad.',
-      attributeModifiers: { strength: 5, consitution: 5, agility: -5, charisma: -5 },
+      attributeModifiers: { strength: 5, constitution: 5, agility: -5, charisma: -5 },
    },
    tamian: {
       name: 'Tamian',
       description: 'Treetop dwellers of forest Terria — agile, industrious.',
-      attributeModifiers: { agility: 5, perception: 5, strength: -5, consitution: -5 },
+      attributeModifiers: { agility: 5, perception: 5, strength: -5, constitution: -5 },
    },
    vulpin: {
       name: 'Vulpin',

@@ -9,7 +9,7 @@ function character(overrides: Partial<CharacterDoc> = {}): CharacterDoc {
    return {
       _id: 'c1',
       identity: { name: 'Bruiser', epithet: '', race: null, gender: '', bio: '', avatarUrl: '' },
-      attributes: { strength: 25, consitution: 30, agility: 40, dexterity: 25, charisma: 25, willpower: 25, perception: 20, intelligence: 25 },
+      attributes: { strength: 25, constitution: 30, agility: 40, dexterity: 25, charisma: 25, willpower: 25, perception: 20, intelligence: 25 },
       resources: { health: { current: 20, max: 20 }, stamina: { current: 10, max: 10 } },
       progression: { skills: {} },
       inventory: [],

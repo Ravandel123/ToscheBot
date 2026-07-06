@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm run lint 2>&1)",
+      "PowerShell(npm run seed 2>&1)",
+      "Bash(npx vitest *)",
+      "Bash(npm run build *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run test *)",
+      "Bash(npm test *)",
+      "Bash(npm view *)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}

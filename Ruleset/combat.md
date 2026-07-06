@@ -395,7 +395,7 @@ round (d100/Health/Soak instead of the placeholder d20/maxHp below).
 `attributeBonus(v) = floor(v/10)`; `maxHp = strengthBonus×5 + willpowerBonus×5 +
 constitutionBonus×10` (ported from the old bot's `getMaxHp`); `attackBonus = weaponSkill +
 strengthBonus` where `weaponSkill` = the character's trained points in the `melee` +
-`brawling` skill-tree roots (skills.md); `defenseBonus = agilityBonus + consitutionBonus`.
+`brawling` skill-tree roots (skills.md); `defenseBonus = agilityBonus + constitutionBonus`.
 `game/combat/engine.ts` resolves rounds as `d20 + attackBonus` vs `d20 + defenseBonus` — this
 is a **different, older engine** than `checks.ts`'s d100 system, kept only because sparring is
 explicitly fantasy/for-fun and nothing here needs to match the real ruleset. Since D25 gave

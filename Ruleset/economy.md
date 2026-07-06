@@ -78,7 +78,7 @@ Smackdown ELO.
   faction-standing modifier (factions.md) × Haggle-check result (skills.md). Confirm the formula
   and how much standing/skill should swing price.
 - **Time/encumbrance/survival as a deep-layer economy sink** *(P18)* — hooks (a Fatigued
-  condition, Consitution vs disease) can stay in the design without building a full survival sim;
+  condition, Constitution vs disease) can stay in the design without building a full survival sim;
   must always stay auto-managed for casuals per README.md's pillar 6.
 
 ---

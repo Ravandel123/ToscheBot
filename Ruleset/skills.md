@@ -168,7 +168,7 @@ proposed root attribute, sketches the intended launch catalog:
 | root attribute | skills |
 |---|---|
 | Strength | Athletics, Row |
-| Consitution | Consitution (resistance) |
+| Constitution | Constitution (resistance) |
 | Agility | **Melee**, Dodge, Climb, Stealth, Acrobatics, Ride, Swim |
 | Dexterity | **Ranged**, Trade (a craft, per-material), Sleight of Hand, Pick Lock, Sail/Drive |
 | Perception | Awareness, Track, Search, Navigate |

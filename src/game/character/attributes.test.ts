@@ -27,7 +27,7 @@ describe('baseAttributes', () => {
       expect(canid.willpower).toBe(ATTRIBUTE_BASE + 5);
       expect(canid.agility).toBe(ATTRIBUTE_BASE - 5);
       expect(canid.charisma).toBe(ATTRIBUTE_BASE - 5);
-      expect(canid.consitution).toBe(ATTRIBUTE_BASE);
+      expect(canid.constitution).toBe(ATTRIBUTE_BASE);
    });
 
    it('keeps every race net-zero (a balance invariant of the catalog)', () => {
@@ -56,7 +56,7 @@ describe('adjustAllocation', () => {
       let allocation = emptyAllocation();
       allocation = adjustAllocation(allocation, 'strength', 20);
       allocation = adjustAllocation(allocation, 'agility', 20);
-      allocation = adjustAllocation(allocation, 'consitution', 8);
+      allocation = adjustAllocation(allocation, 'constitution', 8);
       allocation = adjustAllocation(allocation, 'perception', 5); // only 2 left
       expect(allocation.perception).toBe(2);
       expect(pointsSpent(allocation)).toBe(CREATION_ATTRIBUTE_POINTS);

@@ -28,8 +28,10 @@ export default tseslint.config(
    },
    {
       // Test doubles often have async signatures (to match a callback type)
-      // without an await inside; that's expected in tests.
-      files: ['**/*.test.ts'],
+      // without an await inside; that's expected in tests and in the shared
+      // test harness under src/testing/ (the fake-interaction methods mirror
+      // discord.js's async API without awaiting anything).
+      files: ['**/*.test.ts', 'src/testing/**/*.ts'],
       rules: {
          '@typescript-eslint/require-await': 'off',
       },

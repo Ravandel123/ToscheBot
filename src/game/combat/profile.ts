@@ -54,7 +54,7 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
    const armorValue = stripped ? 0 : totalEquippedArmor(character);
    const attackNode: SkillNodeId = weapon ? weaponSkillNode(weapon) : 'brawling';
    const strengthBonus = attributeBonus(attributes.strength);
-   const constitutionBonus = attributeBonus(attributes.consitution);
+   const constitutionBonus = attributeBonus(attributes.constitution);
 
    return {
       characterId: character._id,
