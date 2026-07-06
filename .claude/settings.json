@@ -10,7 +10,9 @@
       "Bash(npm test *)",
       "Bash(npm view *)",
       "Bash(node -e \"console.log\\(require\\('mongodb-memory-server/package.json'\\).version\\)\")",
-      "Bash(node -e \"try{const d=require\\('mongodb-memory-server-core/package.json'\\);console.log\\('core',d.version\\)}catch\\(e\\){}\")"
+      "Bash(node -e \"try{const d=require\\('mongodb-memory-server-core/package.json'\\);console.log\\('core',d.version\\)}catch\\(e\\){}\")",
+      "Bash(node -e ' *)",
+      "Bash(npx eslint *)"
     ],
     "additionalDirectories": [
       "\\tmp"

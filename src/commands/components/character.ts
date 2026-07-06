@@ -4,7 +4,7 @@ import {
    type ModalSubmitInteraction,
    type StringSelectMenuInteraction,
 } from 'discord.js';
-import { ComponentHandler } from '../../types/interactions.js';
+import type { ComponentHandler } from '../../types/interactions.js';
 import { config } from '../../config.js';
 import { settings } from '../../settings.js';
 import { characterService } from '../../db/services/characterService.js';
@@ -388,7 +388,7 @@ async function ownedEditable(
 ): Promise<CharacterDoc | null> {
    const character = await characterService.get(characterId);
 
-   if (!character || character.ownerId !== interaction.user.id) {
+   if (character?.ownerId !== interaction.user.id) {
       await interaction.reply({ content: "That isn't your character.", ...ephemeral });
       return null;
    }

@@ -11,12 +11,11 @@ const entries = Object.entries(LOCATIONS) as [LocationId, LocationDefinition][];
 
 describe('LOCATIONS world content', () => {
    it('climate overrides reference real weather kinds with positive weights', () => {
-      for (const [id, location] of entries) {
+      for (const [id, location] of entries)
          for (const [kind, weight] of Object.entries(location.climate ?? {})) {
             expect(kind in WEATHER, `${id} climate has unknown weather '${kind}'`).toBe(true);
             expect(weight, `${id} climate weight for ${kind}`).toBeGreaterThan(0);
          }
-      }
    });
 
    it('features carry unique ids and reveal lines', () => {
@@ -32,14 +31,13 @@ describe('LOCATIONS world content', () => {
    });
 
    it('baseStats reference real stats within their catalog ranges', () => {
-      for (const [id, location] of entries) {
+      for (const [id, location] of entries)
          for (const [key, value] of Object.entries(location.baseStats ?? {})) {
             expect(key in LOCATION_STATS, `${id} baseStats has unknown stat '${key}'`).toBe(true);
             const def = LOCATION_STATS[key as LocationStatKey];
             expect(value, `${id} ${key} below min`).toBeGreaterThanOrEqual(def.min);
             expect(value, `${id} ${key} above max`).toBeLessThanOrEqual(def.max);
          }
-      }
    });
 
    // The hub's travel select lists one option per road; Discord caps a select

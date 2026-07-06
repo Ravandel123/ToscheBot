@@ -1,5 +1,5 @@
 import { AttachmentBuilder } from 'discord.js';
-import { CronJob } from '../types/jobs.js';
+import type { CronJob } from '../types/jobs.js';
 import { config } from '../config.js';
 import { settings } from '../settings.js';
 import { backupFileName, buildBackupDump, documentCount } from '../db/backup.js';

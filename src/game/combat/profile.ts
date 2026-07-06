@@ -96,7 +96,7 @@ export function equippedWeapon(character: CharacterDoc): WeaponDefinition | null
       return null;
 
    const item = findItem(character, mainHandId);
-   return item && item.definition.kind === 'weapon' ? item.definition : null;
+   return item?.definition.kind === 'weapon' ? item.definition : null;
 }
 
 /** Which melee branch a weapon trains/attacks with — grip-based for v1 (both live

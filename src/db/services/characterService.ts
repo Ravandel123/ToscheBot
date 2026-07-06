@@ -71,10 +71,9 @@ export const characterService = {
    async updateIdentity(characterId: string, identity: EditableIdentity): Promise<CharacterDoc | null> {
       const set: Record<string, unknown> = {};
 
-      for (const [key, value] of Object.entries(identity)) {
+      for (const [key, value] of Object.entries(identity))
          if (value !== undefined)
             set[`identity.${key}`] = value;
-      }
 
       if (Object.keys(set).length === 0)
          return this.get(characterId);

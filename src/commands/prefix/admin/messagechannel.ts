@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { resolveGuildChannel } from '../../../lib/discord.js';
 
 export default {

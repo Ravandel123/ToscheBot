@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { locateComic } from '../../../fun/comic.js';
 import { buildComicMessage } from '../../components/_comicView.js';
 

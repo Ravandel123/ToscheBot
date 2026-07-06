@@ -319,7 +319,7 @@ function statFields(character: CharacterDoc, item: ResolvedItem): { name: string
       ];
    }
 
-   if (def.kind === 'shield' || def.kind === 'armor') {
+   if (def.kind === 'shield' || def.kind === 'armor')
       return [{
          name: def.kind === 'shield' ? 'Shield' : 'Armor',
          value: [
@@ -330,7 +330,6 @@ function statFields(character: CharacterDoc, item: ResolvedItem): { name: string
          ].filter(Boolean).join('\n'),
          inline: true,
       }];
-   }
 
    if (def.kind === 'consumable') {
       const effects = Object.entries(def.effects)
@@ -350,12 +349,11 @@ function detailButtons(character: CharacterDoc, item: ResolvedItem, state: Brows
    const equippedSlot = slotOfInstance(character, item.instance.instanceId);
    const buttons: ButtonBuilder[] = [];
 
-   if (isEquippable(def)) {
+   if (isEquippable(def))
       if (equippedSlot)
          buttons.push(new ButtonBuilder().setCustomId(`inventory:unequip:${suffix}`).setLabel('Unequip').setEmoji('🫳').setStyle(ButtonStyle.Secondary));
       else
          buttons.push(new ButtonBuilder().setCustomId(`inventory:equip:${suffix}`).setLabel('Equip').setEmoji('🫴').setStyle(ButtonStyle.Primary));
-   }
 
    if (def.kind === 'consumable')
       buttons.push(new ButtonBuilder().setCustomId(`inventory:use:${suffix}`).setLabel('Use').setEmoji('🍽️').setStyle(ButtonStyle.Primary));

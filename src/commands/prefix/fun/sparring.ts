@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { settings } from '../../../settings.js';
 import { resolveGuildChannel } from '../../../lib/discord.js';
 import { randomInt, randomItem } from '../../../lib/random.js';
@@ -41,7 +41,7 @@ function renderRound(round: RoundEvent, names: Record<string, string>): string {
 export default {
    name: 'sparring',
    aliases: ['smackdown', 'sd'],
-   description: "Tosch throws you into the Smackdown Spire for a silly, no-stakes brawl.",
+   description: 'Tosch throws you into the Smackdown Spire for a silly, no-stakes brawl.',
    usage: '@opponent',
    category: 'fun',
    async execute(message) {
@@ -66,7 +66,7 @@ export default {
 
       const spire = resolveGuildChannel(message.guild, settings.channels.smackdownSpire);
       if (!spire?.isSendable()) {
-         await message.reply(`The Spire is missing. Set \`channels.smackdownSpire\` in settings to a real channel.`);
+         await message.reply('The Spire is missing. Set `channels.smackdownSpire` in settings to a real channel.');
          return;
       }
 

@@ -1,4 +1,4 @@
-import { Message } from 'discord.js';
+import type { Message } from 'discord.js';
 import { defineEvent } from '../types/events.js';
 import { config } from '../config.js';
 import { log } from '../lib/log.js';

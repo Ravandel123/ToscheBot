@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { parseFiniteNumber, parseIntInRange } from '../../../lib/number.js';
 import { kgToImperial } from '../../../lib/units.js';
 

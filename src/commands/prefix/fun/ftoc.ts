@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { parseFiniteNumber, parseIntInRange, roundTo } from '../../../lib/number.js';
 import { fahrenheitToCelsius } from '../../../lib/units.js';
 

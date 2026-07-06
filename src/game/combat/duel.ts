@@ -100,7 +100,7 @@ export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = rando
    // Initiative decides the first attacker; an exact tie is a coin flip.
    let attacker = a.initiative > b.initiative ? a
       : b.initiative > a.initiative ? b
-      : (rng(0, 1) === 0 ? a : b);
+         : (rng(0, 1) === 0 ? a : b);
    let defender = attacker.characterId === a.characterId ? b : a;
 
    for (let round = 0; round < MAX_ROUNDS && health[a.characterId] > 0 && health[b.characterId] > 0; round++) {

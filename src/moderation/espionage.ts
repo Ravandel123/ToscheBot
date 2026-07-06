@@ -1,4 +1,4 @@
-import { EmbedBuilder, Guild, Message } from 'discord.js';
+import { EmbedBuilder, type Guild, type Message } from 'discord.js';
 import { settings } from '../settings.js';
 import { resolveGuildChannel } from '../lib/discord.js';
 import { log } from '../lib/log.js';

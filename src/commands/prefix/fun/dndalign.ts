@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { randomItem } from '../../../lib/random.js';
 import { replyChunked, targetFromArgs } from '../../../lib/discord.js';
 import { bold, capitalize } from '../../../lib/text.js';

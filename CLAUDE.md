@@ -52,7 +52,8 @@ its own domain module with its own data models.
 - **TypeScript 6** (strict), Node >= 22.14, **discord.js v14**, **mongoose 9** (MongoDB
   Atlas **free tier M0** — 512 MB storage, limited connections; keep documents lean and
   prefer bulk operations), **node-cron 4**, **ESLint 10** (flat config, type-checked
-  rules via typescript-eslint).
+  rules via typescript-eslint, plus `@stylistic` for formatting and
+  `eslint-plugin-perfectionist` for import-group order).
 - **No dotenv**: `config.ts` loads `.env` with Node's native `process.loadEnvFile()`
   (wrapped in try/catch — on the VPS, vars may come from the service environment) and
   fails fast on any missing variable. No `uuid` either — use `crypto.randomUUID()`.
@@ -81,7 +82,17 @@ its own domain module with its own data models.
 ### Code style & naming conventions
 
 Formalizes what the codebase already does consistently — don't introduce new patterns,
-match these.
+match these. **Most of this section is machine-enforced by `eslint.config.mjs`**
+(2026-07-06): indentation/quotes/semicolons/trailing commas (`@stylistic`), the class
+member order (`member-ordering`), the import group order (`perfectionist/sort-imports` —
+groups only; order within a group is the author's), `import type` (`consistent-type-imports`,
+inline fix style), guard-clause braces (`curly: multi, consistent` — braces only around
+multi-statement bodies, consistent across an if/else chain) and `no-else-return`. Also on:
+`no-console` outside `src/scripts/` + `lib/log.ts`, `switch-exhaustiveness-check`,
+`prefer-nullish-coalescing` (strings exempt — `|| fallback` on possibly-empty strings is a
+deliberate pattern here) and `no-deprecated` (which caught the discord.js modal-builder
+rework — modals now use `addLabelComponents` + `LabelBuilder`, not action rows). When a
+convention changes, change the rule and this section together.
 
 - **Naming**: `PascalCase` for types/interfaces/classes, `camelCase` for functions/
   variables/files, `SCREAMING_SNAKE_CASE` for module-level constants (especially catalog/

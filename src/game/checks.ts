@@ -63,7 +63,7 @@ export function checkEffective(subject: CheckSubject, check: CheckDefinition): n
 /** The d100 target this character rolls under: Effective shaped by difficulty and
  *  racial affinity, clamped to [5, 95]. Pure. */
 export function checkTarget(subject: CheckSubject, check: CheckDefinition): number {
-   const affinity = (subject.identity.race && check.raceAffinity?.[subject.identity.race]) || 1;
+   const affinity = (subject.identity.race ? check.raceAffinity?.[subject.identity.race] : undefined) ?? 1;
    const target = (checkEffective(subject, check) + (check.modifier ?? 0)) * affinity;
 
    return Math.max(CHECK_MIN_TARGET, Math.min(CHECK_MAX_TARGET, Math.round(target)));

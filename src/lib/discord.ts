@@ -1,4 +1,4 @@
-import { Guild, GuildBasedChannel, Message } from 'discord.js';
+import type { Guild, GuildBasedChannel, Message } from 'discord.js';
 import type { ToscheClient } from '../client.js';
 
 export const MAX_MESSAGE_LENGTH = 2000;
@@ -71,9 +71,7 @@ export function chunkMessage(content: string, maxLength = MAX_MESSAGE_LENGTH): s
       if (candidate.length > maxLength) {
          flush();
          current = line;
-      } else {
-         current = candidate;
-      }
+      } else {current = candidate;}
    }
 
    flush();
@@ -91,8 +89,7 @@ export async function replyChunked(message: Message, content: string): Promise<v
    const [first, ...rest] = chunkMessage(content);
    await message.reply(first);
 
-   for (const chunk of rest) {
+   for (const chunk of rest)
       if (message.channel.isSendable())
          await message.channel.send(chunk);
-   }
 }

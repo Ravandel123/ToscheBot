@@ -91,13 +91,12 @@ export class CharacterLockManager {
       for (let queue = this.deferred.get(characterId); queue?.length; queue = this.deferred.get(characterId)) {
          this.deferred.delete(characterId);
 
-         for (const op of queue) {
+         for (const op of queue)
             try {
                await op();
             } catch (error) {
                log.error(`Deferred op for character ${characterId} failed:`, error);
             }
-         }
       }
    }
 }

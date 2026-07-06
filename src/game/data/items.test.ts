@@ -22,10 +22,9 @@ describe('item catalog', () => {
    });
 
    it('two-handed weapons live in the main hand only', () => {
-      for (const [id, def] of entries) {
+      for (const [id, def] of entries)
          if (def.kind === 'weapon' && def.hands === 2)
             expect(def.slots, id).toEqual(['mainHand']);
-      }
    });
 
    it('weapon damage ranges are ordered and non-negative', () => {

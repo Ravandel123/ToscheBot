@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Message } from 'discord.js';
+import type { Message } from 'discord.js';
 import { chunkMessage, targetFromArgs, MAX_MESSAGE_LENGTH } from './discord.js';
 
 describe('chunkMessage', () => {

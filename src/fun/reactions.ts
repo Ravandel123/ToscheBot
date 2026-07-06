@@ -36,13 +36,12 @@ export function celebratePhrase(): string {
 
 /** Tosch hugs (or, 15% of the time, refuses to touch) the target. */
 export function hugPhrase(who: string): string {
-   if (chance(15)) {
+   if (chance(15))
       return randomItem([
          `Sorry, I am not touching ${who}. This is gross${funnyEnding('.')}`,
          `Nah, let ${randomPerson()} hug you instead.`,
          `Nope, no hugs for you${funnyEnding('.')}`,
       ]);
-   }
 
    return randomItem([':hugging:', `*Hugs ${who}.*`]);
 }

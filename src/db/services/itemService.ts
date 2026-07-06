@@ -178,7 +178,7 @@ export const itemService = {
  *  handle space a retry is nearly impossible; running out means something is
  *  broken enough to surface as an error. */
 async function insertWithFreshHandle(doc: Omit<ItemDoc, 'instanceId' | 'createdAt' | 'updatedAt'>): Promise<void> {
-   for (let attempt = 0; attempt < 5; attempt++) {
+   for (let attempt = 0; attempt < 5; attempt++)
       try {
          await Item.create({ ...doc, instanceId: mintInstanceId(new Set()) });
          return;
@@ -186,7 +186,6 @@ async function insertWithFreshHandle(doc: Omit<ItemDoc, 'instanceId' | 'createdA
          if (!isDuplicateKeyError(error))
             throw error;
       }
-   }
 
    throw new Error(`Could not mint a unique stash handle for owner ${doc.ownerId}.`);
 }

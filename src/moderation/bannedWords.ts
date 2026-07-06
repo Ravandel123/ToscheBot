@@ -21,12 +21,11 @@ function collapseWithMap(content: string): { collapsed: string; map: number[] } 
    let collapsed = '';
    const map: number[] = [];
 
-   for (let i = 0; i < lower.length; i++) {
+   for (let i = 0; i < lower.length; i++)
       if (/[a-z0-9]/.test(lower[i])) {
          collapsed += lower[i];
          map.push(i);
       }
-   }
 
    return { collapsed, map };
 }
@@ -37,10 +36,9 @@ function collapseWithMap(content: string): { collapsed: string; map: number[] } 
 const isWordChar = (char: string | undefined): boolean => !!char && /[a-z0-9]/i.test(char);
 
 function findLiteralIndex(lower: string, term: string): number {
-   for (let index = lower.indexOf(term); index >= 0; index = lower.indexOf(term, index + 1)) {
+   for (let index = lower.indexOf(term); index >= 0; index = lower.indexOf(term, index + 1))
       if (!isWordChar(lower[index - 1]))
          return index;
-   }
 
    return -1;
 }

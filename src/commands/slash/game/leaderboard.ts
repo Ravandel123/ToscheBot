@@ -1,5 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
-import { SlashCommand } from '../../../types/commands.js';
+import type { SlashCommand } from '../../../types/commands.js';
 import { smackdownService } from '../../../db/services/smackdownService.js';
 import { DEFAULT_LEADERBOARD_CATEGORY, LEADERBOARD_CATEGORY_IDS, leaderboardCategory } from '../../../game/combat/leaderboards.js';
 

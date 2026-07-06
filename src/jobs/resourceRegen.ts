@@ -1,4 +1,4 @@
-import { CronJob } from '../types/jobs.js';
+import type { CronJob } from '../types/jobs.js';
 import { characterService } from '../db/services/characterService.js';
 import { activitySessionService } from '../db/services/activitySessionService.js';
 import { log } from '../lib/log.js';

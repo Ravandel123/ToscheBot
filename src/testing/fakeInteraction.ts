@@ -1,9 +1,9 @@
-import { CharacterLockManager } from '../core/locks.js';
 import type {
    AnySelectMenuInteraction,
    ButtonInteraction,
    ModalSubmitInteraction,
 } from 'discord.js';
+import { CharacterLockManager } from '../core/locks.js';
 import type { ComponentInteraction } from '../types/interactions.js';
 import type { ToscheClient } from '../client.js';
 

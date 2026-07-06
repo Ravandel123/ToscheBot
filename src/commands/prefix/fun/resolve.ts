@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { personGrammar } from '../../../lib/person.js';
 import { capitalize } from '../../../lib/text.js';
 import { sleep } from '../../../lib/async.js';

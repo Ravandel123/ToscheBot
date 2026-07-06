@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, MessageFlags } from 'discord.js';
+import { type ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 import { defineEvent } from '../types/events.js';
 import { config } from '../config.js';
 import { log } from '../lib/log.js';

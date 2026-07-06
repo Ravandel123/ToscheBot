@@ -1,5 +1,5 @@
 import { MessageFlags } from 'discord.js';
-import { ComponentHandler } from '../../types/interactions.js';
+import type { ComponentHandler } from '../../types/interactions.js';
 import { accountService } from '../../db/services/accountService.js';
 import { buildSkillOverview, buildSkillTreeView } from './_skillPanel.js';
 

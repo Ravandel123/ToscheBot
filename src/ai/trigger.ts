@@ -1,4 +1,4 @@
-import { Message } from 'discord.js';
+import type { Message } from 'discord.js';
 import type { ToscheClient } from '../client.js';
 import { settings } from '../settings.js';
 import { chance } from '../lib/random.js';

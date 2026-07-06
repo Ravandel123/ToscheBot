@@ -1,5 +1,5 @@
 import { MessageFlags, type ButtonInteraction, type SendableChannels } from 'discord.js';
-import { ComponentHandler } from '../../types/interactions.js';
+import type { ComponentHandler } from '../../types/interactions.js';
 import { characterService } from '../../db/services/characterService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { canCharacterAct } from '../../game/character/rules.js';
@@ -65,7 +65,7 @@ export default {
 
 async function handleAccept(client: ToscheClient, interaction: ButtonInteraction, challengerId: string, opponentId: string, modeId: string): Promise<void> {
    const opponent = await characterService.get(opponentId);
-   if (!opponent || opponent.ownerId !== interaction.user.id) {
+   if (opponent?.ownerId !== interaction.user.id) {
       await interaction.reply({ content: 'This challenge is not yours to answer, soldier.', ...ephemeral });
       return;
    }
@@ -117,7 +117,7 @@ async function handleAccept(client: ToscheClient, interaction: ButtonInteraction
 
 async function handleDecline(interaction: ButtonInteraction, challengerId: string, opponentId: string): Promise<void> {
    const opponent = await characterService.get(opponentId);
-   if (!opponent || opponent.ownerId !== interaction.user.id) {
+   if (opponent?.ownerId !== interaction.user.id) {
       await interaction.reply({ content: 'This challenge is not yours to answer, soldier.', ...ephemeral });
       return;
    }

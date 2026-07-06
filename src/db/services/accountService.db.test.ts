@@ -30,7 +30,7 @@ describe('accountService.setActiveCharacter', () => {
       expect((await accountService.getActiveCharacter(USER, 'Rav'))?._id).toBe(a);
    });
 
-   it("refuses a character the user does not own", async () => {
+   it('refuses a character the user does not own', async () => {
       const mine = await characterService.create(USER, { name: 'Mine', race: 'canid' });
       const theirs = await characterService.create('someone-else', { name: 'Theirs', race: 'canid' });
       const locks = new CharacterLockManager();

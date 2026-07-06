@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { botClient } from '../../../lib/discord.js';
 import { postDatabaseBackup } from '../../../jobs/dbBackup.js';
 

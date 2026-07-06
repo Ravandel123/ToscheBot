@@ -1,5 +1,5 @@
-import { type Message, type User } from 'discord.js';
-import { PrefixCommand } from '../../../types/commands.js';
+import type { Message, User } from 'discord.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 
 // Resolves the DM target: a mention, else a raw user id. (Name lookup isn't
 // supported here — DMs need an exact user.)

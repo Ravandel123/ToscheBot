@@ -168,7 +168,7 @@ async function handleRetreat(
 async function repaintCurrent(interaction: ButtonInteraction, sessionId: string): Promise<void> {
    const fresh = await activitySessionService.get(sessionId);
 
-   if (!fresh || fresh.status !== 'active') {
+   if (fresh?.status !== 'active') {
       await interaction.update({ content: 'This activity has already ended.', embeds: [], components: [] });
       return;
    }

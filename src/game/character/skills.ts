@@ -45,10 +45,10 @@ export function nodePoints(progression: SkillProgression, id: SkillNodeId): numb
  *  sibling leaves never counts their shared parent twice. */
 export function pathNodeSet(nodeIds: readonly SkillNodeId[]): SkillNodeId[] {
    const seen = new Set<SkillNodeId>();
-   for (const id of nodeIds) {
+   for (const id of nodeIds)
       for (const node of pathToRoot(id))
          seen.add(node);
-   }
+
    return [...seen];
 }
 
@@ -96,10 +96,10 @@ export function usesForNextPoint(id: SkillNodeId, points: number): number {
    if (points >= cap)
       return Infinity;
 
-   for (const band of growthProfileFor(id).bands) {
+   for (const band of growthProfileFor(id).bands)
       if (points < band.upTo)
          return band.usesPerPoint;
-   }
+
    return Infinity; // points below cap but past every band — treat as capped
 }
 

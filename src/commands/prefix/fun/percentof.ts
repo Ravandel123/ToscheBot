@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { replyChunked, targetFromArgs } from '../../../lib/discord.js';
 import { percentApplied } from '../../../fun/amount.js';
 

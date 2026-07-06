@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import { SlashCommand } from '../../../types/commands.js';
+import type { SlashCommand } from '../../../types/commands.js';
 import { fetchProfilePanel } from '../../components/_profilePanel.js';
 
 // The ACCOUNT surface (D27): your Discord-user-level state — active character

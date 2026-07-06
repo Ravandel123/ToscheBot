@@ -44,13 +44,12 @@ export const classRoast = (who: string): string => roastFrame(who, composedClass
 
 /** "{who} is my savage Troglodyte." — an identity verdict, sometimes a place sighting. */
 export function whoisPhrase(who: string): string {
-   if (chance(30)) {
+   if (chance(30))
       return randomItem([
          `I think I saw ${who} in ${bold(randomItem(PLACES))}.`,
          `${who} was with me in ${bold(randomItem(PLACES))}.`,
          `I have definitely seen ${who} in ${bold(randomItem(PLACES))}.`,
       ]);
-   }
 
    const owner = chance(50) ? 'my' : `${randomPerson()}'s`;
    const adjective = chance(70) ? `${randomItem(INSULT_ADJECTIVES)} ` : '';

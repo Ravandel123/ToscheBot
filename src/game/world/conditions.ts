@@ -75,11 +75,10 @@ export function evaluateCondition(condition: LocationCondition | undefined, ctx:
    if (condition.requiresDiscovery && !ctx.discoveredFeatureIds.includes(condition.requiresDiscovery))
       return { ok: false, reason: 'no one has found it yet' };
 
-   if (condition.minTraits) {
+   if (condition.minTraits)
       for (const [key, min] of Object.entries(condition.minTraits))
          if ((ctx.traits?.[key as TraitKey] ?? 0) < (min ?? 0))
             return { ok: false, reason: 'not for the likes of you' };
-   }
 
    return { ok: true };
 }

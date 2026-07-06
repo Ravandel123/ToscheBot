@@ -1,5 +1,5 @@
 import { MessageFlags } from 'discord.js';
-import { ComponentHandler, type ComponentInteraction } from '../../types/interactions.js';
+import type { ComponentHandler, ComponentInteraction } from '../../types/interactions.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { characterService } from '../../db/services/characterService.js';
 import { isExpired } from '../../game/activity/session.js';
@@ -23,7 +23,7 @@ export default {
       // Lazy expiry: a lapsed session counts as ended even before the TTL
       // index physically deletes it (timeout ⇒ forfeit, D17).
       const session = sessionId ? await activitySessionService.get(sessionId) : null;
-      if (!session || session.status !== 'active' || isExpired(session.expiresAt)) {
+      if (session?.status !== 'active' || isExpired(session.expiresAt)) {
          await endedReply(interaction);
          return;
       }

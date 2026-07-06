@@ -1,4 +1,4 @@
-import { BotConfig } from './types/core.js';
+import type { BotConfig } from './types/core.js';
 
 try {
    // Set ENV_FILE to load an alternate env file (e.g. `.env.production` to run

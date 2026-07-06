@@ -63,7 +63,7 @@ export const accountService = {
     */
    async setActiveCharacter(userId: string, username: string, characterId: string, locks: CharacterLockManager): Promise<SwitchResult> {
       const target = await characterService.get(characterId);
-      if (!target || target.ownerId !== userId)
+      if (target?.ownerId !== userId)
          return { ok: false, reason: 'not-owned' };
 
       const account = await this.getOrCreate(userId, username);

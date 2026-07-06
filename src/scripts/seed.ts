@@ -1,6 +1,6 @@
 import { accountService } from '../db/services/accountService.js';
 import { characterService } from '../db/services/characterService.js';
-import { CharacterLockManager } from '../core/locks.js';
+import type { CharacterLockManager } from '../core/locks.js';
 import { CREATION_ATTRIBUTE_POINTS, MAX_POINTS_PER_ATTRIBUTE, emptyAllocation } from '../game/character/attributes.js';
 import { BIO_MAX_LENGTH, EPITHET_MAX_LENGTH, GENDER_CHOICES, NAME_MAX_LENGTH, NAME_MIN_LENGTH } from '../game/character/identity.js';
 import { defaultBody, parseBody } from '../game/character/body.js';
@@ -95,13 +95,12 @@ export async function applyEntry(entry: SeedCharacter, locks: CharacterLockManag
 
    await characterService.setAttributeAllocation(character._id, entry.race, { ...emptyAllocation(), ...entry.attributes });
 
-   if (entry.body) {
+   if (entry.body)
       await characterService.setBody(character._id, parseBody({
          heightCm: entry.body.heightCm?.toString(),
          weightKg: entry.body.weightKg?.toString(),
          age: entry.body.age?.toString(),
       }, defaultBody(entry.race)));
-   }
 
    // Walk the real guarded lifecycle (draft → pending → approved) instead of
    // poking the status field, so the seed breaks visibly if the flow changes.

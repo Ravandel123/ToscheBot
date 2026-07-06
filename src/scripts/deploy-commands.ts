@@ -1,11 +1,11 @@
+import path from 'node:path';
 // Registers all slash commands for the single guild (guild-scoped commands
 // propagate instantly; this bot never registers global commands — see D1).
 // Run with: npm run deploy
 import { REST, Routes } from 'discord.js';
-import path from 'node:path';
 import { config } from '../config.js';
 import { loadDefaultExports } from '../core/loader.js';
-import { SlashCommand } from '../types/commands.js';
+import type { SlashCommand } from '../types/commands.js';
 
 const slashDir = path.join(import.meta.dirname, '..', 'commands', 'slash');
 const commands = await loadDefaultExports<SlashCommand>(slashDir);

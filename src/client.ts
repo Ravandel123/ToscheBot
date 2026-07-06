@@ -1,14 +1,14 @@
-import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import path from 'node:path';
+import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import { loadDefaultExports } from './core/loader.js';
 import { CooldownManager } from './core/cooldowns.js';
 import { CharacterLockManager } from './core/locks.js';
 import { validateJobs } from './core/scheduler.js';
 import { createAiService, type AiService } from './ai/aiService.js';
-import { PrefixCommand, SlashCommand } from './types/commands.js';
-import { ComponentHandler } from './types/interactions.js';
-import { BotEvent } from './types/events.js';
-import { CronJob } from './types/jobs.js';
+import type { PrefixCommand, SlashCommand } from './types/commands.js';
+import type { ComponentHandler } from './types/interactions.js';
+import type { BotEvent } from './types/events.js';
+import type { CronJob } from './types/jobs.js';
 import { log } from './lib/log.js';
 
 export class ToscheClient extends Client {
@@ -35,7 +35,7 @@ export class ToscheClient extends Client {
             GatewayIntentBits.GuildMessageReactions,
             GatewayIntentBits.DirectMessages,
             GatewayIntentBits.DirectMessageReactions,
-            GatewayIntentBits.MessageContent
+            GatewayIntentBits.MessageContent,
          ],
          partials: [
             Partials.Channel,
@@ -43,7 +43,7 @@ export class ToscheClient extends Client {
             Partials.Message,
             Partials.Reaction,
             Partials.ThreadMember,
-            Partials.User
+            Partials.User,
          ],
       });
    }

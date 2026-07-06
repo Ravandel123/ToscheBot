@@ -1,5 +1,5 @@
 import { MessageFlags, type ButtonInteraction, type StringSelectMenuInteraction } from 'discord.js';
-import { ComponentHandler } from '../../types/interactions.js';
+import type { ComponentHandler } from '../../types/interactions.js';
 import { characterService } from '../../db/services/characterService.js';
 import { inventoryService } from '../../db/services/inventoryService.js';
 import { itemService } from '../../db/services/itemService.js';
@@ -270,7 +270,7 @@ async function mutate(
 /** Fetches the character and verifies the clicker owns it (panels are personal). */
 async function ownedCharacter(interaction: PanelInteraction, characterId: string): Promise<CharacterDoc | null> {
    const character = await characterService.get(characterId);
-   if (character && character.ownerId === interaction.user.id)
+   if (character?.ownerId === interaction.user.id)
       return character;
 
    await interaction.reply({ content: "That isn't your inventory.", ...ephemeral });

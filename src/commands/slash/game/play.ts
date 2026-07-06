@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import { SlashCommand } from '../../../types/commands.js';
+import type { SlashCommand } from '../../../types/commands.js';
 import { accountService } from '../../../db/services/accountService.js';
 import { activitySessionService } from '../../../db/services/activitySessionService.js';
 import { sessionStepView } from '../../components/_playPanel.js';

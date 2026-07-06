@@ -1,5 +1,5 @@
 import { time, type TimestampStylesString } from 'discord.js';
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 
 // Discord's dynamic timestamp styles (render per-viewer in their own timezone).
 const FORMATS: readonly string[] = ['t', 'T', 'd', 'D', 'f', 'F', 'R'];

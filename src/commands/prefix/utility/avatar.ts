@@ -1,5 +1,5 @@
 import { EmbedBuilder, type Message, type User } from 'discord.js';
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 
 // Resolves who the avatar is for: a mention, else a name/nick match in this guild,
 // else (no arg) the author. Returns undefined only when a name was given but missed.

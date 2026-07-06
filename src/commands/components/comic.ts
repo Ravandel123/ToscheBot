@@ -1,4 +1,4 @@
-import { ComponentHandler } from '../../types/interactions.js';
+import type { ComponentHandler } from '../../types/interactions.js';
 import { randomComicLocation } from '../../fun/comic.js';
 import { buildComicMessage } from './_comicView.js';
 

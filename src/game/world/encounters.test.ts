@@ -47,10 +47,9 @@ describe('ENCOUNTERS catalog', () => {
          if (def.kind !== 'activity')
             continue;
          expect(def.maxSetbacks, `${id} needs maxSetbacks >= 1`).toBeGreaterThanOrEqual(1);
-         for (const option of def.options as readonly ChallengeOption[]) {
+         for (const option of def.options as readonly ChallengeOption[])
             if (option.check)
                expect(option.failure, `${id}/${option.id} has a check but no failure outcome`).toBeDefined();
-         }
       }
    });
 
@@ -88,14 +87,14 @@ describe('conditional encounters (D31)', () => {
          const discovers: string[] = [];
          if (def.kind === 'flavor' && def.discovers)
             discovers.push(def.discovers);
-         if (def.kind === 'activity') {
+         if (def.kind === 'activity')
             for (const option of def.options as readonly ChallengeOption[]) {
                if (option.success.discovers)
                   discovers.push(option.success.discovers);
                if (option.failure?.discovers)
                   discovers.push(option.failure.discovers);
             }
-         }
+
          if (discovers.length === 0)
             continue;
 

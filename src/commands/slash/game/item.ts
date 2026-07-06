@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import { SlashCommand } from '../../../types/commands.js';
+import type { SlashCommand } from '../../../types/commands.js';
 import { accountService } from '../../../db/services/accountService.js';
 import { inventoryService } from '../../../db/services/inventoryService.js';
 import { displayName } from '../../../game/character/identity.js';

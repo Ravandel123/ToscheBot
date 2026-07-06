@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { parseFiniteNumber } from '../../../lib/number.js';
 import { bmi } from '../../../lib/units.js';
 import { BODY_SHAPES } from '../../../fun/bodyShapes.js';

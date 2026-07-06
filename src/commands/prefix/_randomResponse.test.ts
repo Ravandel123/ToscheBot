@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Message } from 'discord.js';
+import type { Message } from 'discord.js';
 import { defineRandomResponseCommand } from './_randomResponse.js';
 
 afterEach(() => {

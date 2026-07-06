@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, MessageFlags, type ChatInputCommandInteraction, type SendableChannels } from 'discord.js';
-import { SlashCommand } from '../../../types/commands.js';
+import type { SlashCommand } from '../../../types/commands.js';
 import { settings } from '../../../settings.js';
 import { accountService } from '../../../db/services/accountService.js';
 import { characterService } from '../../../db/services/characterService.js';

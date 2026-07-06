@@ -1,4 +1,4 @@
-import { PrefixCommand } from '../../../types/commands.js';
+import type { PrefixCommand } from '../../../types/commands.js';
 import { reportAdminAction } from '../../../moderation/espionage.js';
 
 export default {

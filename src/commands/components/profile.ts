@@ -1,5 +1,5 @@
 import { MessageFlags, type ButtonInteraction, type ModalSubmitInteraction } from 'discord.js';
-import { ComponentHandler } from '../../types/interactions.js';
+import type { ComponentHandler } from '../../types/interactions.js';
 import { accountService } from '../../db/services/accountService.js';
 import { BOOLEAN_SETTING_KEYS, type BooleanSettingKey, type UnitSystem } from '../../db/models/account.js';
 import { isValidTimeZone } from '../../lib/datetime.js';

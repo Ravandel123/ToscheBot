@@ -1,5 +1,5 @@
 import { EmbedBuilder, MessageFlags, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
-import { SlashCommand } from '../../../types/commands.js';
+import type { SlashCommand } from '../../../types/commands.js';
 import { accountService, type SwitchResult } from '../../../db/services/accountService.js';
 import { characterService } from '../../../db/services/characterService.js';
 import { canEdit, MAX_CHARACTERS_PER_ACCOUNT } from '../../../game/character/rules.js';

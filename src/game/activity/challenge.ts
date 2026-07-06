@@ -39,11 +39,10 @@ export function challengeStateFrom(blob: Record<string, unknown>): ChallengeStat
    const resolution = blob.resolution === 'proceed' || blob.resolution === 'turn-back' ? blob.resolution : '';
 
    const targets: Record<string, number> = {};
-   if (blob.optionTargets && typeof blob.optionTargets === 'object') {
+   if (blob.optionTargets && typeof blob.optionTargets === 'object')
       for (const [key, value] of Object.entries(blob.optionTargets))
          if (typeof value === 'number' && Number.isFinite(value))
             targets[key] = value;
-   }
 
    return {
       encounterId: str(blob.encounterId),

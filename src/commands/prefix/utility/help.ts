@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { PrefixCommand, PrefixCategory } from '../../../types/commands.js';
+import type { PrefixCommand, PrefixCategory } from '../../../types/commands.js';
 import type { ToscheClient } from '../../../client.js';
 import { config } from '../../../config.js';
 import { botClient } from '../../../lib/discord.js';

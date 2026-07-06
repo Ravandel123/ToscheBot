@@ -1,4 +1,4 @@
-import { ClientEvents } from 'discord.js';
+import type { ClientEvents } from 'discord.js';
 import type { ToscheClient } from '../client.js';
 
 export interface BotEvent<K extends keyof ClientEvents = keyof ClientEvents> {
