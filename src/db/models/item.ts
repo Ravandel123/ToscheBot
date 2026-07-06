@@ -48,4 +48,10 @@ const itemSchema = new Schema({
 // backs both the paginated category `find` and the counts aggregation (D33).
 itemSchema.index({ ownerId: 1, container: 1 });
 
+// Uniqueness of the short handle within one owner's stash is enforced HERE,
+// not by scanning: deposit mints an id and just inserts, retrying the
+// (astronomically rare) collision this index rejects — so a deposit never has
+// to read the whole stash to prove a handle free.
+itemSchema.index({ ownerId: 1, instanceId: 1 }, { unique: true });
+
 export const Item = model('Item', itemSchema) as unknown as Model<ItemDoc>;

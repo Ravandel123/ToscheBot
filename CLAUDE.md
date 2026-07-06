@@ -134,6 +134,9 @@ match these.
 - `deploy` — `tsx src/scripts/deploy-commands.ts` (registers slash commands,
   **guild-scoped only** — instant propagation, no global commands ever). Rerun after
   adding/changing any slash command's definition.
+- `clear-commands` — `tsx src/scripts/clear-commands.ts` (wipes the guild slash commands of
+  whichever application the active env resolves to — used to clean the local test bot's
+  (Tyril's) registrations off the shared guild after a testing session).
 - `seed` — `tsx src/scripts/seed-characters.ts` (rebuilds the alpha roster —
   accounts + approved active characters — after a DB wipe, from the owner-edited
   `src/scripts/seed-data.ts`; idempotent, replays creation through the normal
@@ -305,17 +308,18 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
   throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
   must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Eight consumers
+  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Nine consumers
   so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
-  D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details modal,
-  Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
+  D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details + body
+  modals, Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
   `activity` (the generic durable-activity router — D22: resolves the session by id, verifies
   the clicker owns a participant, dispatches to the `_activities/` registry by session type),
   `profile` (the D27 account-settings toggles), `inventory` (the D28 pack/equipment
   panel + the D33 Store transfer), `stash` (the D33 withdraw panel over the `Item`
-  collection — reuses the `/inventory` renderers), and `play` (the D30/D31 game hub —
+  collection — reuses the `/inventory` renderers), `play` (the D30/D31 game hub —
   travel select + condition-gated local-action buttons; the shared hub VIEW + context
-  loader live in `_hubView.ts`).
+  loader live in `_hubView.ts`), `duel` (the D35 consent card + fight orchestration), and
+  `charskills` (the read-only `/character skills` tree viewer — D34).
   All are fully
   **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
@@ -668,9 +672,6 @@ Several overlap topics designed in `Ruleset/` — coordinate there instead of de
   button that renames a string. *(The `/play` hub (D30) is now the SURFACE for this —
   `game/data/hubActions.ts` lists per-location actions as buttons, all placeholders today;
   each backlog activity above becomes one catalog flip + one handler case.)*
-- **Weekly DB backup job** — Atlas M0 has **no backups**; a cron dumping the collections
-  to JSON and posting the file to an owner-only channel insures the whole game state for
-  an hour of work. Cheap enough to just do early.
 - **Seasons / "campaigns"** — optional 2–3-month themed arcs with their own leaderboards;
   winners keep permanent titles. Fights the "everyone is maxed, nothing to want" endgame
   of small servers — but resets can also demotivate casuals. Genuinely undecided; revisit
@@ -707,7 +708,13 @@ return the player to the hub.
 Newest: the **stash (D33)** — a per-instance `Item` collection for owned-but-not-carried
 items, browsed server-side by the new **`/stash`** command and filled by a 🗄️ **Store**
 button on the `/inventory` item card; transfers run under the character lock,
-favor-duplicate-over-loss. **424 tests, build + lint green.** The owner has smoke-tested
+favor-duplicate-over-loss. Newest (2026-07-06): a **full-code audit** (findings + long-term
+plan in **`AUDIT.md`**) landed five hardening fixes — a daily **`db-backup`** job +
+`h!backup` (Atlas M0 has no backups; the JSON dump posts to `#espionage`), a
+`{ownerId, instanceId}` **unique index** replacing `itemService.deposit`'s stash-wide
+handle scan, a first-click-wins guard on the duel consent card, a 30 s OpenAI call timeout,
+and Discord-UI-limit guards in the catalog tests. **430 tests, build + lint green.**
+The owner has smoke-tested
 `/profile` and `/smackdown` live; the bot has not yet been run end-to-end against a live
 Atlas cluster (needs `.env` + `npm run deploy` — **`/stash` is a NEW command so a redeploy
 is required again**; the D33 Store button + `Item` collection add NO other slash changes).
@@ -723,12 +730,12 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   `celebrate`/`party`, `mood`, `advice`/`therapy`, `weapon`/`weapons`, `ddquote` (Darkest Dungeon), converters
   (`ctof`, `ftoc`, `cmtoimperial`, `kgtoimperial`, `bmi`, `bmiforheight`); *utility:* `ping`,
   `roll`, `avatar`, `timestamp`, `help`/`commands` (auto-generated command list); *admin (ownerOnly):* `clear`,
-  `directmessage`/`dm`, `messagechannel`/`mc`.
+  `directmessage`/`dm`, `messagechannel`/`mc`, `backup` (on-demand DB dump to `#espionage`).
 - **Slash (`/`)** — `character` (`create` is the single creation/editing entry point — opens
   the step-driven creation wizard panel for a new or still-editable draft — details, race,
-  gender, **attribute point-buy**, submit, all on the panel — + owner approval; plus
-  **view**/list/switch; `view` is the public character sheet with attributes, **equipment**
-  + traits),
+  gender, **body frame** (R20), **attribute point-buy**, submit, all on the panel — + owner
+  approval; plus **view**/list/**skills**/switch; `view` is the public character sheet with
+  attributes, **equipment** + traits, `skills` the D34 read-only skill-tree viewer),
   `profile` (the account panel: active character, settings toggles — D27), `inventory`
   (the D28 pack/equipment panel: hub → category browser with sort/pages → item card with
   equip/unequip/use/**store**/drop), `stash` (D33 — browse + withdraw the active
@@ -754,7 +761,10 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   `guildMemberAdd`/`guildMemberRemove` (gate welcomes/farewells). Banned-word removals report
   the **exact match + its location** (and flag punctuation-collapsed matches as possible false
   positives), so a deletion is never a mystery.
-- **Jobs** — `resource-regen` (hourly, lock- and session-aware bulk-first per D7/D23).
+- **Jobs** — `resource-regen` (hourly, lock- and session-aware bulk-first per D7/D23),
+  `db-backup` (daily 04:30 — dumps every collection to JSON and posts the file to
+  `#espionage`; Atlas M0 has no backups, so this file IS the disaster-recovery path;
+  `h!backup` runs the same dump on demand).
 - **Component handlers** — `character` (creation wizard incl. attribute point-buy +
   approval petition), `comic` (browser), `activity` (generic durable-activity router +
   `_activities/` registry; first activity: `challenge`), `profile` (account-settings
@@ -763,7 +773,8 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   the `Item` collection + lock-guarded withdraw),
   `play` (the D30/D31 game hub — travel select + condition-gated local-action buttons,
   re-validated at click time), `duel` (D35 — the `/smackdown duel` consent card's
-  Accept/Decline + the auto-resolve fight orchestration: lock, resolve, narrate, persist HP).
+  Accept/Decline + the auto-resolve fight orchestration: lock, resolve, narrate, persist HP),
+  `charskills` (the `/character skills` viewer — read-only, no lock).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
   (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
   `game/chronicle.ts` (public game log — D24).

@@ -17,6 +17,14 @@ describe('actionsAt', () => {
       expect(actionsAt('tavern').map((a) => a.id)).toContain('drink');
       expect(actionsAt('spire').map((a) => a.id)).not.toContain('drink');
    });
+
+   // Discord allows 5 action rows per message; the hub spends one on the travel
+   // select and chunks action buttons 5-wide, so >20 actions at one place would
+   // make the hub message unsendable. Catch the content edit here, not mid-game.
+   it('never offers more actions at one location than the hub can render (20)', () => {
+      for (const locationId of Object.keys(LOCATIONS))
+         expect(actionsAt(locationId).length, `${locationId} overflows the hub's button rows`).toBeLessThanOrEqual(20);
+   });
 });
 
 // Content-integrity check (like the location-graph and encounter tests): a

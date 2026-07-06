@@ -24,7 +24,9 @@ export function createAiService(): AiService {
       };
    }
 
-   const client = new OpenAI({ apiKey: config.openaiApiKey });
+   // Hang guard (CLAUDE.md's timeout rule for external calls): the SDK default
+   // is 10 minutes, which would stall an ambient reply absurdly long.
+   const client = new OpenAI({ apiKey: config.openaiApiKey, timeout: 30_000, maxRetries: 1 });
    log.info(`AI persona enabled (model: ${config.openaiModel}).`);
 
    return {

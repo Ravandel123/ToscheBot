@@ -41,6 +41,13 @@ describe('LOCATIONS world content', () => {
          }
       }
    });
+
+   // The hub's travel select lists one option per road; Discord caps a select
+   // at 25 options. Catch the graph edit here, not mid-game.
+   it('keeps every location renderable in the travel select (≤ 25 roads)', () => {
+      for (const [id, location] of entries)
+         expect(location.connectedTo.length, `${id} overflows the travel select`).toBeLessThanOrEqual(25);
+   });
 });
 
 describe('locationFeature', () => {

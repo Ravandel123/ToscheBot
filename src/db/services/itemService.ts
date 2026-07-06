@@ -97,21 +97,20 @@ export const itemService = {
 
       // A stash handle unique within the owner's whole stash so { ownerId,
       // container, instanceId } resolves exactly one doc and rides customIds.
-      const existing = await Item.find({ ownerId: characterId }, { instanceId: 1 }).lean<{ instanceId: string }[]>();
-      const handle = mintInstanceId(new Set(existing.map((entry) => entry.instanceId)));
-
+      // Uniqueness comes from the { ownerId, instanceId } unique index: mint
+      // and insert, re-minting on the rare collision — never a stash-wide read.
       const docId = randomUUID();
-      await Item.create({
+      const doc = {
          _id: docId,
          ownerId: characterId,
          container,
-         instanceId: handle,
          itemId: packItem.itemId,
          quality: packItem.quality,
          quantity: packItem.quantity,
          ...(packItem.durability === undefined ? {} : { durability: packItem.durability }),
          acquiredAt: packItem.acquiredAt instanceof Date ? packItem.acquiredAt : new Date(),
-      });
+      };
+      await insertWithFreshHandle(doc);
 
       const slot = slotOfInstance(character, instanceId);
       const update: Record<string, unknown> = { $pull: { inventory: { instanceId } } };
@@ -173,3 +172,25 @@ export const itemService = {
       return { ok: true };
    },
 };
+
+/** Inserts a stash doc with a freshly minted handle, re-minting when the
+ *  { ownerId, instanceId } unique index rejects a collision. With an 8-hex
+ *  handle space a retry is nearly impossible; running out means something is
+ *  broken enough to surface as an error. */
+async function insertWithFreshHandle(doc: Omit<ItemDoc, 'instanceId' | 'createdAt' | 'updatedAt'>): Promise<void> {
+   for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+         await Item.create({ ...doc, instanceId: mintInstanceId(new Set()) });
+         return;
+      } catch (error) {
+         if (!isDuplicateKeyError(error))
+            throw error;
+      }
+   }
+
+   throw new Error(`Could not mint a unique stash handle for owner ${doc.ownerId}.`);
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+   return typeof error === 'object' && error !== null && (error as { code?: number }).code === 11000;
+}

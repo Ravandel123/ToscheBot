@@ -53,6 +53,17 @@ describe('ENCOUNTERS catalog', () => {
          }
       }
    });
+
+   // The challenge panel renders one button per option + Turn back, chunked
+   // 5-wide into Discord's 5-row cap — >24 options would make the step
+   // unsendable. Catch the content edit here, not mid-crossing.
+   it('keeps every challenge renderable (≤ 24 options)', () => {
+      for (const [id, def] of activities) {
+         if (def.kind !== 'activity')
+            continue;
+         expect(def.options.length, `${id} overflows the challenge button rows`).toBeLessThanOrEqual(24);
+      }
+   });
 });
 
 describe('conditional encounters (D31)', () => {

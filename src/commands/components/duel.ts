@@ -41,6 +41,13 @@ const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 const INTRO_DELAY_MS = 1500;
 const ROUND_DELAY_MS = 1200;
 
+// One consent card must start at most one fight, but two near-simultaneous
+// Accept clicks are two separate interactions that can BOTH pass the lock
+// check before either acquires it. First click wins on the card's message id;
+// in-memory is enough (single process), and once the winning click repaints
+// the card its buttons are gone for good.
+const startingCards = new Set<string>();
+
 export default {
    namespace: 'duel',
    async handle(client, interaction) {
@@ -63,44 +70,61 @@ async function handleAccept(client: ToscheClient, interaction: ButtonInteraction
       return;
    }
 
-   // A held lock means a fight is already running (this duel from a double-click,
-   // or an unrelated sparring match) — bail before starting a second one. Not a
-   // perfect mutex, but it closes the realistic double-click window; a durable
-   // pending-duel record is the seam if a stronger guarantee is ever needed.
-   if (client.locks.isLocked(challengerId) || client.locks.isLocked(opponentId)) {
-      await interaction.reply({ content: 'One of you is already in a fight — let it finish first.', ...ephemeral });
+   // First-click-wins: the has+add below is synchronous, so of two clicks
+   // racing this line exactly one proceeds to start the fight.
+   if (startingCards.has(interaction.message.id)) {
+      await interaction.reply({ content: 'That challenge is already being answered.', ...ephemeral });
       return;
    }
+   startingCards.add(interaction.message.id);
 
-   const challenger = await characterService.get(challengerId);
-   if (!challenger) {
-      await interaction.update(buildCancelledCard('The challenger is no longer among us — the duel is off.'));
-      return;
-   }
-
-   // Pre-flight eligibility for a clean message; the fight re-checks it
-   // authoritatively under the lock (a downed/busy state can change in between).
-   for (const fighter of [challenger, opponent]) {
-      const reason = await duelBlock(fighter);
-      if (reason) {
-         await interaction.update(buildCancelledCard(`**${displayName(fighter)}** ${reason}.`));
+   try {
+      // A held lock means a fight is already running (an unrelated sparring
+      // match, or a duel accepted a moment ago) — bail before queueing a second
+      // one behind it.
+      if (client.locks.isLocked(challengerId) || client.locks.isLocked(opponentId)) {
+         await interaction.reply({ content: 'One of you is already in a fight — let it finish first.', ...ephemeral });
          return;
       }
+
+      const challenger = await characterService.get(challengerId);
+      if (!challenger) {
+         await interaction.update(buildCancelledCard('The challenger is no longer among us — the duel is off.'));
+         return;
+      }
+
+      // Pre-flight eligibility for a clean message; the fight re-checks it
+      // authoritatively under the lock (a downed/busy state can change in between).
+      for (const fighter of [challenger, opponent]) {
+         const reason = await duelBlock(fighter);
+         if (reason) {
+            await interaction.update(buildCancelledCard(`**${displayName(fighter)}** ${reason}.`));
+            return;
+         }
+      }
+
+      // Acknowledge the button now: the fight (narration delays + a possible wait
+      // on the character lock) runs long past the 3 s interaction ack window.
+      await interaction.update(buildAcceptedCard(challenger, opponent));
+
+      const channel = interaction.channel;
+      if (channel?.isSendable())
+         await runDuel(client, channel, challengerId, opponentId, modeId);
+   } finally {
+      startingCards.delete(interaction.message.id);
    }
-
-   // Acknowledge the button now: the fight (narration delays + a possible wait on
-   // the character lock) runs long past the 3 s interaction ack window.
-   await interaction.update(buildAcceptedCard(challenger, opponent));
-
-   const channel = interaction.channel;
-   if (channel?.isSendable())
-      await runDuel(client, channel, challengerId, opponentId, modeId);
 }
 
 async function handleDecline(interaction: ButtonInteraction, challengerId: string, opponentId: string): Promise<void> {
    const opponent = await characterService.get(opponentId);
    if (!opponent || opponent.ownerId !== interaction.user.id) {
       await interaction.reply({ content: 'This challenge is not yours to answer, soldier.', ...ephemeral });
+      return;
+   }
+
+   // A decline racing an accept must not repaint a fight-in-progress as declined.
+   if (startingCards.has(interaction.message.id)) {
+      await interaction.reply({ content: 'Too late — the duel is already underway.', ...ephemeral });
       return;
    }
 
