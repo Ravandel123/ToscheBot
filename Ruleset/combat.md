@@ -44,15 +44,33 @@ not StrengthBonus). `attributeBonus(v) = floor(v/10)`.
 **Armour ✕ weapon type** ✅ direction — damage type (slash/pierce/impact) vs armour type
 (cloth/leather/mail/plate) has a **multiplier** (slash ≈ useless vs plate; impact/pierce better).
 
-**Stances** (🟡): Aggressive (+hit/+dmg, −defence) · Balanced · Defensive (+defence, −hit).
+**Fighting styles & the combat plan** ✅ v1 BUILT (D41, owner-designed) — styles are
+**family-specific** (unarmed ≠ melee ≠ ranged — muay thai doesn't help a swordsman; the
+family resolves from what's wielded). Catalog `game/combat/styles.ts`, 3 per family
+(🥊 Striker / 🤼 Grappler / 🧱 Stonewall unarmed; ⚔️ Onslaught / ⛓️ Binder / 🛡️ Warden armed;
+ranged = typed seam, no engine), each an optional mix of flat **modifiers**
+(attack/defence/damage — Striker +10/−10/+2) and **effects** (**hamper**: a connecting hit
+fouls the foe's next swing −15; **riposte**: a defence won by ≥2 SL counters for 1–3+StrB−Soak,
+≥1). A style is a switchable DECISION, not a skill — but it **draws on a node**
+(unarmed = its brawling branch; armed = a style branch under `melee`, summed with the weapon
+branch via `extraNodes`): the path feeds the style's attack AND defence (owner's rule — knowing
+your style well means striking *and* defending better in it) and fighting in it **trains that
+branch** (D40). No unlock gate — an untrained style rolls its untrained path. The **combat
+plan** (`/character combat` → `Character.combatPlan`) is the async agency layer: per-family
+default style + up to 3 conditional switch rules (own HP below X% · foe HP below X% · from
+round N), first match wins, re-evaluated each exchange (triggers are monotonic → no flapping),
+switches narrated. Supersedes the old **Stances** placeholder (the inert `stance` field is
+gone — "defensive stance" is now the Stonewall/Warden style). 🟡 all numbers.
+
 **Initiative** = `AgilityBonus + PerceptionBonus`.
 
-**Resolution mode** ✅ direction R24 — **v1 = auto-resolve**: set stance/style/target in a
-pre-fight menu, one button, the engine rolls every round and narrates with a delay (no
-per-round input). **Manual, turn-by-turn** control is an explicit **later** upgrade, built only
-once v1 proves fun. **Built (D35):** the auto-resolve v1 engine + the consent-gated `/smackdown
-duel` (`game/combat/duel.ts` + `profile.ts`, no pre-fight stance/style menu yet — v1 resolves as
-'balanced').
+**Resolution mode** ✅ direction R24 — **v1 = auto-resolve**: set your standing orders ahead of
+time, one button, the engine rolls every round and narrates with a delay (no per-round input).
+**Manual, turn-by-turn** control is an explicit **later** upgrade, built only once v1 proves
+fun. **Built (D35 + D41):** the auto-resolve v1 engine + the consent-gated `/smackdown duel`
+(`game/combat/duel.ts` + `profile.ts`); the pre-fight setup menu landed as the **combat plan
+panel** (`/character combat`) — better than a per-fight menu for an async game (the defender's
+plan fights for them while they're offline).
 
 **Positioning & terrain** ⬜ future, not v1, R25 — a lightweight grid (adjacent/ranged/flanked)
 + terrain tags (`cramped, uneven, slick, open`) that weapons/styles check against (a cramped room
@@ -253,12 +271,14 @@ side) — this holds for both resolution modes. **Initiative** = `AgilityBonus +
 (+ optional tiebreak roll); the auto-resolve layer uses one roll per *side* instead of per
 combatant for speed and narration brevity.
 
-**Stances** (the casual tactical handle, 🟡): **Aggressive** (+hit/+damage, −defence) ·
-**Balanced** (no modifier) · **Defensive** (+Dodge/Parry, −hit). A stance is meant to be the
-auto-face of a deep-layer fighting style (below) — the casual just picks one and presses
-Attack. **Conditions** (small, stacking, shown as an emoji row, 🟡): Bleeding, Prone, Stunned,
-Fatigued, **Shaken** (high Stress — flavor-progression.md), Broken (fled in fear). None of
-this is built (Implementation, below).
+**Stances — SUPERSEDED by D41 fighting styles.** The planned casual Aggressive/Balanced/
+Defensive stance layer was absorbed into the style catalog before it was ever built: "no
+style" is the balanced default, Striker/Onslaught are the aggressive handle, Stonewall/Warden
+the defensive one — with the difference that a style is also *knowledge* (a trained node), not
+just a toggle. The inert `stance` field on `CombatProfile` was removed with it. **Conditions**
+(small, stacking, shown as an emoji row, 🟡): Bleeding, Prone, Stunned, Fatigued, **Shaken**
+(high Stress — flavor-progression.md), Broken (fled in fear) — not built; the D41 hamper
+("tangled") is the first condition-shaped thing the narration shows.
 
 The original design docs carried a full worked example of this whole flow — a fighting-style
 duel (Rhett the ermehn duelist, finesse damage, Dagger-Dueling maneuvers) and a Brawling spire
@@ -277,24 +297,32 @@ readable). **Scope discipline, stated explicitly by design:** v1 should be *one*
 *one* style, Brawling with ~3 moves — prove one fight feels good before building the whole
 arsenal.
 
-### Combat styles & counter-play ✅ direction (nothing built) *(owner-requested)*
-The owner wants styles that *interact*, not just flat buffs:
-- **A style shapes the fight, with trade-offs.** The owner's simple example — "a style which can
-  be faster but do less damage" — generalizes to a small set of levers a style tunes: speed/
-  initiative, damage, defence, Fatigue cost, reach preference. A style is the **deep-layer face
-  of a stance**: a casual just picks Aggressive/Balanced/Defensive; a trained fighter picks a
-  *named* style whose maneuvers auto-map onto those stances. Styles are **talents/skill nodes**
-  (skills.md) — learned, ranked, and requirement-gated.
-- **Knowing a style helps you counter it.** The owner's key ask: "if a character knows well
-  combat style X, it can defend/perform better if an enemy uses combat style X." So a style
-  carries a **familiarity** term: fighting *against* a style you know well grants a defence/read
-  bonus (you've trained against those angles). This turns combat into a **metagame of reads** —
-  a duelist who's studied dagger-dueling shuts down another dagger-duelist — and gives learning
-  many styles a real payoff beyond your own offence. Cheap to implement: an opposed-check
-  modifier keyed on `defender.knowsStyle(attacker.activeStyle)`.
+### Combat styles & counter-play ✅ v1 BUILT (D41) / counter-play deferred *(owner-requested)*
+The owner wants styles that *interact*, not just flat buffs. **The v1 style system is live** —
+see the Reference block above for the full built shape (family-specific catalogs, node-backed
+proficiency, modifiers + effects, the combat plan with conditional switches). Design notes that
+still matter:
+- **A style shapes the fight, with trade-offs.** Built as the modifiers/effects mix: Striker
+  trades guard for pressure, Grappler trades raw output for control (hamper), Stonewall/Warden
+  trade offence for defence + the riposte. The owner's further levers (speed/initiative, Fatigue
+  cost, reach preference) remain seams on the same catalog — a new lever is a field + one engine
+  step, exactly like `hamper`/`riposte` were.
+- **Styles as skill nodes.** Landed as designed: each style draws on (and trains) a tree branch —
+  the owner's added rule *"the better you know your active style, the better you also defend in
+  it"* is exactly the defence drawing on the style node's path. The style choice itself is free
+  to switch (no unlock): proficiency, not permission, is the gate. **Named canon schools**
+  (tamian Tenets of Tesque, ermehn dagger-dueling, canid shield-wall, lutren Sea Guard, polcan
+  boarding) stay a LATER layer — learned/requirement-gated talents that sit on top of (or
+  replace) the generic six, once talents exist (skills.md R13).
+- **Knowing a style helps you counter it** — ⬜ still deferred. The `knowsStyle` familiarity
+  bonus (defence/read bonus against a style you've trained) now has an obvious data source —
+  the defender's points on the attacker's active style's node — so the seam is even cheaper
+  than designed: an opposed-check modifier keyed on the defender's path sum for
+  `attacker.activeStyle`. Not built (v1 keeps the opposed roll clean).
 - **Ranged has styles too, thinner.** Per the owner, ranged gets its own shooting styles
-  (aimed/steady vs fast/volley, hold-and-loose) but **deliberately less extensive** than melee —
-  a couple of options, not a school tree. Keeps ranged distinct without doubling the content.
+  (aimed/steady vs fast/volley, hold-and-loose) but **deliberately less extensive** than melee.
+  The catalog's `family: 'ranged'` is typed and validated; no ranged styles are authored until
+  ranged combat exists in the engine.
 
 ### Named signature moves ✅ direction (nothing built) *(owner-requested, spire-flavored)*
 Distinct from styles: discrete **named techniques** with flavor and a mechanical kick — the
@@ -431,14 +459,48 @@ model*, as D25/D34 did for attributes/skills). Three pieces:
   "wake with a dented pride"). It's a **short action** (D5 rule 1: resolve in memory, commit once),
   not an ActivitySession — **manual turn-by-turn** (R24 option 2) is the documented next layer over
   the same profile/engine; wagers, a duel W/L record, and Trial/PvE are the other seams.
-  **Learn-by-doing (D40):** after the damage is persisted, BOTH fighters' attack paths are
-  credited via `creditSkillUse`, weighted by the opponent's relative strength
+  **Learn-by-doing (D40, extended by D41):** after the damage is persisted, BOTH fighters are
+  credited via `creditSkillUse` on the paths they **actually fought in**
+  (`trainingNodes` — each used style's branch, the plain attack node for style-less stretches,
+  and always the weapon branch when armed), weighted by the opponent's relative strength
   (`game/combat/training.ts`; skills.md Reference has the formula) — win or lose, and a foe at
   ≤ half your power credits nothing. The trial does the same for the player only (a rematch vs
   an outgrown champion naturally decays to zero). Sparring credits nothing (fantasy stakes).
   Rank-ups announce in the Spire narration (`📈 … rises to N`).
 - **Numbers stay 🟡**: attack/defence bases, unarmed damage, the pool size (still the flat 20 from
   `resources.ts`, not the R12 frame+Constitution pool).
+
+### Fighting styles & the combat plan ✅ v1 / 🟡 numbers *(D41)*
+Four pieces, all pure below the panel:
+- **`game/combat/styles.ts`** — the style catalog (D10): family, the skill node it draws on,
+  optional `modifiers` {attack, defense, damage}, optional `effects[]` (typed union — `hamper`,
+  `riposte`; adding a kind = one union member + one engine step). Catalog-validated by
+  `styles.test.ts` (a style's node must sit under its family's tree root; select budgets).
+- **`game/combat/plan.ts`** — plan types + evaluation: `FamilyPlan {style, rules[≤3]}`,
+  triggers `self-health-below` / `foe-health-below` / `round-at-least`, `activePlanStyle`
+  (first-match priority), `sanitizeFamilyPlan` (defensive read — unknown/wrong-family styles
+  drop, values clamp; D10 rule 3). Stored sparse on `Character.combatPlan` (Mixed, per-family
+  `$set` via `characterService.setCombatPlan`).
+- **Engine + profile** — `combatProfile` resolves the fighter's **family** from the main hand,
+  reads that family's plan, and precomputes **per-style base targets** from each referenced
+  style's node path (stored up front — the honest-odds discipline; unarmed: the node replaces
+  the attack draw, armed: weapon branch + style branch summed, defence = the style node's path
+  both ways). `resolveDuel` re-evaluates both plans at the top of every exchange, applies the
+  active style's modifiers (clamped [5,95]), runs hamper (fouls the foe's next swing) and
+  riposte (a ≥2-SL defence counters through Soak, ≥1), and reports `openingStyles`,
+  per-blow `styleSwitches` and `stylesUsed` for narration + training. Champions carry a
+  hand-authored `plan` (their stat block IS their style's base — only modifiers/effects apply);
+  several ladder rungs use one (Osk grapples, Dourmane stonewalls, Busk turns Striker once
+  you're under half — the ladder teaches the system by showing it).
+- **`/character combat`** (`combatplan` handler + `_combatPlanView.ts`) — the plan panel:
+  ephemeral/personal/stateless (the `/profile` pattern), a default-style select per family
+  (each option shows the trained path points), a two-step rule builder (discrete trigger menu →
+  style; the half-built rule rides the customId), clear-rules per family. A plan edit is one
+  atomic per-family `$set` — no lock needed (a fight snapshots the plan under ITS lock).
+- **Training (D40 extension)** — `trainingNodes(profile, stylesUsed)`: each style actually
+  fought in trains its branch (a whole bout in Grappler banks nothing into Striking), a plain
+  stretch trains the base attack node, an armed fighter always keeps training the weapon branch.
+🟡 all numbers (modifier sizes, hamper −15, riposte margins/damage, champion plans).
 
 ### Bout modes — the ruleset layer ✅ v1 / seams *(D36)*
 `game/combat/bouts.ts` is the data-driven **bout catalog** (D10) — the customization surface the
@@ -493,9 +555,10 @@ later, not now".
   frame+Constitution **Health max** (the pool is the flat stored `health` for now, not split per
   location) — design only; the duel above uses one shared pool with no locations.
 - The **armour ✕ weapon-type** multiplier — design only (the `computeDamage` seam is marked).
-- **Combat styles + counter-play** (`knowsStyle` defence bonus), **ranged shooting styles**, and
-  **named signature moves** — design only; the `melee`/`ranged`/`brawling` nodes in
-  `game/data/skills.ts` are unused stubs today.
+- **Combat styles ✅ BUILT (D41)** — what still waits: the `knowsStyle` **counter-play** defence
+  bonus (now cheap: key it on the defender's path sum for the attacker's active style's node),
+  **ranged shooting styles** (typed family, no engine), **named canon schools** as learned
+  talents, and **named signature moves** — the last two are design only.
 - **Fate points** — no field, no spend path.
 - `/smackdown duel` **built (D35)** and `/smackdown trial` (PvE Spire ladder) **built (D37)**; still
   missing: **wagers**, a duel W/L record, boss loot / titles as trial rewards, and the **manual
@@ -503,8 +566,9 @@ later, not now".
   `ActivitySession`).
 - Criticals/fumbles (now decided, R21), **Initiative is used** (first strike; D35), Fatigue,
   Conditions (Bleeding/Prone/Stunned/Shaken/Broken) — the rest none built.
-- **The R24 pre-fight setup menu** (stance/style/target picker driving the auto-resolve engine)
-  — no code; the duel resolves as 'balanced' with no stance/style choice yet.
+- **~~The R24 pre-fight setup menu~~ → superseded by the combat plan (D41):** `/character
+  combat` sets standing orders once, ahead of every fight — strictly better than a per-fight
+  menu in an async game (the challenged player's plan fights for them while they're offline).
 - **Positioning & terrain (R25)** — explicitly not started, future-only; no grid, no terrain tags.
 
 ---
@@ -535,9 +599,12 @@ later, not now".
   light/heavy as the top branches); how much of "weapon category" lives in the weapon tree vs
   the fighting style; v1 scope (recommendation: one weapon branch, one style, ~3 Brawling
   moves).
-- **Combat styles & counter-play** *(R12/owner)* — the launch style list and each one's levers
-  (speed/damage/defence/Fatigue trade-offs); how big the `knowsStyle`-vs-attacker defence bonus
-  is; how many ranged styles (kept deliberately thin).
+- **Combat styles & counter-play** *(R12/owner — v1 shipped, D41)* — the launch six and their
+  numbers are 🟡 first guesses (modifier sizes, hamper −15, riposte ≥2 SL / 1–3); open: the
+  `knowsStyle`-vs-attacker defence bonus size (and whether it reads off the defender's points
+  on the attacker's style node), ranged styles (when ranged combat exists), more effect kinds
+  (initiative/Fatigue/reach levers), and whether deeper style-branch leaves (a Striker
+  sub-tree) are worth the content.
 - **Named signature moves** *(owner)* — the ~3 v1 Brawling moves (names + setup + effect); which
   are spire-exclusive; how a move is unlocked (talent/skill node) and triggered (auto by the bot
   vs a picked maneuver in the deep layer).

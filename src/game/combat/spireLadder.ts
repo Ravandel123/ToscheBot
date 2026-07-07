@@ -1,4 +1,5 @@
 import type { CombatProfile } from './duel.js';
+import type { FamilyPlan } from './plan.js';
 
 // The Smackdown Spire PvE ladder (owner-requested #PvE): a fixed gauntlet of
 // champions who exist ONLY in the Spire — each tougher than the last. A player
@@ -8,16 +9,23 @@ import type { CombatProfile } from './duel.js';
 // the engine (`resolveDuel`) takes two CombatProfiles, so a champion is just a
 // stat block with no owner and no consent needed.
 //
+// Several champions carry a fighting style / combat plan (D41) — their blurbs
+// already telegraphed one (Osk grapples, Dourmane counters), and watching a
+// champion switch under pressure teaches players the plan system exists. A
+// champion has no per-style targets: its authored attack/defence ARE its style's
+// bases (the stat block already prices its skill), only modifiers/effects apply.
+//
 // 🟡 Every number + the roster is a balance/content placeholder. Adding or
 // retuning a rung is one catalog edit; the difficulty curve is meant to climb
 // from a warm-up to a brutal grand champion.
 
 /** The combat numbers of a champion — the CombatProfile minus the per-fight
- *  identity/health the builder fills in. */
+ *  identity/health the builder fills in. `plan` is the champion's standing
+ *  orders (unarmed styles only — the Spire ladder brawls). */
 export type ChampionStats = Pick<
    CombatProfile,
-   'maxHealth' | 'attackTarget' | 'defenseTarget' | 'damage' | 'damageType' | 'strengthBonus' | 'soak' | 'initiative' | 'stance'
->;
+   'maxHealth' | 'attackTarget' | 'defenseTarget' | 'damage' | 'damageType' | 'strengthBonus' | 'soak' | 'initiative'
+> & { plan?: FamilyPlan };
 
 export interface ChampionReward {
    /** Deltrada Coins paid the first time this rung is cleared (D19 single currency). */
@@ -44,7 +52,7 @@ export const SPIRE_LADDER = [
       name: 'Pip',
       title: 'the Warm-Up',
       blurb: 'A wiry tamian who mostly dances. Good for shaking off the rust — go easy on the little one, no-no.',
-      stats: { maxHealth: 14, attackTarget: 40, defenseTarget: 26, damage: { min: 2, max: 4 }, damageType: 'impact', strengthBonus: 1, soak: 1, initiative: 4, stance: 'balanced' },
+      stats: { maxHealth: 14, attackTarget: 40, defenseTarget: 26, damage: { min: 2, max: 4 }, damageType: 'impact', strengthBonus: 1, soak: 1, initiative: 4 },
       reward: { coins: 20 },
    },
    {
@@ -52,7 +60,7 @@ export const SPIRE_LADDER = [
       name: 'Bricktooth',
       title: 'the Regular',
       blurb: 'A canid who has lost more bouts than he\'s won, but he keeps coming back. Slow, stubborn, hits like a door.',
-      stats: { maxHealth: 16, attackTarget: 45, defenseTarget: 28, damage: { min: 3, max: 5 }, damageType: 'impact', strengthBonus: 2, soak: 2, initiative: 4, stance: 'balanced' },
+      stats: { maxHealth: 16, attackTarget: 45, defenseTarget: 28, damage: { min: 3, max: 5 }, damageType: 'impact', strengthBonus: 2, soak: 2, initiative: 4 },
       reward: { coins: 35 },
    },
    {
@@ -60,7 +68,7 @@ export const SPIRE_LADDER = [
       name: 'Sela Quickpaw',
       title: 'the Flurry',
       blurb: 'A felis who\'d rather not get hit at all. All footwork and fast little jabs — you\'ll swing at air.',
-      stats: { maxHealth: 16, attackTarget: 48, defenseTarget: 36, damage: { min: 3, max: 6 }, damageType: 'slash', strengthBonus: 2, soak: 2, initiative: 8, stance: 'balanced' },
+      stats: { maxHealth: 16, attackTarget: 48, defenseTarget: 36, damage: { min: 3, max: 6 }, damageType: 'slash', strengthBonus: 2, soak: 2, initiative: 8, plan: { style: 'striker', rules: [] } },
       reward: { coins: 55 },
    },
    {
@@ -68,7 +76,7 @@ export const SPIRE_LADDER = [
       name: 'Old Marrow',
       title: 'the Journeyman',
       blurb: 'A grey-muzzled ermehn who has seen it all. No wasted motion. He\'ll make you earn every step.',
-      stats: { maxHealth: 18, attackTarget: 51, defenseTarget: 32, damage: { min: 4, max: 7 }, damageType: 'slash', strengthBonus: 3, soak: 3, initiative: 5, stance: 'balanced' },
+      stats: { maxHealth: 18, attackTarget: 51, defenseTarget: 32, damage: { min: 4, max: 7 }, damageType: 'slash', strengthBonus: 3, soak: 3, initiative: 5, plan: { style: 'stonewall', rules: [] } },
       reward: { coins: 80 },
    },
    {
@@ -76,7 +84,7 @@ export const SPIRE_LADDER = [
       name: 'Tidewarden Osk',
       title: 'the Undertow',
       blurb: 'A lutren built like a river barge. Grapples, drags, and never seems to tire. Patience is his weapon.',
-      stats: { maxHealth: 20, attackTarget: 53, defenseTarget: 37, damage: { min: 4, max: 7 }, damageType: 'impact', strengthBonus: 3, soak: 3, initiative: 6, stance: 'balanced' },
+      stats: { maxHealth: 20, attackTarget: 53, defenseTarget: 37, damage: { min: 4, max: 7 }, damageType: 'impact', strengthBonus: 3, soak: 3, initiative: 6, plan: { style: 'grappler', rules: [] } },
       reward: { coins: 110 },
    },
    {
@@ -84,7 +92,7 @@ export const SPIRE_LADDER = [
       name: 'Ironhide Busk',
       title: 'the Anvil',
       blurb: 'A polcan you could break a chair on. He\'ll let you tire yourself out, then flatten you at leisure.',
-      stats: { maxHealth: 22, attackTarget: 55, defenseTarget: 33, damage: { min: 5, max: 8 }, damageType: 'impact', strengthBonus: 4, soak: 5, initiative: 5, stance: 'balanced' },
+      stats: { maxHealth: 22, attackTarget: 55, defenseTarget: 33, damage: { min: 5, max: 8 }, damageType: 'impact', strengthBonus: 4, soak: 5, initiative: 5, plan: { style: 'stonewall', rules: [{ trigger: { kind: 'foe-health-below', value: 50 }, style: 'striker' }] } },
       reward: { coins: 150 },
    },
    {
@@ -92,7 +100,7 @@ export const SPIRE_LADDER = [
       name: 'Vesh',
       title: 'the Cutthroat',
       blurb: 'A vulpin who fights dirty and fast. Blink and you\'ll be bleeding. The crowd loves to hate this one.',
-      stats: { maxHealth: 18, attackTarget: 59, defenseTarget: 41, damage: { min: 5, max: 9 }, damageType: 'pierce', strengthBonus: 3, soak: 3, initiative: 8, stance: 'balanced' },
+      stats: { maxHealth: 18, attackTarget: 59, defenseTarget: 41, damage: { min: 5, max: 9 }, damageType: 'pierce', strengthBonus: 3, soak: 3, initiative: 8, plan: { style: 'striker', rules: [] } },
       reward: { coins: 190 },
    },
    {
@@ -100,7 +108,7 @@ export const SPIRE_LADDER = [
       name: 'Captain Dourmane',
       title: 'the Drillmaster',
       blurb: 'A canid officer who treats the Spire like a parade ground. Textbook guard, textbook counters. No openings.',
-      stats: { maxHealth: 24, attackTarget: 61, defenseTarget: 43, damage: { min: 6, max: 10 }, damageType: 'slash', strengthBonus: 4, soak: 5, initiative: 6, stance: 'balanced' },
+      stats: { maxHealth: 24, attackTarget: 61, defenseTarget: 43, damage: { min: 6, max: 10 }, damageType: 'slash', strengthBonus: 4, soak: 5, initiative: 6, plan: { style: 'stonewall', rules: [] } },
       reward: { coins: 240 },
    },
    {
@@ -108,7 +116,7 @@ export const SPIRE_LADDER = [
       name: 'The Sand Widow',
       title: 'the Merciless',
       blurb: 'A felis nobody has beaten twice. She fights like the fight already bores her — and it usually does.',
-      stats: { maxHealth: 24, attackTarget: 65, defenseTarget: 47, damage: { min: 6, max: 10 }, damageType: 'slash', strengthBonus: 4, soak: 4, initiative: 9, stance: 'balanced' },
+      stats: { maxHealth: 24, attackTarget: 65, defenseTarget: 47, damage: { min: 6, max: 10 }, damageType: 'slash', strengthBonus: 4, soak: 4, initiative: 9, plan: { style: 'striker', rules: [{ trigger: { kind: 'self-health-below', value: 35 }, style: 'stonewall' }] } },
       reward: { coins: 300 },
    },
    {
@@ -116,7 +124,7 @@ export const SPIRE_LADDER = [
       name: 'Grand Champion Aurok',
       title: 'the Undefeated',
       blurb: 'The mountain at the top of the Spire. Bigger, faster and meaner than anyone has a right to be. Good luck, soldier — you\'ll need it.',
-      stats: { maxHealth: 30, attackTarget: 70, defenseTarget: 50, damage: { min: 6, max: 12 }, damageType: 'impact', strengthBonus: 5, soak: 7, initiative: 8, stance: 'balanced' },
+      stats: { maxHealth: 30, attackTarget: 70, defenseTarget: 50, damage: { min: 6, max: 12 }, damageType: 'impact', strengthBonus: 5, soak: 7, initiative: 8, plan: { style: 'grappler', rules: [{ trigger: { kind: 'foe-health-below', value: 40 }, style: 'striker' }] } },
       reward: { coins: 500 },
    },
 ] as const satisfies readonly SpireChampion[];
@@ -173,13 +181,15 @@ function climbOrCleared(clearedRung: number): TrialTarget {
 
 /** Builds an engine-ready CombatProfile for a champion — always at full Health,
  *  with a synthetic id that can never collide with a real Character uuid.
- *  `attackNode` is nominal (champions brawl, and never persist skill credit). */
+ *  `attackNode` is nominal (champions brawl, and never persist skill credit);
+ *  no per-style targets — the authored stats are the style's bases (D41). */
 export function championProfile(champion: SpireChampion): CombatProfile {
    return {
       characterId: `spire:${champion.id}`,
       name: `${champion.name}, ${champion.title}`,
       health: champion.stats.maxHealth,
       attackNode: 'striking',
+      family: 'unarmed',
       ...champion.stats,
    };
 }

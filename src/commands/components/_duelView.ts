@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type MessageActionRowComponentBuilder } from 'discord.js';
 import { displayName } from '../../game/character/identity.js';
 import { COMBAT_MOVES, HIT_LOCATIONS, FINISH_GIFS, START_GIFS } from '../../game/combat/flavor.js';
+import { fightingStyle, type FightingStyleId } from '../../game/combat/styles.js';
 import { skillNode } from '../../game/data/skills.js';
 import { randomItem } from '../../lib/random.js';
 import type { BoutMode } from '../../game/combat/bouts.js';
@@ -74,20 +75,53 @@ export function duelOpeningLine(challengerName: string, opponentName: string, mo
       `**${mode.emoji} ${mode.name}** rules — ${mode.description}\n${randomItem(START_GIFS)}`;
 }
 
+/** The fighters' opening styles, one line after the bell — only fighters with a
+ *  plan get a mention; a bout of two plain fighters returns null (no noise). */
+export function buildStyleIntro(openingStyles: Record<string, FightingStyleId | null>, names: Record<string, string>): string | null {
+   const lines = Object.entries(openingStyles)
+      .filter((entry): entry is [string, FightingStyleId] => entry[1] !== null)
+      .map(([id, styleId]) => {
+         const style = fightingStyle(styleId);
+         return `${style.emoji} **${names[id] ?? 'A fighter'}** squares up as a **${style.name}** — ${style.description.toLowerCase()}`;
+      });
+
+   return lines.length > 0 ? lines.join('\n') : null;
+}
+
 /** One narrated exchange. Numbers stay backstage where they can; the HP note is
- *  the one figure worth showing so a watcher can feel the fight turning. */
+ *  the one figure worth showing so a watcher can feel the fight turning. Style
+ *  switches (the combat plan firing), a hampered swing and a riposte all read as
+ *  extra story beats on the same line block. */
 export function renderBlow(blow: DuelBlow, names: Record<string, string>): string {
    const attacker = names[blow.attackerId] ?? 'A fighter';
    const defender = names[blow.defenderId] ?? 'their foe';
    const location = randomItem(HIT_LOCATIONS);
+   const lines: string[] = [];
 
-   if (!blow.hit)
-      return `**${attacker}** goes for **${defender}**'s ${location} — turned aside!`;
+   for (const change of blow.styleSwitches) {
+      const style = fightingStyle(change.style);
+      lines.push(`🔄 **${names[change.characterId] ?? 'A fighter'}** shifts to ${style.emoji} **${style.name}**!`);
+   }
+
+   // A hampered attacker is still fouled from the foe's last controlling hit.
+   const swing = blow.hampered ? `**${attacker}**, still tangled up, goes` : `**${attacker}** goes`;
+
+   if (!blow.hit) {
+      let line = `${swing} for **${defender}**'s ${location} — turned aside!`;
+      if (blow.riposte)
+         line += blow.riposte.attackerDowned
+            ? ` **${defender}** answers on the counter for **${blow.riposte.damage}** — and **${attacker}** goes down! 💫`
+            : ` **${defender}** answers on the counter for **${blow.riposte.damage}**! _(${attacker}: ${blow.riposte.attackerHealthAfter} HP)_`;
+      lines.push(line);
+      return lines.join('\n');
+   }
 
    if (blow.defenderDowned)
-      return `**${attacker}** ${randomItem(COMBAT_MOVES)} **${defender}**'s ${location} for **${blow.damage}** — and **${defender}** goes down! 💫`;
+      lines.push(`${blow.hampered ? `${swing} in and` : `**${attacker}**`} ${randomItem(COMBAT_MOVES)} **${defender}**'s ${location} for **${blow.damage}** — and **${defender}** goes down! 💫`);
+   else
+      lines.push(`${blow.hampered ? `${swing} in and` : `**${attacker}**`} ${randomItem(COMBAT_MOVES)} **${defender}**'s ${location} for **${blow.damage}**! _(${defender}: ${blow.defenderHealthAfter} HP)_`);
 
-   return `**${attacker}** ${randomItem(COMBAT_MOVES)} **${defender}**'s ${location} for **${blow.damage}**! _(${defender}: ${blow.defenderHealthAfter} HP)_`;
+   return lines.join('\n');
 }
 
 /** The closing line: a knockout, or a points decision on the round cap. */

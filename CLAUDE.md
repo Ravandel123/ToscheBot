@@ -209,6 +209,7 @@ convention changes, change the rule and this section together.
 | D38 | **Alpha DB-wipe recovery: `npm run seed` replays a hand-maintained roster (`src/scripts/seed-data.ts`) through the normal creation services.** The alpha wipes the DB often; instead of making ~10 players redo the wizard, the owner records each player's **wizard inputs only** (ownerId, username, name, race, gender, epithet/bio/avatar, the 50-pt attribute allocation, optional body frame, optional `active`) once per character in `seed-data.ts`, and `seed-characters.ts` replays them through the real domain path — `accountService.getOrCreate` → `characterService.create` (`defaultCharacterStats`) → `setAttributeAllocation`/`setBody` → the **guarded** `submitForApproval`+`approve` transitions → `setActiveCharacter` — **never raw model writes**. Validates everything up front (point-buy sum/caps, name/gender/lengths, duplicate owner+name) and writes nothing on any error; **idempotent** (an existing owner+name is skipped), so rerunning after adding entries is safe. **MAINTENANCE RULE for every future session:** because the seed stores only creation inputs and derives the rest from catalogs/services, schema/catalog changes normally need NO seed edit — but any change to the **creation-input shape** (a new required wizard step, changed identity fields, changed point-buy rules) MUST extend `SeedCharacter` + the runner **in the same commit**, and populated `seed-data.ts` entries must be migrated by hand. | Replaying creation through services means the seed auto-absorbs new fields/catalogs (derive, don't copy — the same D10 instinct); a raw-document dump would rot on exactly the schema changes that force the wipes. Walking the real approval lifecycle (not a status `$set`) makes the seed break visibly if the flow ever changes instead of minting corrupt characters. |
 | D39 | **Attribute-derived Health/Stamina maxes are BUILT (owner-requested 2026-07-07), closing the `recalculateMaxResources` seam D14/D23 named.** `game/character/resources.ts`: `healthMax` = Constitution-led (weight 2) + a lesser Strength + Willpower nudge (weight 1 each); `staminaMax` = Constitution-led (weight 2) + a lesser Willpower nudge (weight 1) — both read the shared `attributeBonus` (tens-digit scale, moved to `game/character/attributes.ts` as the canonical definition; `game/combat/stats.ts` now re-exports it instead of defining its own copy). Constants (`HEALTH_BASE = 12`, `STAMINA_BASE = 4`, the weights) are tuned so a raceless/unallocated draft lands exactly on the old flat defaults (Health 20 / Stamina 10) — today's placeholder combat numbers don't silently shift for the "average" character. Wired at `defaultCharacterStats` (fresh character starts full at its computed max) and recomputed by `characterService.setRace`/`setAttributeAllocation` via `applyMaxResources` (full stays full on a raised cap; a damaged character keeps its wounds, only the ceiling moves). Frame (weight/height, R12) is still a documented future addend to the formula, not built. | Constitution as the dominant driver with Strength/Willpower as lesser contributors was the owner's explicit call — mirrors the shape the throwaway sparring engine already used informally (`combatStatsFromCharacter`'s `str*5+wp*5+end*10`) but wires it into the REAL persisted pool that duel/trial actually fight over, not just the fantasy sparring stat. Tuning constants to match the old flat baseline avoids a silent balance shift for every character that already exists. |
 | D40 | **Learn-by-doing is LIVE — skill use is credited with an opposition-scaled training weight; first consumers: Spire combat + travel challenges (owner-requested 2026-07-07).** `creditUse`/`characterService.creditSkillUse` now take fractional `uses` (the weight; ≤0 = no-op, banked progress stored to 2 decimals), and `GROWTH_PROFILES` gained knees at 20/40 points to land the owner's pacing example (~10 fights per point on a fresh fighting skill → ~100 at 20 points; root slowest — one fight still trains the WHOLE path root→leaf, D34). **Combat weight** (`game/combat/training.ts`): `foePower / yourPower` over `combatPower(CombatProfile)` (attack+defence targets + damage/StrB/Soak/Health) — capped at **2.0**, linear below 1, **0 at ≤ 0.5** (beating up novices or an outgrown Spire rematch teaches literally nothing — the anti-farm). `/smackdown duel` credits BOTH fighters' `attackNode` path (a new `CombatProfile` field; unarmed attack now draws on the `striking` leaf, not the bare `brawling` root, so the whole brawling path trains) **win or lose**, under the existing bout locks; `/smackdown trial` credits the player against the champion's stat-block power. **Non-combat checks**: `checkTrainingWeight(target) = 2·(1 − target/100)` (a coin-flip = 1.0, a near-certainty ≈ 0.1) — travel-challenge ROLLED options credit their check's node after the step-guard win (the guard makes the read-modify-write safe: a session-busy character can't equip/duel/switch); checkless choices and attribute-only checks credit nothing. **Sparring credits nothing** (D16 fantasy stakes); the "meaningful use" house rule is now LOCKED in `Ruleset/skills.md` (*rolled and could have failed → counts; free/auto → never*). Rank-ups announce in the narration (`📈 … rises to N`, shared `buildTrainingLine`); `/character skills` shows fractional banked progress. All weights/bands stay 🟡. | The owner's explicit brief: growth through use with diminishing returns, a stronger opponent teaching more, a much weaker one nothing, roots slowest. Expressing "how instructive" as fractional USES keeps the engine's single growth currency (the bands) instead of bolting on a parallel XP meter; deriving the combat weight from the already-derived `CombatProfile`s prices PvP fighters and hand-authored PvE champions identically (no new stat surface); crediting inside the existing locks/step-guards adds zero new concurrency rules. The check-difficulty weight is the same "edge of your ability teaches most" principle applied where there is no opponent — one idea, two formulas, both in `Ruleset/skills.md`'s Reference. |
+| D41 | **Fighting styles + the combat plan (owner-designed 2026-07-07): family-specific, node-backed styles, switched by standing orders set on `/character combat`.** Two axes, deliberately separate: the **tree = what you know** (new branches: `brawling → {striking, grappling, guard}`; `melee → {onslaught, binding, warding}` style branches beside the weapon-grip ones — catalog edits, zero migration per D34) and the **style = how you fight** (`game/combat/styles.ts`, D10): 3 per family (🥊 Striker/🤼 Grappler/🧱 Stonewall unarmed; ⚔️ Onslaught/⛓️ Binder/🛡️ Warden armed; `ranged` a typed no-content seam), each a flexible mix of `modifiers` {attack/defense/damage} and/or typed `effects` (**hamper** — a connecting hit fouls the foe's next swing −15; **riposte** — a ≥2-SL defence counters through Soak, ≥1). Styles are **family-specific** (owner: muay thai doesn't help a swordsman; the family resolves from the main hand at profile build) and are NOT tree nodes themselves — but each **draws on a node**: unarmed the node IS the attack draw, armed it sums with the weapon branch via `extraNodes` (path dedup handles the shared `melee` root — the metallurgy pattern verbatim), and **defence rolls the style node's path in both families** — the owner's added rule "know your style well → strike AND defend better in it", which also makes styles **self-gating** (no unlock economy; an untrained style rolls its untrained path) and **trainable** (D40 extension: `trainingNodes` credits each style actually fought in — a whole bout in Grappler banks nothing into Striking; armed always keeps the weapon branch). The **combat plan** (`Character.combatPlan`, sparse Mixed; `characterService.setCombatPlan`, per-family atomic `$set`) is R24's "pre-fight menu" landed as something better for an async game: per-family default style + ≤3 conditional switch rules (own-HP-below% / foe-HP-below% / round ≥ N — triggers monotonic in-fight, so styles never flap), first-match-wins, re-evaluated at the top of every exchange and narrated (`🔄 … shifts to …`). Edited on **`/character combat`** (`combatplan` handler + `_combatPlanView` — ephemeral/personal/stateless like `/profile`; the rule builder is a two-step select flow whose half-built rule rides the customId — discrete trigger menu, no free text, honoring the "modals host only text inputs" convention); per-style base targets are precomputed at profile build (the challenge-panel honest-odds discipline) with a base-target fallback for styles without them. Spire champions may carry a hand-authored `plan` (their stat block IS their style's base; Osk grapples, Marrow/Dourmane stonewall, Sela/Vesh strike, Busk/Sand Widow/Aurok switch under pressure — the ladder demos the system to players); the inert `stance` field died unbuilt, replaced by this. Deferred with seams: `knowsStyle` counter-play (now cheap — key it on the defender's points in the attacker's active style's node), ranged styles (family typed, no engine), named canon schools as learned talents, more effect kinds. All numbers 🟡. **`/character` needs a redeploy** (new `combat` subcommand; no other slash changes). | The owner asked for a deeper unarmed tree, ~3 behavior-changing switchable styles and a `/character combat` panel with conditionals — and the panel idea is structurally right: under R24 auto-resolve the challenged player makes NO decision after Accept, so standing orders set ahead of time are the only agency shape that works async (FF12 gambits). Splitting knowledge (tree) from decision (style) answers his "lower leaf or something different?" fork: a conditional can't switch a *skill*, only a *choice* — while backing every style with a node keeps proficiency trainable through the one existing growth engine (no parallel XP surface, no unlock catalog). Family-specific catalogs honor his muay-thai point without a per-weapon-leaf style explosion (style branches beside grip branches, joined by the already-proven `extraNodes` summing). |
 
 ## Target architecture
 
@@ -249,7 +250,9 @@ src/
                           equipment attribute modifiers, browse state — D28)
     combat/             two engines (both pure + testable): the throwaway sparring d20
                         (engine/stats/elo, D16) AND the real duel (duel.ts opposed-d100 /
-                        Health / Soak + profile.ts derivation — D35); flavor data
+                        Health / Soak + profile.ts derivation — D35); styles.ts (the
+                        fighting-style catalog) + plan.ts (combat-plan triggers) — D41;
+                        training.ts (D40 weights + D41 trainingNodes); flavor data
     activity/           durable-activity pure logic: session timing helpers (D17 seam) +
                         per-activity step reducers (challenge.ts — D22/D26)
     world/              travel rules over the location graph + encounter rolling (D21)
@@ -329,7 +332,7 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
   throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
   must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Ten consumers
+  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Eleven consumers
   so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
   D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details + body
   modals, Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
@@ -340,9 +343,11 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   collection — reuses the `/inventory` renderers), `play` (the D30/D31 game hub —
   travel select + condition-gated local-action buttons; the shared hub VIEW + context
   loader live in `_hubView.ts`), `duel` (the D35 consent card + fight orchestration),
-  `charskills` (the read-only `/character skills` tree viewer — D34), and `trial` (the
+  `charskills` (the read-only `/character skills` tree viewer — D34), `trial` (the
   D37 Spire-ladder **browser** — ◀ ▶ scroll the champions + a Fight button; owns the PvE
-  bout orchestration, mirroring `duel`).
+  bout orchestration, mirroring `duel`), and `combatplan` (the D41 `/character combat`
+  plan editor — default-style selects + a two-step rule builder whose half-built rule
+  rides the customId).
   All are fully
   **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
@@ -762,7 +767,15 @@ up to 2×, a foe at ≤ half your power nothing; checks weigh by difficulty), wi
 bands retuned to the owner's ~10→~100-uses-per-point curve; rank-ups announce in the
 narration and the full formula sits at the top of `Ruleset/skills.md`. **No slash-command
 changes — no redeploy needed for D40.**
-**473 tests, build + lint green.**
+Newest (2026-07-07): **fighting styles + the combat plan (D41)** — family-specific styles
+(unarmed: Striker/Grappler/Stonewall over the new `striking`/`grappling`/`guard` brawling
+branches; armed: Onslaught/Binder/Warden over style branches beside the weapon-grip ones),
+each modifiers and/or effects (hamper, riposte), drawing attack AND defence from its skill
+node (know it better → fight better in it, and fighting in it trains it); the **`/character
+combat`** panel sets a per-family default style + up to 3 conditional switch rules
+(own/foe HP %, round), evaluated per exchange and narrated; several Spire champions now
+fight with plans of their own. **`/character` needs a redeploy** (new `combat` subcommand).
+**511 tests, build + lint green.**
 The owner has smoke-tested
 `/profile` and `/smackdown` live; the bot has not yet been run end-to-end against a live
 Atlas cluster (needs `.env` + `npm run deploy` — **`/stash` is a NEW command so a redeploy
@@ -785,8 +798,10 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
 - **Slash (`/`)** — `character` (`create` is the single creation/editing entry point — opens
   the step-driven creation wizard panel for a new or still-editable draft — details, race,
   gender, **body frame** (R20), **attribute point-buy**, submit, all on the panel — + owner
-  approval; plus **view**/list/**skills**/switch; `view` is the public character sheet with
-  attributes, **equipment** + traits, `skills` the D34 read-only skill-tree viewer),
+  approval; plus **view**/list/**skills**/**combat**/switch; `view` is the public character
+  sheet with attributes, **equipment** + traits, `skills` the D34 read-only skill-tree viewer,
+  `combat` the D41 **combat-plan panel** — default fighting style per family + conditional
+  switch rules),
   `profile` (the account panel: active character, settings toggles — D27), `inventory`
   (the D28 pack/equipment panel: hub → category browser with sort/pages → item card with
   equip/unequip/use/**store**/drop), `stash` (D33 — browse + withdraw the active
@@ -796,11 +811,14 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   (round-by-round in `#smackdown-spire`, commits Elo only) and `smackdown duel [mode]` (the real
   bout — D35: consent-gated, opposed-d100/Health/Soak, persists damage to both fighters,
   0 HP = Downed with no other cost; **bout modes** Full Gear / Bare-Knuckle — D36; both
-  fighters **train their attack skill path**, opposition-weighted — D40) and
+  fighters fight under their **combat plans** — styles, conditional switches, hamper/riposte
+  effects, all narrated — D41 — and **train the paths they fought in**, opposition-weighted —
+  D40/D41) and
   `smackdown trial` (the PvE **Spire ladder** — D37: opens a **browsable roster panel** — ◀ ▶
   scroll the 10 escalating champions, each with a stat card + 🖼️ portrait placeholder, then a
   Fight button live only for a climb/earned rematch; real HP at stake, a coin reward per rung,
-  and the player **trains** against the champion's strength (an outgrown rematch teaches
+  several champions fight with **styles/plans of their own** — D41 — and the player **trains**
+  against the champion's strength (an outgrown rematch teaches
   nothing — D40).
   Replaced the old `opponent:<name>` argument, so a bare `/smackdown trial` always works),
   `play` (the D30/D31 game hub —
@@ -834,7 +852,9 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   Accept/Decline + the auto-resolve fight orchestration: lock, resolve, narrate, persist HP),
   `charskills` (the `/character skills` viewer — read-only, no lock), `trial` (D37 — the
   `/smackdown trial` Spire-ladder browser: ◀ ▶ roster nav + a Fight button that runs the PvE
-  bout under the character lock, persisting only the player's HP).
+  bout under the character lock, persisting only the player's HP), `combatplan` (D41 — the
+  `/character combat` plan editor: default-style selects + a two-step rule builder; each
+  edit is one atomic per-family `$set`, no lock — a fight snapshots the plan under its own).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
   (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
   `game/chronicle.ts` (public game log — D24).

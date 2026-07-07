@@ -8,6 +8,7 @@ import { effectiveAttributes, emptyAllocation, type AttributeAllocation } from '
 import { recalculateMaxResources } from '../../game/character/resources.js';
 import { emptyProgression, type CharacterProgression } from '../../game/character/skills.js';
 import { defaultBody, type CharacterBody } from '../../game/character/body.js';
+import type { CombatPlan } from '../../game/combat/plan.js';
 import type { ItemInstance } from '../../game/character/inventory.js';
 import type { RaceId } from '../../game/data/races.js';
 
@@ -71,6 +72,11 @@ export interface CharacterDoc {
    // Worn/wielded gear: equipment slot id → inventory instanceId. Plain object
    // (not a catalog-derived field map) so ADDING a slot needs no migration.
    equipment: Partial<Record<string, string>>;
+   // Standing combat orders (D41): per style-family default style + conditional
+   // switches, read at fight time by combatProfile. Sparse plain object (an
+   // absent family fights plain) — adding a family/trigger needs no migration;
+   // reads sanitize via game/combat/plan.ts (D10 rule 3).
+   combatPlan: CombatPlan;
    createdAt: Date;
    updatedAt: Date;
 }
@@ -123,6 +129,7 @@ const characterSchema = new Schema({
    currencies: fromKeys(Object.keys(CURRENCIES), { type: Number, required: true }),
    inventory: { type: [itemInstanceSchema], default: [] },
    equipment: { type: Schema.Types.Mixed, default: {} },
+   combatPlan: { type: Schema.Types.Mixed, default: {} },
 }, { timestamps: true, minimize: false });
 
 export const Character = model('Character', characterSchema) as unknown as Model<CharacterDoc>;
@@ -130,7 +137,7 @@ export const Character = model('Character', characterSchema) as unknown as Model
 /** Catalog-derived stat block for a fresh character (identity/owner set by the caller).
  *  Attributes start at the racial base with an untouched allocation — the wizard's
  *  point-buy step (and any later race change) recomputes them via the service. */
-export function defaultCharacterStats(race: RaceId | null = null): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'attributeAllocation' | 'body' | 'traits' | 'progression' | 'currencies' | 'inventory' | 'equipment'> {
+export function defaultCharacterStats(race: RaceId | null = null): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'attributeAllocation' | 'body' | 'traits' | 'progression' | 'currencies' | 'inventory' | 'equipment' | 'combatPlan'> {
    const attributes = effectiveAttributes(race, emptyAllocation());
    const maxResources = recalculateMaxResources(attributes);
 
@@ -152,5 +159,6 @@ export function defaultCharacterStats(race: RaceId | null = null): Pick<Characte
       ) as Record<CurrencyKey, number>,
       inventory: [],
       equipment: {},
+      combatPlan: {},
    };
 }

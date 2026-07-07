@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { LADDER_LENGTH, SPIRE_LADDER, championAtRung, championProfile, trialTarget } from './spireLadder.js';
+import { LADDER_LENGTH, SPIRE_LADDER, championAtRung, championProfile, trialTarget, type SpireChampion } from './spireLadder.js';
+import { FIGHTING_STYLES } from './styles.js';
 
 describe('Spire ladder', () => {
    it('is a non-empty ordered gauntlet', () => {
@@ -30,6 +31,19 @@ describe('Spire ladder', () => {
       const profile = championProfile(SPIRE_LADDER[0]);
       expect(profile.health).toBe(profile.maxHealth);
       expect(profile.characterId.startsWith('spire:')).toBe(true);
+   });
+
+   it('champions with a combat plan use only unarmed styles (the ladder brawls)', () => {
+      // Widen off the `as const` literals so entries without a plan read it as
+      // the optional field it is.
+      for (const champion of SPIRE_LADDER as readonly SpireChampion[]) {
+         const plan = champion.stats.plan;
+         if (!plan)
+            continue;
+         for (const styleId of [plan.style, ...plan.rules.map((rule) => rule.style)])
+            if (styleId !== null)
+               expect(FIGHTING_STYLES[styleId].family, `${champion.id} plan style ${styleId}`).toBe('unarmed');
+      }
    });
 });
 

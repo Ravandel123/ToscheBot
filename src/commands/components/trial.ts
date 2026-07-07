@@ -7,12 +7,12 @@ import { smackdownService } from '../../db/services/smackdownService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { resolveDuel } from '../../game/combat/duel.js';
 import { combatProfile } from '../../game/combat/profile.js';
-import { trainingWeight } from '../../game/combat/training.js';
+import { trainingNodes, trainingWeight } from '../../game/combat/training.js';
 import { LADDER_LENGTH, championProfile, trialTarget, type SpireChampion, type TrialTarget } from '../../game/combat/spireLadder.js';
 import { canCharacterAct } from '../../game/character/rules.js';
 import { displayName } from '../../game/character/identity.js';
 import { postChronicle } from '../../game/chronicle.js';
-import { buildTrainingLine, renderBlow } from './_duelView.js';
+import { buildStyleIntro, buildTrainingLine, renderBlow } from './_duelView.js';
 import { buildTrialBrowser, buildTrialOpening, buildTrialResult, buildTrialSentOff } from './_trialView.js';
 import { resolveGuildChannel } from '../../lib/discord.js';
 import { sleep } from '../../lib/async.js';
@@ -153,6 +153,14 @@ async function runTrialFight(client: ToscheClient, spire: SendableChannels, char
 
       await announce(spire, buildTrialOpening(player.name, champ, isRematch));
       await sleep(INTRO_DELAY_MS);
+
+      // A champion (or a player with a combat plan) opens in a named style (D41).
+      const styleIntro = buildStyleIntro(result.openingStyles, names);
+      if (styleIntro) {
+         await announce(spire, styleIntro);
+         await sleep(ROUND_DELAY_MS);
+      }
+
       for (const blow of result.blows) {
          await announce(spire, renderBlow(blow, names));
          await sleep(ROUND_DELAY_MS);
@@ -164,11 +172,12 @@ async function runTrialFight(client: ToscheClient, spire: SendableChannels, char
       if (delta !== 0)
          await characterService.applyResourceDeltas(fighter._id, { health: delta });
 
-      // Learn-by-doing (D40): the bout trains the player's attack path, win or
-      // lose, weighted by the champion's strength — so a rematch against an
+      // Learn-by-doing (D40/D41): the bout trains the paths the player actually
+      // fought in (each used style's branch, the weapon branch when armed), win
+      // or lose, weighted by the champion's strength — so a rematch against an
       // outgrown rung fades to nothing (the anti-farm) while the next climb
       // teaches plenty. Still under the character lock.
-      const levelUps = await characterService.creditSkillUse(fighter._id, [player.attackNode], trainingWeight(player, foe));
+      const levelUps = await characterService.creditSkillUse(fighter._id, trainingNodes(player, result.stylesUsed[player.characterId] ?? []), trainingWeight(player, foe));
       if (levelUps.length > 0)
          await announce(spire, buildTrainingLine(player.name, levelUps));
 

@@ -1,4 +1,6 @@
+import { fightingStyle, type FightingStyleId } from './styles.js';
 import type { CombatProfile } from './duel.js';
+import type { SkillNodeId } from '../data/skills.js';
 
 // Learn-by-doing for COMBAT (Ruleset/skills.md "Training weight"): how much one
 // bout is worth in skill uses. Pure — reads only the two engine-ready profiles,
@@ -45,4 +47,27 @@ export function trainingWeight(self: CombatProfile, foe: CombatProfile): number 
       return Math.min(MAX_TRAINING_WEIGHT, ratio);
 
    return Math.max(0, (ratio - TRIVIAL_FOE_RATIO) / (1 - TRIVIAL_FOE_RATIO));
+}
+
+/**
+ * The skill nodes one fighter's bout actually exercised (D41): each style they
+ * fought in trains its own branch (you practise what you did — a whole bout in
+ * Grappler banks nothing into Striking), a plain stretch trains the base attack
+ * node, and an armed fighter keeps training the weapon branch under any style
+ * (the blade is still doing the cutting). `creditUse` dedupes shared parents.
+ */
+export function trainingNodes(profile: CombatProfile, stylesUsed: readonly (FightingStyleId | null)[]): SkillNodeId[] {
+   const nodes = new Set<SkillNodeId>();
+
+   for (const styleId of stylesUsed.length > 0 ? stylesUsed : [null]) {
+      if (styleId === null) {
+         nodes.add(profile.attackNode);
+         continue;
+      }
+      nodes.add(fightingStyle(styleId).node);
+      if (profile.family === 'melee')
+         nodes.add(profile.attackNode);
+   }
+
+   return [...nodes];
 }

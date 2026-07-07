@@ -62,6 +62,52 @@ describe('combatProfile', () => {
       expect(combatProfile(armoured).soak).toBe(attributeBonus(30) + 1);
    });
 
+   it('resolves the style family from the hands: fists = unarmed, a weapon = melee', () => {
+      expect(combatProfile(character()).family).toBe('unarmed');
+
+      const armed = character({
+         inventory: [{ instanceId: 'w1', itemId: 'iron_sword', quality: 'common', quantity: 1, durability: 60, acquiredAt: new Date() }],
+         equipment: { mainHand: 'w1' },
+      });
+      expect(combatProfile(armed).family).toBe('melee');
+      // Bare-knuckle strips the sword → the unarmed catalog (and plan) applies.
+      expect(combatProfile(armed, { loadout: 'unarmed-unarmored' }).family).toBe('unarmed');
+   });
+
+   it('derives per-style targets for every style the combat plan references', () => {
+      const planned = character({
+         combatPlan: { unarmed: { style: 'striker', rules: [{ trigger: { kind: 'self-health-below', value: 50 }, style: 'stonewall' }] } },
+      });
+      const p = combatProfile(planned);
+
+      expect(p.plan).toEqual({ style: 'striker', rules: [{ trigger: { kind: 'self-health-below', value: 50 }, style: 'stonewall' }] });
+      expect(p.styleTargets?.striker).toBeDefined();
+      expect(p.styleTargets?.stonewall).toBeDefined();
+      expect(p.styleTargets?.grappler).toBeUndefined(); // unreferenced — not computed
+   });
+
+   it('rolls a trained style better on BOTH sides of the opposed test (the owner\'s rule)', () => {
+      const plan = { unarmed: { style: 'stonewall' as const, rules: [] } };
+      const novice = combatProfile(character({ combatPlan: plan }));
+      const drilled = combatProfile(character({
+         combatPlan: plan,
+         progression: { skills: { guard: { points: 20, progress: 0 }, brawling: { points: 10, progress: 0 } } },
+      }));
+
+      const noviceTargets = novice.styleTargets?.stonewall;
+      const drilledTargets = drilled.styleTargets?.stonewall;
+      expect(drilledTargets?.attack ?? 0).toBeGreaterThan(noviceTargets?.attack ?? 0);
+      expect(drilledTargets?.defense ?? 0).toBeGreaterThan(noviceTargets?.defense ?? 0);
+   });
+
+   it('drops a wrong-family plan instead of carrying it into the bout', () => {
+      // A melee plan on a bare-fisted fighter: the unarmed family has no plan
+      // stored, so the profile fights plain.
+      const p = combatProfile(character({ combatPlan: { melee: { style: 'warden', rules: [] } } }));
+      expect(p.plan).toEqual({ style: null, rules: [] });
+      expect(p.styleTargets).toEqual({});
+   });
+
    it('strips gear for a bare-knuckle loadout', () => {
       const kitted = character({
          inventory: [

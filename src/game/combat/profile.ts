@@ -1,9 +1,11 @@
-import { checkTarget } from '../checks.js';
+import { checkTarget, type CheckSubject } from '../checks.js';
 import { attributeBonus } from './stats.js';
+import { fightingStyle, type FightingStyleId, type StyleFamily } from './styles.js';
+import { sanitizeFamilyPlan, type FamilyPlan } from './plan.js';
 import { attributesWithEquipment, equipmentOf, findItem, totalEquippedArmor } from '../character/inventory.js';
 import { displayName } from '../character/identity.js';
 import type { BoutLoadout } from './bouts.js';
-import type { CombatProfile, DamageType } from './duel.js';
+import type { CombatProfile, DamageType, StyleTargets } from './duel.js';
 import type { AttributeKey } from '../data/attributes.js';
 import type { SkillNodeId } from '../data/skills.js';
 import type { WeaponDefinition } from '../data/items.js';
@@ -56,6 +58,11 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
    const strengthBonus = attributeBonus(attributes.strength);
    const constitutionBonus = attributeBonus(attributes.constitution);
 
+   // Styles are family-specific (D41): what's in your hands decides which
+   // catalog (and which stored plan) applies to this bout.
+   const family: StyleFamily = weapon ? 'melee' : 'unarmed';
+   const plan = sanitizeFamilyPlan(character.combatPlan?.[family], family);
+
    return {
       characterId: character._id,
       name: displayName(character),
@@ -73,8 +80,45 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
       strengthBonus,
       soak: constitutionBonus + armorValue,
       initiative: attributeBonus(attributes.agility) + attributeBonus(attributes.perception),
-      stance: 'balanced',
+      family,
+      styleTargets: buildStyleTargets(subject, plan, family, attackNode),
+      plan,
    };
+}
+
+/**
+ * Per-style base d100 targets for every style the plan references, computed
+ * UP FRONT (the same honest-odds discipline as challenge options: what a
+ * repaint would show and what the engine rolls can never disagree). Each style
+ * draws on its skill node (D41): unarmed, the node replaces the attack draw;
+ * armed, the weapon branch and the style branch are summed together (extraNodes
+ * — the shared melee root dedupes). Defence is the style node's path both ways
+ * — the owner's rule: knowing your style well means defending better in it.
+ */
+function buildStyleTargets(
+   subject: CheckSubject,
+   plan: FamilyPlan,
+   family: StyleFamily,
+   attackNode: SkillNodeId,
+): Partial<Record<FightingStyleId, StyleTargets>> {
+   const referenced = new Set<FightingStyleId>();
+   if (plan.style)
+      referenced.add(plan.style);
+   for (const rule of plan.rules)
+      referenced.add(rule.style);
+
+   const targets: Partial<Record<FightingStyleId, StyleTargets>> = {};
+   for (const styleId of referenced) {
+      const node = fightingStyle(styleId).node;
+      targets[styleId] = {
+         attack: family === 'melee'
+            ? checkTarget(subject, { node: attackNode, extraNodes: [node], modifier: COMBAT_ATTACK_BASE })
+            : checkTarget(subject, { node, modifier: COMBAT_ATTACK_BASE }),
+         defense: checkTarget(subject, { node, modifier: COMBAT_DEFENSE_BASE }),
+      };
+   }
+
+   return targets;
 }
 
 /** A character's attributes WITHOUT any equipment modifiers — what a bare-knuckle

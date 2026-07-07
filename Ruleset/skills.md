@@ -47,6 +47,9 @@ announce themselves (`📈 …rises to N`); silent banking stays silent.
 
 **Live consumers** — `/smackdown duel` (both fighters), `/smackdown trial` (the player; a
 rematch vs an outgrown champion decays to 0), travel-challenge options with a rolled check.
+Since D41 a bout credits the paths the fighter **actually fought in** (`trainingNodes`): each
+fighting style used trains its own branch (a whole bout in Grappler banks nothing into
+Striking), plus the weapon branch when armed.
 
 **Attribute growth (R13)** — skills don't raise attributes directly; **using attribute-tied
 skills unlocks buying that attribute with XP**. Only attributes fed by trained skills unlock.
@@ -301,12 +304,15 @@ Mastery above that via special sources is future, per the Ruleset section above.
 - **Awareness** (root, blend `1.0 PER`) → {Searching} — added with D40 so the travel
   challenges' spot/search options train something real; the design list's Perception root,
   deliberately minimal (Track/Navigate join it when built).
-- **Combat trees** (live in the serious engine since D35/D40 — the duel/trial attack draws on
-  and TRAINS the wielded weapon's branch, or **Striking** when unarmed; sparring still uses the
-  old flat throwaway formula, combat.md): Melee (`0.5 AGI`) → One-Handed → {Blades, Axes &
-  Maces}; Melee → Two-Handed → {Great Blades, Polearms}; Ranged (`0.5 DEX`); Brawling
-  (`0.5 AGI`) → Striking. Weapon→leaf mapping (a longsword to Blades) is a SEAM — grip decides
-  the branch until weapons carry a skill tag.
+- **Combat trees** (live in the serious engine since D35/D40/D41 — the duel/trial attack draws
+  on and TRAINS the wielded weapon's branch, or the unarmed style's branch; sparring still uses
+  the old flat throwaway formula, combat.md): Melee (`0.5 AGI`) → One-Handed → {Blades, Axes &
+  Maces}; Melee → Two-Handed → {Great Blades, Polearms}; Melee → **style branches** {Onslaught,
+  Binding, Warding} (D41 — an armed style sums its branch WITH the weapon branch via
+  `extraNodes`, and its path is the style's defence); Ranged (`0.5 DEX`); Brawling (`0.5 AGI`)
+  → {Striking, **Grappling**, **Guard**} (the brawling branches ARE the unarmed styles' nodes —
+  unarmed, the technique is the approach). Weapon→leaf mapping (a longsword to Blades) is a
+  SEAM — grip decides the branch until weapons carry a skill tag.
 
 ### Storage — `progression` subdoc ✅ D32
 `Character.progression: { skills: SkillProgression }`, stored as a plain (Mixed) object so
@@ -317,11 +323,12 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
 
 ### What's wired, what isn't
 - ✅ `game/checks.ts` (combat.md) consumes `effectiveSkill`/`checkTarget` for travel challenges.
-- ✅ **Skills grow in play (D40)**: `/smackdown duel` credits BOTH fighters' attack paths
-  (opponent-strength weight, `game/combat/training.ts`), `/smackdown trial` credits the player
-  (champion-strength weight — an outgrown rematch credits 0), and travel-challenge checked
-  options credit their node (difficulty weight, `checkTrainingWeight`). Rank-ups announce in
-  the narration; the skill panel shows fractional banked progress.
+- ✅ **Skills grow in play (D40)**: `/smackdown duel` credits BOTH fighters' fought paths
+  (opponent-strength weight, `game/combat/training.ts`; since D41 `trainingNodes` credits each
+  used fighting style's branch + the weapon branch when armed), `/smackdown trial` credits the
+  player (champion-strength weight — an outgrown rematch credits 0), and travel-challenge
+  checked options credit their node (difficulty weight, `checkTrainingWeight`). Rank-ups
+  announce in the narration; the skill panel shows fractional banked progress.
 - ⬜ Crafting/professions crediting (foraging etc.) — next consumers; the same
   `creditSkillUse(id, nodes, weight)` call.
 - ⬜ Roles, the XP/points economy, and talents are pure design (above) — nothing in `game/` or

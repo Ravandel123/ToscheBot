@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_TRAINING_WEIGHT, combatPower, trainingWeight } from './training.js';
+import { MAX_TRAINING_WEIGHT, combatPower, trainingNodes, trainingWeight } from './training.js';
 import { SPIRE_LADDER, championProfile } from './spireLadder.js';
 import type { CombatProfile } from './duel.js';
 
@@ -17,7 +17,7 @@ function profile(overrides: Partial<CombatProfile> = {}): CombatProfile {
       strengthBonus: 0,
       soak: 0,
       initiative: 5,
-      stance: 'balanced',
+      family: 'unarmed',
       ...overrides,
    };
 }
@@ -65,5 +65,26 @@ describe('trainingWeight', () => {
       const underdog = profile();
       const favourite = profile({ attackTarget: 65, defenseTarget: 50, soak: 3 });
       expect(trainingWeight(underdog, favourite)).toBeGreaterThan(trainingWeight(favourite, underdog));
+   });
+});
+
+describe('trainingNodes', () => {
+   it('trains the base attack node for a plain bout (no styles used)', () => {
+      expect(trainingNodes(profile(), [])).toEqual(['striking']);
+      expect(trainingNodes(profile(), [null])).toEqual(['striking']);
+   });
+
+   it('trains the style branch you actually fought in, not the base one', () => {
+      // A whole bout in Grappler banks nothing into Striking (D41).
+      expect(trainingNodes(profile(), ['grappler'])).toEqual(['grappling']);
+   });
+
+   it('trains every distinct style of a plan-switching bout', () => {
+      expect(trainingNodes(profile(), ['striker', 'stonewall'])).toEqual(['striking', 'guard']);
+   });
+
+   it('keeps an armed fighter training the weapon branch under any style', () => {
+      const armed = profile({ family: 'melee', attackNode: 'one_handed' });
+      expect(trainingNodes(armed, ['warden'])).toEqual(expect.arrayContaining(['warding', 'one_handed']));
    });
 });

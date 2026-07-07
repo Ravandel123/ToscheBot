@@ -7,7 +7,7 @@ import { displayName } from '../../game/character/identity.js';
 import { boutMode, type BoutMode } from '../../game/combat/bouts.js';
 import { combatProfile } from '../../game/combat/profile.js';
 import { resolveDuel, type CombatProfile, type DuelResult } from '../../game/combat/duel.js';
-import { trainingWeight } from '../../game/combat/training.js';
+import { trainingNodes, trainingWeight } from '../../game/combat/training.js';
 import { postChronicle } from '../../game/chronicle.js';
 import { sleep } from '../../lib/async.js';
 import {
@@ -15,6 +15,7 @@ import {
    buildCancelledCard,
    buildDeclinedCard,
    buildOutcomeLine,
+   buildStyleIntro,
    buildTrainingLine,
    duelOpeningLine,
    renderBlow,
@@ -179,11 +180,12 @@ async function runDuel(client: ToscheClient, channel: SendableChannels, challeng
          applyDamage(p2.characterId, p2.health, result.finalHealth[p2.characterId]),
       ]);
 
-      // Learn-by-doing (D40): both fighters trained their attack path, win or
-      // lose, weighted by how dangerous the OTHER one was — a pushover credits
-      // nothing. Still under both locks, so the map write is safe.
-      await creditBout(channel, p1, p2);
-      await creditBout(channel, p2, p1);
+      // Learn-by-doing (D40/D41): both fighters trained the paths they actually
+      // fought in (each used style's branch, the weapon branch when armed), win
+      // or lose, weighted by how dangerous the OTHER one was — a pushover
+      // credits nothing. Still under both locks, so the map write is safe.
+      await creditBout(channel, p1, p2, result);
+      await creditBout(channel, p2, p1, result);
 
       await postChronicle(client, chronicleLine(result, names));
    });
@@ -194,6 +196,13 @@ async function narrateDuel(channel: SendableChannels, result: DuelResult, names:
 
    await announce(channel, duelOpeningLine(challengerName, opponentName, mode));
    await sleep(INTRO_DELAY_MS);
+
+   // Fighters with a combat plan open in a named style (D41) — worth a beat.
+   const styleIntro = buildStyleIntro(result.openingStyles, names);
+   if (styleIntro) {
+      await announce(channel, styleIntro);
+      await sleep(ROUND_DELAY_MS);
+   }
 
    for (const blow of result.blows) {
       await announce(channel, renderBlow(blow, names));
@@ -210,8 +219,9 @@ async function applyDamage(characterId: string, startHealth: number, endHealth: 
 }
 
 /** Credits one fighter's skill use for the bout and announces any rank-ups. */
-async function creditBout(channel: SendableChannels, self: CombatProfile, foe: CombatProfile): Promise<void> {
-   const levelUps = await characterService.creditSkillUse(self.characterId, [self.attackNode], trainingWeight(self, foe));
+async function creditBout(channel: SendableChannels, self: CombatProfile, foe: CombatProfile, result: DuelResult): Promise<void> {
+   const nodes = trainingNodes(self, result.stylesUsed[self.characterId] ?? []);
+   const levelUps = await characterService.creditSkillUse(self.characterId, nodes, trainingWeight(self, foe));
    if (levelUps.length > 0)
       await announce(channel, buildTrainingLine(self.name, levelUps));
 }

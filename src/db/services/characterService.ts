@@ -8,6 +8,8 @@ import { effectiveAttributes, type AttributeAllocation } from '../../game/charac
 import { applyMaxResources, recalculateMaxResources } from '../../game/character/resources.js';
 import { creditUse, type SkillLevelUp } from '../../game/character/skills.js';
 import type { CharacterBody } from '../../game/character/body.js';
+import type { FamilyPlan } from '../../game/combat/plan.js';
+import type { StyleFamily } from '../../game/combat/styles.js';
 import type { SkillNodeId } from '../../game/data/skills.js';
 import type { CurrencyKey } from '../../game/data/currencies.js';
 import type { TraitKey } from '../../game/data/traits.js';
@@ -117,6 +119,13 @@ export const characterService = {
     *  caller via game/character/body.ts). Callers gate with `canEdit` first. */
    async setBody(characterId: string, body: CharacterBody): Promise<void> {
       await Character.updateOne({ _id: characterId }, { $set: { body } });
+   },
+
+   /** Persists one family's standing combat orders (D41; validated by the
+    *  caller via game/combat/plan.ts — sanitizeFamilyPlan). One atomic $set of
+    *  the whole family subtree; other families' plans are untouched. */
+   async setCombatPlan(characterId: string, family: StyleFamily, plan: FamilyPlan): Promise<void> {
+      await Character.updateOne({ _id: characterId }, { $set: { [`combatPlan.${family}`]: plan } });
    },
 
    /** Adds signed deed-trait deltas, clamping each to >= 0 atomically. */

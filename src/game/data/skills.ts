@@ -133,9 +133,22 @@ export const SKILL_NODES = {
    two_handed: { name: 'Two-Handed', parent: 'melee', description: 'Great weapons wielded in both hands.' },
    great_blades: { name: 'Great Blades', parent: 'two_handed', description: 'Greatswords and longblades.' },
    polearms: { name: 'Polearms', parent: 'two_handed', description: 'Spears, halberds and reach weapons.' },
+   // Armed STYLE branches (D41): approach knowledge, orthogonal to the weapon-grip
+   // branches above. A fighting style (game/combat/styles.ts) draws on one of
+   // these — summed into the attack alongside the weapon branch (extraNodes,
+   // dedup shares the melee root) and the base of the style's defence, so knowing
+   // your style well means attacking AND defending better in it (owner's rule).
+   onslaught: { name: 'Onslaught', parent: 'melee', description: 'Relentless armed aggression — pressure over caution.' },
+   binding: { name: 'Binding', parent: 'melee', description: 'Binds, hooks and beats — fouling the foe\'s weapon and rhythm.' },
+   warding: { name: 'Warding', parent: 'melee', description: 'A measured armed guard — parries, distance and patient counters.' },
    ranged: { name: 'Ranged', parent: null, attributes: { dexterity: 0.5 }, description: 'Bows, slings and thrown weapons.' },
+   // The brawling branches double as the unarmed STYLES' nodes (D41): unarmed,
+   // the technique IS the approach, so a style draws its attack and defence
+   // straight from its branch (Striker→striking, Grappler→grappling…).
    brawling: { name: 'Brawling', parent: null, attributes: { agility: 0.5 }, description: 'Unarmed fighting — the Smackdown Spire staple.' },
    striking: { name: 'Striking', parent: 'brawling', description: 'Punches, kicks, knees and natural weapons.' },
+   grappling: { name: 'Grappling', parent: 'brawling', description: 'Clinches, throws and holds — control the body, smother the fight.' },
+   guard: { name: 'Guard', parent: 'brawling', description: 'Blocks, slips and footwork — the art of not being hit.' },
 } as const satisfies Record<string, SkillNode>;
 
 export type SkillNodeId = keyof typeof SKILL_NODES;
