@@ -15,6 +15,9 @@ import type { TraitKey } from './traits.js';
 // 🟡 Content and numbers are placeholder; the check SHAPE is the stable part.
 // Ids (encounters AND option ids) are stable slugs (D10) — they ride in
 // session state and customIds.
+// A rolled check that names a skill `node` also TRAINS that node's path
+// (learn-by-doing, D40) — prefer a skill node over a bare attribute wherever
+// one fits; attribute-only checks stay untrained feats and credit nothing.
 
 interface EncounterBase {
    name: string;
@@ -150,7 +153,9 @@ export const ENCOUNTERS = {
             label: 'Climb over',
             emoji: '🧗',
             description: 'Scramble up the trunk and drop down the far side.',
-            check: { attribute: 'agility' },
+            // Same odds as the old bare-agility check (the blend is 1.0 AGI)
+            // but the attempt now trains Athletics → Climbing (D40).
+            check: { node: 'climbing' },
             success: { result: 'proceed', lines: ['You find a solid hold, haul yourself up and drop onto the road beyond.'] },
             failure: { result: 'retry', lines: ['Your grip slips on wet bark and you slide back down.', 'A branch snaps under you — back to the start.'] },
          },
@@ -168,7 +173,7 @@ export const ENCOUNTERS = {
             label: 'Search for a way around',
             emoji: '🔍',
             description: 'Study the tangle for a gap the storm left open.',
-            check: { attribute: 'perception' },
+            check: { node: 'searching' },
             oneShot: true,
             success: { result: 'proceed', lines: ['There — a game trail skirts the roots. You slip through untouched.'] },
             failure: { result: 'retry', lines: ['Brambles and mud on both sides; if there is a way around, you cannot see it.'] },
@@ -205,7 +210,7 @@ export const ENCOUNTERS = {
             label: 'Find a long branch',
             emoji: '🌿',
             description: 'Spot something to reach them without getting wet.',
-            check: { attribute: 'perception' },
+            check: { node: 'searching' },
             success: {
                result: 'proceed',
                lines: ['A fallen sapling! You thrust it out; they clamp on and you drag them ashore.'],

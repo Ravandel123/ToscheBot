@@ -1,9 +1,11 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type MessageActionRowComponentBuilder } from 'discord.js';
 import { displayName } from '../../game/character/identity.js';
 import { COMBAT_MOVES, HIT_LOCATIONS, FINISH_GIFS, START_GIFS } from '../../game/combat/flavor.js';
+import { skillNode } from '../../game/data/skills.js';
 import { randomItem } from '../../lib/random.js';
 import type { BoutMode } from '../../game/combat/bouts.js';
 import type { DuelBlow, DuelResult } from '../../game/combat/duel.js';
+import type { SkillLevelUp } from '../../game/character/skills.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
 // Colocated Discord builders for the serious `/smackdown duel` (D16/combat.md
@@ -100,6 +102,14 @@ export function buildOutcomeLine(result: DuelResult, names: Record<string, strin
 
    return `🏁 The bell ends it — **${winner}** takes the bout on points.\n` +
       `**${winner}** ${winnerHp} · **${loser}** ${healthBar(result.finalHealth[result.loserId], maxHealth[result.loserId])}. Both are bruised but standing.`;
+}
+
+/** The "you improved!" line after a Spire bout (skills.md: growth must announce
+ *  itself) — only ranked-up nodes are named; a bout that only banked progress
+ *  stays quiet. Shared by the duel and the trial. */
+export function buildTrainingLine(name: string, levelUps: readonly SkillLevelUp[]): string {
+   const gains = levelUps.map((up) => `**${skillNode(up.node).name}** rises to **${up.to}**`).join(', ');
+   return `📈 The bout leaves its mark — **${name}**'s ${gains}.`;
 }
 
 // --- Small helpers -------------------------------------------------------------

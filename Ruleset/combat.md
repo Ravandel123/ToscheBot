@@ -415,7 +415,9 @@ model*, as D25/D34 did for attributes/skills). Three pieces:
   crit/hit-location step — so each layer is a fill-in, not a reshape (owner: "start WITHOUT
   styles/named-moves/location-crits, but take them into account").
 - **`game/combat/profile.ts`** — derives a `CombatProfile` from the REAL systems: equipment-
-  modified attributes (D28), the melee/brawling skill-tree Effective (D34), worn **AV** into
+  modified attributes (D28), the melee/brawling skill-tree Effective (D34 — the attack draws on
+  the wielded weapon's grip branch, or the **Striking** leaf unarmed; the chosen node rides the
+  profile as `attackNode`), worn **AV** into
   `Soak = ConstitutionBonus + AV`, and the character's **actual `resources.health`** as the pool
   (no frame/Constitution max recompute yet — the R12 pool-with-locations is the next layer; v1
   uses the stored pool, which reads fine for the unarmed Spire). `isDowned` = Health ≤ 0.
@@ -429,6 +431,12 @@ model*, as D25/D34 did for attributes/skills). Three pieces:
   "wake with a dented pride"). It's a **short action** (D5 rule 1: resolve in memory, commit once),
   not an ActivitySession — **manual turn-by-turn** (R24 option 2) is the documented next layer over
   the same profile/engine; wagers, a duel W/L record, and Trial/PvE are the other seams.
+  **Learn-by-doing (D40):** after the damage is persisted, BOTH fighters' attack paths are
+  credited via `creditSkillUse`, weighted by the opponent's relative strength
+  (`game/combat/training.ts`; skills.md Reference has the formula) — win or lose, and a foe at
+  ≤ half your power credits nothing. The trial does the same for the player only (a rematch vs
+  an outgrown champion naturally decays to zero). Sparring credits nothing (fantasy stakes).
+  Rank-ups announce in the Spire narration (`📈 … rises to N`).
 - **Numbers stay 🟡**: attack/defence bases, unarmed damage, the pool size (still the flat 20 from
   `resources.ts`, not the R12 frame+Constitution pool).
 

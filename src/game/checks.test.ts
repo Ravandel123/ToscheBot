@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHECK_MAX_TARGET, CHECK_MIN_TARGET, checkEffective, checkTarget, rollAgainst, type CheckSubject } from './checks.js';
+import { CHECK_MAX_TARGET, CHECK_MIN_TARGET, checkEffective, checkTarget, checkTrainingWeight, rollAgainst, type CheckSubject } from './checks.js';
 import { ATTRIBUTE_KEYS, type AttributeKey } from './data/attributes.js';
 import type { SkillNodeId } from './data/skills.js';
 import type { RaceId } from './data/races.js';
@@ -79,5 +79,17 @@ describe('rollAgainst', () => {
       expect(result.roll).toBeGreaterThanOrEqual(1);
       expect(result.roll).toBeLessThanOrEqual(100);
       expect(result.success).toBe(result.roll <= 50);
+   });
+});
+
+describe('checkTrainingWeight (D40)', () => {
+   it('treats a coin-flip as the 1.0 baseline', () => {
+      expect(checkTrainingWeight(50)).toBe(1);
+   });
+
+   it('rewards long shots and near-ignores sure things', () => {
+      expect(checkTrainingWeight(25)).toBe(1.5);
+      expect(checkTrainingWeight(CHECK_MIN_TARGET)).toBeCloseTo(1.9);
+      expect(checkTrainingWeight(CHECK_MAX_TARGET)).toBeCloseTo(0.1);
    });
 });

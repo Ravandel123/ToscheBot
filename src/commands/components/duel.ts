@@ -6,7 +6,8 @@ import { canCharacterAct } from '../../game/character/rules.js';
 import { displayName } from '../../game/character/identity.js';
 import { boutMode, type BoutMode } from '../../game/combat/bouts.js';
 import { combatProfile } from '../../game/combat/profile.js';
-import { resolveDuel, type DuelResult } from '../../game/combat/duel.js';
+import { resolveDuel, type CombatProfile, type DuelResult } from '../../game/combat/duel.js';
+import { trainingWeight } from '../../game/combat/training.js';
 import { postChronicle } from '../../game/chronicle.js';
 import { sleep } from '../../lib/async.js';
 import {
@@ -14,6 +15,7 @@ import {
    buildCancelledCard,
    buildDeclinedCard,
    buildOutcomeLine,
+   buildTrainingLine,
    duelOpeningLine,
    renderBlow,
 } from './_duelView.js';
@@ -177,6 +179,12 @@ async function runDuel(client: ToscheClient, channel: SendableChannels, challeng
          applyDamage(p2.characterId, p2.health, result.finalHealth[p2.characterId]),
       ]);
 
+      // Learn-by-doing (D40): both fighters trained their attack path, win or
+      // lose, weighted by how dangerous the OTHER one was — a pushover credits
+      // nothing. Still under both locks, so the map write is safe.
+      await creditBout(channel, p1, p2);
+      await creditBout(channel, p2, p1);
+
       await postChronicle(client, chronicleLine(result, names));
    });
 }
@@ -199,6 +207,13 @@ async function applyDamage(characterId: string, startHealth: number, endHealth: 
    const delta = endHealth - startHealth;
    if (delta !== 0)
       await characterService.applyResourceDeltas(characterId, { health: delta });
+}
+
+/** Credits one fighter's skill use for the bout and announces any rank-ups. */
+async function creditBout(channel: SendableChannels, self: CombatProfile, foe: CombatProfile): Promise<void> {
+   const levelUps = await characterService.creditSkillUse(self.characterId, [self.attackNode], trainingWeight(self, foe));
+   if (levelUps.length > 0)
+      await announce(channel, buildTrainingLine(self.name, levelUps));
 }
 
 /** A reason this character cannot duel right now, or null. Approval + Health via

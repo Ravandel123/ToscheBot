@@ -92,7 +92,9 @@ consequences** (a forced door breaks; a botched approach can force a retreat; so
 one-shot). Without that friction, a player would brute-force every option for free, and the
 choice stops mattering. Outcomes may also move deed traits (flavor-progression.md) — diving in
 after a drowning stranger vs walking on is the canonical example, and either resolution can
-also **discover** a location feature.
+also **discover** a location feature. Since D40, every **rolled** option also trains its skill
+path (learn-by-doing, weighted by how hard the roll was for that character — skills.md's
+Reference formula); checkless choices train nothing.
 
 ### The chronicle ✅ D24
 Gameplay itself should stay **ephemeral** (only the acting player sees their own journey step

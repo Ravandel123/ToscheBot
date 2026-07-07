@@ -61,6 +61,35 @@ describe('characterService.applyCurrencyDeltas (clamp >= 0, D6)', () => {
    });
 });
 
+describe('characterService.creditSkillUse (learn-by-doing, D34/D40)', () => {
+   it('persists weighted progress across the whole path and reports rank-ups', async () => {
+      const character = await freshCharacter();
+
+      // The leaf band needs 5 uses/point: 2 + 2 + 1 ranks Bladesmithing up on
+      // the third credit.
+      await characterService.creditSkillUse(character._id, ['bladesmithing'], 2);
+      await characterService.creditSkillUse(character._id, ['bladesmithing'], 2);
+      const levelUps = await characterService.creditSkillUse(character._id, ['bladesmithing'], 1);
+
+      expect(levelUps).toContainEqual({ node: 'bladesmithing', from: 0, to: 1 });
+
+      const after = await characterService.get(character._id);
+      expect(after?.progression?.skills.bladesmithing).toEqual({ points: 1, progress: 0 });
+      // The branch above (10 uses/pt) banked the same 5 uses, no point yet.
+      expect(after?.progression?.skills.weaponsmithing).toEqual({ points: 0, progress: 5 });
+   });
+
+   it('a non-positive weight writes nothing', async () => {
+      const character = await freshCharacter();
+
+      const levelUps = await characterService.creditSkillUse(character._id, ['striking'], 0);
+
+      expect(levelUps).toEqual([]);
+      const after = await characterService.get(character._id);
+      expect(after?.progression?.skills.striking).toBeUndefined();
+   });
+});
+
 describe('characterService.spendActionPoints (atomic check-and-spend)', () => {
    it('refuses a spend the character cannot afford (no overdraw)', async () => {
       const character = await freshCharacter(); // AP starts at 0

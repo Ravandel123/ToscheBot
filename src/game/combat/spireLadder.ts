@@ -172,12 +172,14 @@ function climbOrCleared(clearedRung: number): TrialTarget {
 }
 
 /** Builds an engine-ready CombatProfile for a champion — always at full Health,
- *  with a synthetic id that can never collide with a real Character uuid. */
+ *  with a synthetic id that can never collide with a real Character uuid.
+ *  `attackNode` is nominal (champions brawl, and never persist skill credit). */
 export function championProfile(champion: SpireChampion): CombatProfile {
    return {
       characterId: `spire:${champion.id}`,
       name: `${champion.name}, ${champion.title}`,
       health: champion.stats.maxHealth,
+      attackNode: 'striking',
       ...champion.stats,
    };
 }

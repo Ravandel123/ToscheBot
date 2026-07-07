@@ -52,7 +52,7 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
 
    const weapon = stripped ? null : equippedWeapon(character);
    const armorValue = stripped ? 0 : totalEquippedArmor(character);
-   const attackNode: SkillNodeId = weapon ? weaponSkillNode(weapon) : 'brawling';
+   const attackNode: SkillNodeId = weapon ? weaponSkillNode(weapon) : 'striking';
    const strengthBonus = attributeBonus(attributes.strength);
    const constitutionBonus = attributeBonus(attributes.constitution);
 
@@ -61,10 +61,12 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
       name: displayName(character),
       maxHealth: character.resources.health.max,
       health: character.resources.health.current,
-      // Attack draws on the weapon's melee branch (or Brawling); defence is an
-      // untrained Agility dodge for now. SEAM: a dedicated Dodge/Parry node +
+      // Attack draws on the weapon's melee branch (or Striking, the unarmed
+      // leaf — its path sums and trains Brawling too); defence is an untrained
+      // Agility dodge for now. SEAM: a dedicated Dodge/Parry node +
       // shield-parry bonus (combat.md) is a later blend swap here.
       attackTarget: checkTarget(subject, { node: attackNode, modifier: COMBAT_ATTACK_BASE }),
+      attackNode,
       defenseTarget: checkTarget(subject, { attribute: 'agility', attributeWeight: 0.5, modifier: COMBAT_DEFENSE_BASE }),
       damage: weapon ? weapon.damage : { ...UNARMED_DAMAGE },
       damageType: weapon ? weaponDamageType(weapon) : 'impact',

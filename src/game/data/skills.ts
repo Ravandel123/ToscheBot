@@ -42,13 +42,19 @@ export interface GrowthProfile {
    bands: readonly [GrowthBand, ...GrowthBand[]];
 }
 
+// The curve follows the owner's worked example (2026-07-07): ~10 uses per point
+// when a fighting skill is fresh, ~100 per point once it sits around 20 — with
+// knees at 20 and 40 so the wall rises in steps, not one cliff. An equal-strength
+// fight/check credits 1.0 use; training weights (combat/training.ts,
+// checkTrainingWeight) stretch or shrink what one action is worth.
 export const GROWTH_PROFILES = {
-   // A general root: broad but deliberately slow, and it walls up hard past 10.
-   root: { bands: [{ upTo: 5, usesPerPoint: 10 }, { upTo: 10, usesPerPoint: 50 }, { upTo: 100, usesPerPoint: 200 }] },
-   // A mid branch: moderate.
-   branch: { bands: [{ upTo: 5, usesPerPoint: 10 }, { upTo: 10, usesPerPoint: 30 }, { upTo: 100, usesPerPoint: 100 }] },
+   // A general root: broad but deliberately slow — it feeds every branch below
+   // it (the whole path sums into Effective), so it must crawl.
+   root: { bands: [{ upTo: 5, usesPerPoint: 10 }, { upTo: 10, usesPerPoint: 50 }, { upTo: 20, usesPerPoint: 100 }, { upTo: 40, usesPerPoint: 200 }, { upTo: 100, usesPerPoint: 400 }] },
+   // A mid branch: moderate — the owner's 10→100-by-20 example curve.
+   branch: { bands: [{ upTo: 5, usesPerPoint: 10 }, { upTo: 10, usesPerPoint: 30 }, { upTo: 20, usesPerPoint: 60 }, { upTo: 40, usesPerPoint: 100 }, { upTo: 100, usesPerPoint: 200 }] },
    // A specialised leaf: quick to build, where a specialist actually lives.
-   leaf: { bands: [{ upTo: 5, usesPerPoint: 5 }, { upTo: 10, usesPerPoint: 20 }, { upTo: 100, usesPerPoint: 60 }] },
+   leaf: { bands: [{ upTo: 5, usesPerPoint: 5 }, { upTo: 10, usesPerPoint: 20 }, { upTo: 20, usesPerPoint: 40 }, { upTo: 40, usesPerPoint: 80 }, { upTo: 100, usesPerPoint: 150 }] },
 } as const satisfies Record<string, GrowthProfile>;
 
 export type GrowthProfileId = keyof typeof GROWTH_PROFILES;
@@ -111,6 +117,11 @@ export const SKILL_NODES = {
    athletics: { name: 'Athletics', parent: null, attributes: { agility: 1 }, description: 'Running, jumping, hauling, clambering.' },
    swimming: { name: 'Swimming', parent: 'athletics', attributes: { agility: 1 }, description: 'Staying afloat and making headway in water.' },
    climbing: { name: 'Climbing', parent: 'athletics', description: 'Scaling walls, trees and sheer ground.' },
+
+   // === Perception — Awareness (the design list roots it under Perception; the
+   // travel challenges' spot/search options draw on and train it — D40) ======
+   awareness: { name: 'Awareness', parent: null, attributes: { perception: 1 }, description: 'Noticing what others walk past — movement, gaps, glints.' },
+   searching: { name: 'Searching', parent: 'awareness', description: 'Deliberate scouring — a way through, a thing lost, a thing hidden.' },
 
    // === Combat — placeholder weapon/brawl roots (combat weight ~0.5 per the
    // opposed-roll model; no live solo consumer yet — sparring uses the old

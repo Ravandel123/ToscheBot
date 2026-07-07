@@ -89,6 +89,13 @@ export function effectiveSkill(
 
 // --- Learn-by-doing --------------------------------------------------------
 
+/** Banked progress is stored to 2 decimals — training weights are fractional
+ *  (a tough foe credits 1.6 uses, a routine check 0.8), and rounding at every
+ *  write keeps float dust out of the DB and the skill panel. */
+function roundProgress(value: number): number {
+   return Math.round(value * 100) / 100;
+}
+
 /** Uses needed to raise a node from `points` to `points + 1`, per its growth
  *  profile's band. Infinity once the node is capped (ordinary practice stops). */
 export function usesForNextPoint(id: SkillNodeId, points: number): number {
@@ -115,12 +122,19 @@ export interface CreditResult {
    levelUps: SkillLevelUp[];
 }
 
-/** Credits ONE meaningful use of the given skills: +1 use to every node on their
- *  paths (leaf, branch, root), converting banked progress to points at each
- *  node's own rate. Pure — returns a new sparse map (existing state untouched)
- *  and the nodes that ranked up. The caller decides an action is "meaningful"
- *  (a real, contested use — RPG/ §7 anti-grind); the engine just applies it. */
-export function creditUse(progression: SkillProgression, nodeIds: readonly SkillNodeId[]): CreditResult {
+/** Credits ONE meaningful use of the given skills, at a training weight: `uses`
+ *  (default 1, may be fractional) is added to every node on their paths (leaf,
+ *  branch, root), converting banked progress to points at each node's own rate.
+ *  The weight is how "how instructive was this?" reaches the engine — an equal
+ *  duel is 1.0, a stronger foe up to 2.0, a pushover 0 (a no-op). Pure — returns
+ *  a new sparse map (existing state untouched) and the nodes that ranked up. The
+ *  caller decides an action is "meaningful" (a real, contested use — Ruleset/
+ *  skills.md's house rule) and derives the weight (combat/training.ts, or
+ *  checks.ts's checkTrainingWeight); the engine just applies it. */
+export function creditUse(progression: SkillProgression, nodeIds: readonly SkillNodeId[], uses = 1): CreditResult {
+   if (uses <= 0)
+      return { progression, levelUps: [] };
+
    const next: SkillProgression = { ...progression };
    const levelUps: SkillLevelUp[] = [];
 
@@ -128,10 +142,10 @@ export function creditUse(progression: SkillProgression, nodeIds: readonly Skill
       const before = next[id] ?? { points: 0, progress: 0 };
       const cap = skillNode(id).cap ?? SKILL_NODE_CAP;
       let { points, progress } = before;
-      progress += 1;
+      progress = roundProgress(progress + uses);
 
       while (points < cap && progress >= usesForNextPoint(id, points)) {
-         progress -= usesForNextPoint(id, points);
+         progress = roundProgress(progress - usesForNextPoint(id, points));
          points += 1;
       }
       if (points >= cap)

@@ -8,8 +8,8 @@ import type { CharacterDoc } from '../db/models/character.js';
 // The core resolution mechanic: d100, roll-under, with Success Levels — the
 // shape locked in RPG/'s R1 (WHFRP-style). A check draws on either a SKILL-TREE
 // node (its blend gives the attribute term, its path is summed — the R10 sum
-// model, game/character/skills.ts) or a bare attribute (untrained checks like
-// climbing a fallen tree). The raw Effective is then shaped into a d100 % by a
+// model, game/character/skills.ts) or a bare attribute (untrained feats like
+// heaving a trunk aside; these train nothing — D40). The raw Effective is then shaped into a d100 % by a
 // difficulty modifier and any racial affinity (a lutren swims at ×1.5), and
 // clamped so nothing is ever certain.
 
@@ -83,4 +83,18 @@ export function rollAgainst(target: number, roll = randomInt(1, 100)): CheckResu
 /** Convenience: derive the target from the subject and roll it in one go. */
 export function rollCheck(subject: CheckSubject, check: CheckDefinition): CheckResult {
    return rollAgainst(checkTarget(subject, check));
+}
+
+/**
+ * Learn-by-doing weight of one ROLLED check (Ruleset/skills.md "Training
+ * weight"): how many skill uses attempting it is worth, from how hard it was
+ * for THIS character — a coin-flip (50%) is the 1.0 baseline, a desperate
+ * long shot approaches 2, a near-certainty (the 95 cap) teaches almost
+ * nothing. The non-combat sibling of combat/training.ts's opponent-strength
+ * ratio; success and failure credit alike (the attempt is what trains).
+ * Un-rolled actions (checkless choices, auto-successes) must credit nothing —
+ * the caller simply doesn't call this.
+ */
+export function checkTrainingWeight(target: number): number {
+   return Math.max(0, 2 * (1 - target / 100));
 }

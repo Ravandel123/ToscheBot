@@ -1,5 +1,6 @@
 import { randomInt } from '../../lib/random.js';
 import { rollAgainst } from '../checks.js';
+import type { SkillNodeId } from '../data/skills.js';
 
 // The REAL combat engine (Ruleset/combat.md R12/R24) — pure, no Discord, no DB:
 // it deals only in the numbers profile.ts derives, so it stays unit-testable
@@ -37,6 +38,10 @@ export interface CombatProfile {
    health: number;
    /** d100 % to land a blow (skill-tree Effective + attributes, clamped [5,95]). */
    attackTarget: number;
+   /** The skill node this fighter's blows draw on AND train (learn-by-doing —
+    *  the whole path root→leaf is credited after the bout). Not read by the
+    *  engine itself; carried for the post-fight `creditSkillUse`. */
+   attackNode: SkillNodeId;
    /** d100 % to evade/parry a blow. */
    defenseTarget: number;
    /** Base weapon (or unarmed) damage, rolled per hit. */

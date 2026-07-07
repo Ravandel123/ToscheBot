@@ -106,14 +106,15 @@ function nodeLine(character: CharacterDoc, skills: SkillProgression, id: SkillNo
    const pts = `${points}`.padStart(3);
    const eff = `${Math.round(effective)}`.padStart(3);
 
-   // Progress toward the next point (banked uses / uses needed). Hidden once the
-   // node is capped — ordinary practice can't push it further.
+   // Progress toward the next point (banked uses / uses needed). Banked uses are
+   // fractional (training weights — D40); one decimal keeps the row readable.
+   // Hidden once the node is capped — ordinary practice can't push it further.
    let progress = '';
    if (points < cap) {
       const need = usesForNextPoint(id, points);
       const banked = skills[id]?.progress ?? 0;
       if (Number.isFinite(need))
-         progress = `  (${banked}/${need}→)`;
+         progress = `  (${Number.isInteger(banked) ? banked : banked.toFixed(1)}/${need}→)`;
    }
 
    return `${label.padEnd(24)} ${pts} pt   Eff ${eff}${progress}`;

@@ -21,10 +21,32 @@ cancels difficulty. Below 100 a point is worth ~2× a point above 100. `SKILL_NO
 **sparse** (absent = 0), embedded (bounded + hot-path, D32). `progression` also holds (⬜)
 `talents`, `points`, and the R13 `xp` / attribute-raise state.
 
-**Growth (learn-by-doing)** — one meaningful use → `creditUse` credits +1 use to **every node on
-the path**, each converting uses→points at its `GROWTH_PROFILES` rate (🟡: root 10→50→200,
-branch 10→30→100, leaf 5→20→60 uses/pt; steepens with points). "Meaningful" = contested / had a
-real cost.
+**Growth (learn-by-doing) — LIVE (D40, 2026-07-07)** — one meaningful action credits
+`creditUse` with **`weight` uses** (fractional) to **every node on the path** root→leaf, each
+converting banked uses→points at its `GROWTH_PROFILES` band (uses per point, steepening with
+points — the owner's 10→100 curve; all 🟡):
+
+| profile (uses/pt) | pts <5 | <10 | <20 | <40 | <100 |
+|---|---|---|---|---|---|
+| root | 10 | 50 | 100 | 200 | 400 |
+| branch | 10 | 30 | 60 | 100 | 200 |
+| leaf | 5 | 20 | 40 | 80 | 150 |
+
+**Training weight** — what one action is worth:
+- **Combat** (`game/combat/training.ts`): `weight = foePower / yourPower` (`combatPower` — a
+  score off the CombatProfile: attack+defence targets, damage+StrB, Soak, Health), **capped at
+  2.0**; below 1 it falls linearly and hits **0 at ≤ 0.5** — a foe at half your power teaches
+  nothing (the anti-farm). Both fighters train their **attack path**, win or lose.
+- **Non-combat checks** (`checks.ts` `checkTrainingWeight`): `weight = 2·(1 − target/100)` —
+  a coin-flip (50%) = 1.0, a near-certainty (95) ≈ 0.1, a long shot → ~1.9. Success and
+  failure credit alike (the attempt trains); attribute-only checks train nothing (no node).
+
+**House rule (locked)** — *if a check was rolled and could have failed, it counts; free/auto
+actions never do.* Sparring credits nothing (fantasy stakes, no cost — D16). Rank-ups always
+announce themselves (`📈 …rises to N`); silent banking stays silent.
+
+**Live consumers** — `/smackdown duel` (both fighters), `/smackdown trial` (the player; a
+rematch vs an outgrown champion decays to 0), travel-challenge options with a rolled check.
 
 **Attribute growth (R13)** — skills don't raise attributes directly; **using attribute-tied
 skills unlocks buying that attribute with XP**. Only attributes fed by trained skills unlock.
@@ -34,8 +56,9 @@ XP also buys **talents**. (Cost curve 🟡; must be steep — attribute double-d
 **attribute ≥ N**, **race**, **deed-trait ≥ N** (flavor-progression.md), **faction rep**
 (factions.md), or an **in-game achievement/flag**.
 
-**Prototype trees shipped** — Smithing, Metallurgy, Speechcraft, Athletics (real, used); Melee/
-Ranged/Brawling roots (stubs, unused). Content + numbers all 🟡.
+**Prototype trees shipped** — Smithing, Metallurgy, Speechcraft, Athletics, Awareness (real,
+used); Melee/Brawling live in the serious combat engine since D35/D40 (attack draws on + trains
+them; Ranged still a stub). Content + numbers all 🟡.
 
 **Target breadth** — ~30 top-level trees, Basic vs Advanced (Advanced needs ≥1 point to attempt).
 
@@ -73,22 +96,29 @@ crafting, damage/margin in combat — and it **cancels difficulty** (a Punishing
 a 130-skill master). This is a deliberate soft-cap: below 100 a point is worth roughly twice as
 much (via the target's tens digit) as a point spent past 100. Mastery is meant to be hard-won.
 
-### Learn-by-doing, with anti-grind baked in ✅ shape / ⬜ exact math
+### Learn-by-doing, with anti-grind baked in ✅ built (D40) / 🟡 numbers
 Skills rise **through use** (Elder-Scrolls style): every meaningful, contested use of a skill
 earns progress toward its next point. This is the casual engine — you just play, and you grow.
-Two rules keep it from being a dummy-grinding contest:
+Three rules keep it from being a dummy-grinding contest (the exact math is in the Reference
+above):
 - **Diminishing returns.** Each rank needs more uses than the last (steeper bands as points
-  climb) — a root crawls, a leaf rises fast, but every node eventually walls up hard.
+  climb) — a root crawls, a leaf rises fast, but every node eventually walls up hard. The
+  owner's pacing example anchors the curve: a fresh fighting skill lands a point in ~10 fights;
+  at 20 points the same point costs ~100.
+- **Opposition-scaled progress (training weight).** One action is not always one use: a
+  **stronger opponent teaches more** (up to 2× per bout), an equal is the 1.0 baseline, and a
+  **much weaker one teaches nothing at all** (0 at half your power) — so farming novices or an
+  outgrown Spire rung yields literally zero. Non-combat checks scale the same way by how hard
+  the roll was *for you* (a near-certain check ≈ nothing). Win or lose, the attempt trains.
 - **Quality-gated caps, per node.** *How* you practise caps *how far* practice alone takes that
   node: a home forge caps Bladesmithing around 40, a master's workshop/instructor around 70,
   and only real commissions at the edge of your ability push it past that toward Mastery. Same
-  shape for combat nodes (a dummy < sparring < a real fight). **⬜ Not built**: only the
-  diminishing-returns growth bands exist in code today; the practice-source cap tiers (home vs
-  workshop vs commission) are still a design intent, not a mechanic.
-- **Only *meaningful* uses count** — a bot-checkable rule: the action had a real cost or a
-  chance of failure (an opposed/contested test, or a craft that consumed materials + AP at
-  non-trivial difficulty). Free auto-successes and dummy-spam grant ~nothing, and the bot
-  should always tell the player when an action "counted," so growth never feels arbitrary.
+  shape for combat nodes (a dummy < sparring < a real fight). **⬜ Not built**: the
+  practice-source cap tiers (home vs workshop vs commission) are still a design intent.
+- **Only *meaningful* uses count** — the locked house rule: *if a check was rolled and could
+  have failed, it counts; free/auto actions never do.* (Sparring is fantasy-stakes, cost-free —
+  it credits nothing.) The bot tells the player when growth lands — every rank-up announces
+  itself in the narration (`📈 … rises to N`) — so growth never feels arbitrary.
 
 ### Roles — identity, chosen ~once ⬜ not built *(was P12)*
 A **Role** (Guard, Tavern Keeper, Craftsman, Soldier, Scout, Healer, Trader, Scholar…) is not a
@@ -241,17 +271,20 @@ Core functions (`game/character/skills.ts`, pure, tested):
 - `skillSum(progression, ids)` — Σ points over the unique path nodes.
 - `effectiveSkill(attrs, progression, {node, extraNodes?})` — the full uncapped Effective;
   `checks.ts` (combat.md) clamps it into a d100 %.
-- `creditUse(progression, ids)` — learn-by-doing: +1 use to every node on the combined path,
-  each converting banked `progress` → `points` at its own `usesForNextPoint` rate; returns the
-  updated sparse map + which nodes ranked up. Capped nodes stop banking progress they can never
-  spend. **No live caller credits this yet** — `characterService.creditSkillUse` is a ready
-  seam, waiting on a first consumer (crafting or combat).
+- `creditUse(progression, ids, uses = 1)` — learn-by-doing: `uses` (the training weight —
+  fractional, ≤0 is a no-op, progress stored to 2 decimals) added to every node on the combined
+  path, each converting banked `progress` → `points` at its own `usesForNextPoint` rate;
+  returns the updated sparse map + which nodes ranked up. Capped nodes stop banking progress
+  they can never spend. **Live since D40** via `characterService.creditSkillUse(id, nodes,
+  uses)`: the Spire duel + trial (weight from `game/combat/training.ts` — `combatPower` ratio,
+  crediting the profile's `attackNode` path) and travel-challenge checked options (weight from
+  `checkTrainingWeight`).
 
-Growth profiles (`GROWTH_PROFILES`, 🟡 numbers, owner's worked example): named `root` / `branch`
-/ `leaf` band tables of uses-per-point, steepening as points climb (root 10→50→200 uses/pt;
-branch 10→30→100; leaf 5→20→60). A node's profile is explicit or defaulted by its depth
-(root=0, branch=1, leaf=2+). `SKILL_NODE_CAP = 100` — Mastery above that via special sources is
-future, per the Ruleset section above.
+Growth profiles (`GROWTH_PROFILES`, 🟡 numbers, the owner's 10→100 pacing example): named
+`root` / `branch` / `leaf` band tables of uses-per-point, steepening as points climb — the
+exact table is in the Reference above (knees at 5/10/20/40 points). A node's profile is
+explicit or defaulted by its depth (root=0, branch=1, leaf=2+). `SKILL_NODE_CAP = 100` —
+Mastery above that via special sources is future, per the Ruleset section above.
 
 ### The prototype trees shipped today 🟡 content
 - **Smithing** (root, blend `0.2 INT + 0.1 DEX`) → Weaponsmithing → {Bladesmithing,
@@ -263,10 +296,17 @@ future, per the Ruleset section above.
   Intimidate (override `0.25 STR + 0.25 CHA`), Deceit (override `0.25 CHA + 0.25 INT`)} — the
   cross-attribute-blend demo.
 - **Athletics** (root, blend `1.0 AGI`) → {Swimming (blend `1.0 AGI`, explicit), Climbing
-  (inherited)} — keeps the travel-challenge swim check working (world-travel.md).
-- **Combat placeholders** (no live consumer — sparring still uses the old flat combat formula,
-  combat.md): Melee (`0.5 AGI`) → One-Handed → {Blades, Axes & Maces}; Melee → Two-Handed →
-  {Great Blades, Polearms}; Ranged (`0.5 DEX`); Brawling (`0.5 AGI`) → Striking.
+  (inherited)} — keeps the travel-challenge swim check working (world-travel.md); the
+  fallen-tree climb option draws on (and since D40 trains) Climbing.
+- **Awareness** (root, blend `1.0 PER`) → {Searching} — added with D40 so the travel
+  challenges' spot/search options train something real; the design list's Perception root,
+  deliberately minimal (Track/Navigate join it when built).
+- **Combat trees** (live in the serious engine since D35/D40 — the duel/trial attack draws on
+  and TRAINS the wielded weapon's branch, or **Striking** when unarmed; sparring still uses the
+  old flat throwaway formula, combat.md): Melee (`0.5 AGI`) → One-Handed → {Blades, Axes &
+  Maces}; Melee → Two-Handed → {Great Blades, Polearms}; Ranged (`0.5 DEX`); Brawling
+  (`0.5 AGI`) → Striking. Weapon→leaf mapping (a longsword to Blades) is a SEAM — grip decides
+  the branch until weapons carry a skill tag.
 
 ### Storage — `progression` subdoc ✅ D32
 `Character.progression: { skills: SkillProgression }`, stored as a plain (Mixed) object so
@@ -277,8 +317,13 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
 
 ### What's wired, what isn't
 - ✅ `game/checks.ts` (combat.md) consumes `effectiveSkill`/`checkTarget` for travel challenges.
-- ✅ `characterService.creditSkillUse` exists as a seam.
-- ⬜ No live action calls `creditUse` yet — skills currently never grow in play.
+- ✅ **Skills grow in play (D40)**: `/smackdown duel` credits BOTH fighters' attack paths
+  (opponent-strength weight, `game/combat/training.ts`), `/smackdown trial` credits the player
+  (champion-strength weight — an outgrown rematch credits 0), and travel-challenge checked
+  options credit their node (difficulty weight, `checkTrainingWeight`). Rank-ups announce in
+  the narration; the skill panel shows fractional banked progress.
+- ⬜ Crafting/professions crediting (foraging etc.) — next consumers; the same
+  `creditSkillUse(id, nodes, weight)` call.
 - ⬜ Roles, the XP/points economy, and talents are pure design (above) — nothing in `game/` or
   `db/` yet.
 - ⬜ **XP + skill-gated attribute raises (R13)** — no `xp` field, no per-attribute unlock
@@ -288,8 +333,8 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
 - ✅ **The skill panel** — `/character skills` (`_skillPanel.ts` + `charskills` handler), read-only.
 - ⬜ Practice-source quality-gated caps (home/workshop/commission) — only the flat diminishing-
   returns bands exist.
-- 🟡 **First `creditUse` consumer** is likely **foraging** (professions.md) — the peaceful
-  professions are the natural place skills first grow in play.
+- ✅ **First `creditUse` consumers landed (D40)** — Spire combat + travel challenges; foraging/
+  professions (professions.md) join with the same call when built.
 
 ---
 
@@ -309,8 +354,9 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
 - **Skill & talent catalog breadth** *(P14)* — target ~30 top-level trees (fits a Discord
   select); which ones beyond the four prototypes; the launch talent list beyond the ten
   sketched above.
-- **First `creditUse` consumer** — **foraging/professions** (professions.md) is the likely first,
-  ahead of combat; whichever ships first is what finally makes skills grow in play.
+- **Training-weight tuning (D40)** — the combat `combatPower` mix (how much Health/Soak weigh
+  vs the targets), the 0.5 trivial-foe floor, the 2.0 cap, and the check weight's `2·(1−p)`
+  slope are all 🟡 first guesses; revisit with real play data.
 - **Item required-sum gates + quality-from-surplus** — the crafting-quality half of the
   Smithing example isn't implemented; today's per-instance item quality (items-equipment.md)
   is set at acquisition, not derived from a check.
@@ -333,12 +379,11 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
   player choosing among 30 sibling trees with only a handful trained needs strong sorting/
   filtering (role-recommended first, touched-trees pinned) or the skill panel becomes a wall of
   text instead of the "casual glance, deep drill-down" it's meant to be.
-- **`creditUse`'s "meaningful use" rule is a judgment call per consumer.** Every future system
-  that credits skill use (professions, crafting, combat) has to independently decide what counts
-  as "had a real cost or a chance of failure" — inconsistent judgment across consumers could make
-  growth feel arbitrary in one system and generous in another. Worth a one-line house rule stated
-  once here rather than re-litigated per file: *if a check was rolled and could have failed, it
-  counts; free/auto actions never do.*
+- **`creditUse`'s "meaningful use" rule needs consistent judgment per consumer.** The house
+  rule is now locked in the Reference (*rolled and could have failed → counts; free/auto →
+  never*), and the D40 consumers follow it (sparring excluded, checkless choices excluded) —
+  but every future system (crafting, professions) must still apply it honestly, or growth will
+  feel generous in one system and stingy in another.
 
 **Expansion ideas:**
 - **The skill panel could double as a "next step" recommender** — beyond showing points/progress,

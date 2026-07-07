@@ -13,6 +13,7 @@ function profile(characterId: string, overrides: Partial<CombatProfile> = {}): C
       maxHealth: 20,
       health: 20,
       attackTarget: 50,
+      attackNode: 'striking',
       defenseTarget: 40,
       damage: { min: 3, max: 3 },
       damageType: 'impact',

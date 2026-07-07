@@ -27,9 +27,11 @@ import {
    challengeStateFrom,
    type ChallengeState,
 } from '../../../game/activity/challenge.js';
-import { checkTarget, rollAgainst } from '../../../game/checks.js';
+import { checkTarget, checkTrainingWeight, rollAgainst } from '../../../game/checks.js';
 import { attributesWithEquipment } from '../../../game/character/inventory.js';
+import { skillNode } from '../../../game/data/skills.js';
 import { randomItem } from '../../../lib/random.js';
+import type { SkillLevelUp } from '../../../game/character/skills.js';
 import type { ActivityHandler, ActivityView } from '../../../types/activities.js';
 import type { ActivitySessionDoc } from '../../../db/models/activitySession.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
@@ -104,29 +106,44 @@ async function handleOption(
    if (outcome.traits)
       await characterService.applyTraitDeltas(actor._id, outcome.traits);
 
+   // Learn-by-doing (D40): a ROLLED check trains its skill path, success or
+   // failure alike, weighted by how hard the attempt was for this character.
+   // Checkless choices (and attribute-only checks — no node to train) credit
+   // nothing. The step-guard win serializes this write: a session-busy
+   // character cannot equip, duel or switch, so no other progression writer
+   // can interleave (same argument as the trait deltas above).
+   let trainingNote = '';
+   if (check && option.check?.node) {
+      const levelUps = await characterService.creditSkillUse(actor._id, [option.check.node], checkTrainingWeight(check.target));
+      if (levelUps.length > 0)
+         trainingNote = trainingLine(levelUps);
+   }
+
    // Some outcomes reveal a feature of the destination (D31) — idempotent, and
    // it announces itself to the chronicle only when genuinely new.
    if (outcome.discovers)
       await revealFeature(client, actor, next.toId, outcome.discovers);
 
    if (challengeProgress(next) === 'ongoing') {
-      await interaction.update(stepView(advanced, next));
+      await interaction.update(stepView(advanced, next, trainingNote));
       return;
    }
 
    // We won the guard on the terminal step, so completion is ours to run.
-   await finalize(client, interaction, advanced, actor, next);
+   await finalize(client, interaction, advanced, actor, next, trainingNote);
 }
 
 /** The idempotent completion tail: move (only on 'proceed') → chronicle → delete
  *  session → repaint the HUB at wherever the character ended up, so the play
- *  loop continues without a fresh `/play` (D30/D31). */
+ *  loop continues without a fresh `/play` (D30/D31). `trainingNote` rides only
+ *  the attempt that just credited it — a crash-replay re-entry passes none. */
 async function finalize(
    client: ToscheClient,
    interaction: ButtonInteraction,
    session: ActivitySessionDoc,
    actor: CharacterDoc,
    state: ChallengeState,
+   trainingNote = '',
 ): Promise<void> {
    const proceeded = challengeProgress(state) === 'proceed';
    const name = displayName(actor);
@@ -140,9 +157,10 @@ async function finalize(
    await activitySessionService.complete(session._id);
 
    const survivor = await characterService.get(actor._id);
-   const banner = proceeded
+   const outcomeLine = proceeded
       ? `✅ ${state.lastLine || 'You press on.'}\nYou arrive at **${locationName(state.toId)}**.`
       : `❌ ${challenge} proves too much — you trudge back to **${locationName(state.fromId)}**.`;
+   const banner = trainingNote ? `${outcomeLine}\n${trainingNote}` : outcomeLine;
    await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
 
    await postChronicle(client, proceeded
@@ -179,7 +197,7 @@ async function repaintCurrent(interaction: ButtonInteraction, sessionId: string)
 
 // --- Views --------------------------------------------------------------------
 
-function stepView(session: ActivitySessionDoc, state: ChallengeState): ActivityView {
+function stepView(session: ActivitySessionDoc, state: ChallengeState, trainingNote = ''): ActivityView {
    const encounter = activityEncounter(state.encounterId);
    const options = encounter ? availableOptions(encounter.options, state) : [];
 
@@ -194,6 +212,9 @@ function stepView(session: ActivitySessionDoc, state: ChallengeState): ActivityV
       .setDescription([
          encounter?.intro ?? 'Something stands in the way.',
          state.lastLine ? `\n_${state.lastLine}_` : '',
+         // Rides only the attempt that earned it — a repaint (stale click,
+         // re-entry) rebuilds from state alone and stays quiet.
+         trainingNote,
          optionLines.length > 0 ? `\n${optionLines.join('\n')}` : '',
          encounter ? `\nSetbacks: **${state.setbacks}/${encounter.maxSetbacks}**` : '',
          '⏳ Walk away for too long and you will give up the crossing.',
@@ -232,6 +253,13 @@ function optionRows(sessionId: string, options: readonly ChallengeOption[]): Act
       rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(buttons.slice(i, i + 5)));
 
    return rows;
+}
+
+/** Second-person "you improved" note (the duel narration's sibling, skills.md:
+ *  growth must announce itself; quiet when the attempt only banked progress). */
+function trainingLine(levelUps: readonly SkillLevelUp[]): string {
+   const gains = levelUps.map((up) => `**${skillNode(up.node).name}** rises to **${up.to}**`).join(', ');
+   return `📈 The attempt taught you something — ${gains}.`;
 }
 
 /** The encounter behind a state, if it still exists and is activity-kind (D10 rule 3). */

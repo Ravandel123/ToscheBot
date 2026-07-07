@@ -137,20 +137,26 @@ export const characterService = {
    },
 
    /**
-    * Credits ONE meaningful use of the given skills (learn-by-doing, D34): +1 use
-    * to every node on their paths, converting banked progress to points at each
+    * Credits ONE meaningful use of the given skills (learn-by-doing, D34/D40) at
+    * a training weight: `uses` (default 1, fractional, ≤0 = no-op) is added to
+    * every node on their paths, converting banked progress to points at each
     * node's own rate. Read-modify-write over the sparse map — the CALLER must
-    * hold the character lock (like inventory mutations); the single-process
-    * assumption makes the whole-map $set safe. Returns the nodes that ranked up
-    * (for the "you improved!" line). No live consumer yet — the seam the first
-    * crafting/combat action wires into.
+    * hold the character lock OR own the character's live activity step (the
+    * step-guard win serializes challenge clicks; a busy character can't equip,
+    * duel or switch, so no other progression writer can interleave). Returns the
+    * nodes that ranked up (for the "you improved!" line). Consumers: the Spire
+    * duel/trial (opponent-strength weight) and travel challenges
+    * (difficulty weight).
     */
-   async creditSkillUse(characterId: string, nodeIds: SkillNodeId[]): Promise<SkillLevelUp[]> {
+   async creditSkillUse(characterId: string, nodeIds: SkillNodeId[], uses = 1): Promise<SkillLevelUp[]> {
+      if (uses <= 0)
+         return [];
+
       const character = await this.get(characterId);
       if (!character)
          return [];
 
-      const { progression, levelUps } = creditUse(character.progression?.skills ?? {}, nodeIds);
+      const { progression, levelUps } = creditUse(character.progression?.skills ?? {}, nodeIds, uses);
       await Character.updateOne({ _id: characterId }, { $set: { 'progression.skills': progression } });
       return levelUps;
    },

@@ -129,3 +129,36 @@ describe('creditUse (learn-by-doing)', () => {
       expect(result.levelUps).toEqual([]);
    });
 });
+
+describe('creditUse training weights (D40)', () => {
+   it('banks a fractional weight, rounded to 2 decimals (no float dust)', () => {
+      const first = creditUse({}, ['bladesmithing'], 1.5);
+      expect(first.progression.bladesmithing).toEqual({ points: 0, progress: 1.5 });
+
+      const second = creditUse(first.progression, ['bladesmithing'], 0.33);
+      expect(second.progression.bladesmithing?.progress).toBe(1.83);
+   });
+
+   it('a zero or negative weight is a pure no-op (a pushover teaches nothing)', () => {
+      const before: SkillProgression = { smithing: { points: 1, progress: 2 } };
+      expect(creditUse(before, ['smithing'], 0)).toEqual({ progression: before, levelUps: [] });
+      expect(creditUse(before, ['smithing'], -0.5)).toEqual({ progression: before, levelUps: [] });
+   });
+
+   it('heavier uses reach a point in fewer actions', () => {
+      // Leaf band below 5 points needs 5 uses: 2 + 2 + 1 lands the point on the
+      // third action instead of the fifth.
+      let p: SkillProgression = creditUse({}, ['bladesmithing'], 2).progression;
+      p = creditUse(p, ['bladesmithing'], 2).progression;
+      const third = creditUse(p, ['bladesmithing'], 1);
+
+      expect(third.levelUps).toContainEqual({ node: 'bladesmithing', from: 0, to: 1 });
+      expect(third.progression.bladesmithing).toEqual({ points: 1, progress: 0 });
+   });
+
+   it('carries fractional remainder across a rank-up', () => {
+      const almost: SkillProgression = { bladesmithing: { points: 0, progress: 4.6 } };
+      const result = creditUse(almost, ['bladesmithing'], 1.5); // 6.1 = 5 (point) + 1.1 over
+      expect(result.progression.bladesmithing).toEqual({ points: 1, progress: 1.1 });
+   });
+});
