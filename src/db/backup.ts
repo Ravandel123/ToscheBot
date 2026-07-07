@@ -2,10 +2,12 @@ import mongoose from 'mongoose';
 
 // Disaster-recovery snapshot of the whole game database. Atlas M0 has NO
 // backups, so until this existed the entire game state (characters players
-// spent weeks building) was one bad wipe away from gone. The dump is plain
-// JSON — `{ collection → documents[] }` — meant to be posted as a file to an
-// owner-side channel (see jobs/dbBackup.ts); restoring is a manual step
-// (mongoimport, or a future restore script) and Dates land as ISO strings.
+// spent weeks building) was one bad wipe away from gone. The dump is
+// `{ collection → documents[] }` serialized as relaxed EJSON (`serializeDump`),
+// meant to be posted as a file to an owner-side channel (see jobs/dbBackup.ts)
+// and re-imported by `npm run restore` (restore.ts is the mirror of this file).
+
+const { EJSON } = mongoose.mongo.BSON;
 
 export interface BackupDump {
    takenAt: string;
@@ -26,6 +28,13 @@ export async function buildBackupDump(): Promise<BackupDump> {
       collections[name] = await db.collection(name).find({}).toArray();
 
    return { takenAt: new Date().toISOString(), collections };
+}
+
+/** The posted file's format: relaxed EJSON — plain JSON except the BSON types
+ *  plain JSON would flatten (dates become `{"$date": <ISO>}`), so a restore is
+ *  lossless while the file stays human-readable and diffable. */
+export function serializeDump(dump: BackupDump): string {
+   return JSON.stringify(EJSON.serialize(dump, { relaxed: true }));
 }
 
 export function backupFileName(date = new Date()): string {

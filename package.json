@@ -13,6 +13,7 @@
       "test:watch": "vitest",
       "deploy": "tsx src/scripts/deploy-commands.ts",
       "seed": "tsx src/scripts/seed-characters.ts",
+      "restore": "tsx src/scripts/restore-backup.ts",
       "clear-commands": "tsx src/scripts/clear-commands.ts"
    },
    "dependencies": {

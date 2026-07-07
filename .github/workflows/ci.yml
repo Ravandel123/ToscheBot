@@ -1,0 +1,32 @@
+# The pre-deploy gate (CLAUDE.md "Deploy gate") enforced on every push instead
+# of on the developer's honor (AUDIT.md §2.9). Production runs TS directly via
+# tsx — nothing type-checks at startup — so this is the only automated net.
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      # Pin where mongodb-memory-server keeps its mongod binary so the cache
+      # step below always matches (the *.db.test.ts files boot an in-memory
+      # mongod; without the cache every push re-downloads ~90 MB).
+      MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongodb-binaries
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/mongodb-binaries
+          key: ${{ runner.os }}-mongodb-binaries-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-mongodb-binaries-
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npm test

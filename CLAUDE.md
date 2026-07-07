@@ -74,8 +74,9 @@ its own domain module with its own data models.
   assumption is load-bearing: in-memory locks and queues are valid because nothing else
   touches the DB.
 - **Deploy gate**: production runs TS directly, so nothing type-checks at startup. Before
-  every upload run `npm run build` + `npm run lint` locally (move to CI eventually).
-  Never commit `dist/` to git.
+  every upload run `npm run build` + `npm run lint` locally; **CI (GitHub Actions,
+  `.github/workflows/ci.yml`) also enforces build + lint + test on every push**
+  (2026-07-07, AUDIT §2.9). Never commit `dist/` to git.
 - Code style: **3-space indentation** (existing convention), semicolons, single quotes.
   See "Code style & naming conventions" below for naming, import order, and file layout.
 
@@ -156,6 +157,13 @@ convention changes, change the rule and this section together.
   name and **requires it confirmed before connecting**: typed back in an
   interactive terminal, or via `SEED_CONFIRM_DB=<name>` when run non-interactively
   (scripts, CI, an agent) — there is no way to proceed blindly against the wrong DB.
+  (The confirmation guard itself lives in `src/scripts/confirmDb.ts`, shared with `restore`.)
+- `restore` — `tsx src/scripts/restore-backup.ts <file>` (disaster recovery — AUDIT §2.3:
+  restores a `db-backup`/`h!backup` dump from `#espionage` by wiping every collection and
+  re-inserting the snapshot; collections not in the dump are dropped. Same typed DB-name
+  confirmation as the seed, with its own `RESTORE_CONFIRM_DB=<name>` for non-interactive
+  runs. Dumps are relaxed EJSON since 2026-07-07 (dates survive the file losslessly);
+  older plain-JSON dumps still restore — their ISO date strings are revived by shape.)
 
 ## Decision log
 
@@ -426,7 +434,9 @@ PrefixCommand`. Adding a new *response* to an existing command is just one array
    `npm test` runs them. Do **not** put DB tests on a shared cloud database.
    Covered so far: `characterService`, `accountService`, `activitySessionService`,
    `itemService`, `smackdownService` (Elo swing + tallies, the `$max`-monotonic
-   `trialRung` D37 guard, the dynamic-`sortField` leaderboard D36) and
+   `trialRung` D37 guard, the dynamic-`sortField` leaderboard D36), the backup/restore
+   round trip (`backup.db.test.ts` / `restore.db.test.ts` — EJSON dates, legacy-dump
+   revival, snapshot semantics) and
    `locationStateService` (lazy-upsert defaults, filter-guarded weather re-roll +
    event sweep on read, the `$ne`/`$addToSet` dedup guards, the pipeline stat clamp
    with `$ifNull` fallback — D31). **mongod caveat found while writing these:** on the
@@ -687,8 +697,6 @@ Several overlap topics designed in `Ruleset/` — coordinate there instead of de
   winners keep permanent titles. Fights the "everyone is maxed, nothing to want" endgame
   of small servers — but resets can also demotivate casuals. Genuinely undecided; revisit
   once the RPG loop exists.
-- **CI (GitHub Actions)** — run `build` + `lint` + `test` on push once the repo has a
-  remote; replaces the manual pre-deploy gate (already noted as "move to CI eventually").
 
 ## Roadmap & status
 
@@ -724,7 +732,13 @@ plan in **`AUDIT.md`**) landed five hardening fixes — a daily **`db-backup`** 
 `h!backup` (Atlas M0 has no backups; the JSON dump posts to `#espionage`), a
 `{ownerId, instanceId}` **unique index** replacing `itemService.deposit`'s stash-wide
 handle scan, a first-click-wins guard on the duel consent card, a 30 s OpenAI call timeout,
-and Discord-UI-limit guards in the catalog tests. **430 tests, build + lint green.**
+and Discord-UI-limit guards in the catalog tests. Newest (2026-07-07): the audit's two
+recommended follow-ups landed — **`npm run restore`** (AUDIT §2.3: wipes the target DB and
+re-imports a backup dump under the seed-style typed DB-name confirmation, extracted to the
+shared `scripts/confirmDb.ts`; dumps are now relaxed EJSON so dates survive the file, and
+legacy plain-JSON dumps are revived by shape) and **CI** (AUDIT §2.9:
+`.github/workflows/ci.yml` — build + lint + test on every push, mongod binary cached).
+**442 tests, build + lint green.**
 The owner has smoke-tested
 `/profile` and `/smackdown` live; the bot has not yet been run end-to-end against a live
 Atlas cluster (needs `.env` + `npm run deploy` — **`/stash` is a NEW command so a redeploy
@@ -773,9 +787,9 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   the **exact match + its location** (and flag punctuation-collapsed matches as possible false
   positives), so a deletion is never a mystery.
 - **Jobs** — `resource-regen` (hourly, lock- and session-aware bulk-first per D7/D23),
-  `db-backup` (daily 04:30 — dumps every collection to JSON and posts the file to
-  `#espionage`; Atlas M0 has no backups, so this file IS the disaster-recovery path;
-  `h!backup` runs the same dump on demand).
+  `db-backup` (daily 04:30 — dumps every collection to relaxed EJSON and posts the file to
+  `#espionage`; Atlas M0 has no backups, so this file IS the disaster-recovery path —
+  `npm run restore` re-imports it; `h!backup` runs the same dump on demand).
 - **Component handlers** — `character` (creation wizard incl. attribute point-buy +
   approval petition), `comic` (browser), `activity` (generic durable-activity router +
   `_activities/` registry; first activity: `challenge`), `profile` (account-settings

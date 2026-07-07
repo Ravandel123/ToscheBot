@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { dbNameFromUri } from './seed.js';
+import { dbNameFromUri } from './confirmDb.js';
 
-// Pure — the CLI's confirmation guard (seed-characters.ts) reads this to show
-// and verify the target database name before ever connecting.
+// Pure — the destructive CLIs' confirmation guard (confirmDb.ts) reads this to
+// show and verify the target database name before ever connecting.
 describe('dbNameFromUri', () => {
    it('extracts the database name from a standard connection string', () => {
       expect(dbNameFromUri('mongodb+srv://user:pass@cluster0.mongodb.net/tosche?retryWrites=true')).toBe('tosche');

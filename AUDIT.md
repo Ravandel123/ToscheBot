@@ -67,6 +67,15 @@ script must revive the known date fields (`createdAt`, `updatedAt`, `acquiredAt`
 weather/event dates) or insert via EJSON. Until it exists, treat the dump as "data is safe,
 recovery takes an evening".
 
+> **Resolved 2026-07-07:** `npm run restore` (`scripts/restore-backup.ts` → `db/restore.ts`) —
+> same typed DB-name confirmation as the seed (own `RESTORE_CONFIRM_DB` for non-interactive
+> runs; the guard was extracted to the shared `scripts/confirmDb.ts`), wipes + re-inserts every
+> dump collection (`deleteMany`, keeping indexes) and drops collections absent from the dump so
+> the result is the snapshot, never a merge. Dumps are now serialized as **relaxed EJSON**
+> (dates lossless); a legacy plain-JSON dump is detected and its ISO date strings revived by
+> shape (safe — every `_id` in this project is a plain string). Covered by `restore.db.test.ts`
+> plus an end-to-end CLI smoke against a throwaway in-memory mongod.
+
 ### 2.4 The single-process assumption is load-bearing and silently violable
 In-memory locks, deferred queues, cooldowns, and the F3 duel guard are all correct **only**
 while exactly one bot process touches the DB. Two ways to violate it by accident: running
@@ -111,6 +120,10 @@ remote, so the backlog's **CI (GitHub Actions)** entry is now just a 20-line wor
 (`on: push` → `npm ci && npm run build && npm run lint && npm test`). The only nuance:
 `mongodb-memory-server` downloads a mongod binary in CI (cache `~/.cache/mongodb-binaries`).
 Recommended as the next infra chore; it also protects the seed/backup scripts.
+
+> **Resolved 2026-07-07:** `.github/workflows/ci.yml` — `npm ci` → `build` → `lint` → `test`
+> on every push (+ manual dispatch), with the mongod binary pinned via `MONGOMS_DOWNLOAD_DIR`
+> and cached keyed on `package-lock.json`.
 
 ### 2.10 Small documented races that stay accepted (by design)
 For the record, these were examined and deliberately left as-is, matching the codebase's

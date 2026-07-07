@@ -11,8 +11,9 @@
 import { config } from '../config.js';
 import { connectDb, disconnectDb } from '../db/connect.js';
 import { CharacterLockManager } from '../core/locks.js';
+import { confirmTargetDatabase } from './confirmDb.js';
 import { SEED_CHARACTERS } from './seed-data.js';
-import { dbNameFromUri, runSeed, validateRoster } from './seed.js';
+import { runSeed, validateRoster } from './seed.js';
 
 if (SEED_CHARACTERS.length === 0) {
    console.log('seed-data.ts has no entries — add characters to SEED_CHARACTERS first.');
@@ -25,7 +26,10 @@ if (problems.length > 0) {
    process.exit(1);
 }
 
-await confirmTargetDatabase();
+// A wipe-recovery script writing to whatever `MONGODB_URI` resolves to must
+// never run "by accident" — the shared guard (confirmDb.ts) requires the
+// target database name typed back (or SEED_CONFIRM_DB=<name> non-interactively).
+await confirmTargetDatabase(config.mongodbUri, { action: 'continue seeding', envVar: 'SEED_CONFIRM_DB' });
 await connectDb(config.mongodbUri);
 
 try {
@@ -35,38 +39,4 @@ try {
    console.log(`Done: ${report.created} created, ${report.skipped} skipped (of ${SEED_CHARACTERS.length} entries).`);
 } finally {
    await disconnectDb();
-}
-
-/**
- * A wipe-recovery script writing to whatever `MONGODB_URI` resolves to is exactly
- * the kind of action that must never happen "by accident" (e.g. a stray
- * `ENV_FILE=.env.production`, or a future Claude session rerunning this without
- * this conversation's context). Prints the target database name up front and
- * requires it to be confirmed before any connection is made:
- *  - interactive terminal: type the database name back:
- *  - non-interactive (scripts, CI, an agent's shell): set SEED_CONFIRM_DB=<name>
- *    explicitly — there is no way to proceed blindly.
- */
-async function confirmTargetDatabase(): Promise<void> {
-   const dbName = dbNameFromUri(config.mongodbUri);
-   const redactedUri = config.mongodbUri.replace(/:\/\/[^@]*@/, '://***@');
-   console.log(`Target database: '${dbName}' (${redactedUri})`);
-
-   if (process.stdin.isTTY) {
-      const { createInterface } = await import('node:readline/promises');
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      const answer = await rl.question(`Type the database name to continue seeding '${dbName}': `);
-      rl.close();
-
-      if (answer.trim() !== dbName) {
-         console.error('Confirmation did not match — aborting, nothing written.');
-         process.exit(1);
-      }
-      return;
-   }
-
-   if (process.env.SEED_CONFIRM_DB !== dbName) {
-      console.error(`Non-interactive run: set SEED_CONFIRM_DB=${dbName} to confirm the target database. Aborting, nothing written.`);
-      process.exit(1);
-   }
 }

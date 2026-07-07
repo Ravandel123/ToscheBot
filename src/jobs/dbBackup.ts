@@ -2,7 +2,7 @@ import { AttachmentBuilder } from 'discord.js';
 import type { CronJob } from '../types/jobs.js';
 import { config } from '../config.js';
 import { settings } from '../settings.js';
-import { backupFileName, buildBackupDump, documentCount } from '../db/backup.js';
+import { backupFileName, buildBackupDump, documentCount, serializeDump } from '../db/backup.js';
 import { resolveGuildChannel } from '../lib/discord.js';
 import { log } from '../lib/log.js';
 import type { ToscheClient } from '../client.js';
@@ -31,7 +31,7 @@ export default {
  *  missing channel — a backup failure must be visible, not fatal. */
 export async function postDatabaseBackup(client: ToscheClient): Promise<string> {
    const dump = await buildBackupDump();
-   const buffer = Buffer.from(JSON.stringify(dump), 'utf8');
+   const buffer = Buffer.from(serializeDump(dump), 'utf8');
    const docs = documentCount(dump);
 
    const guild = client.guilds.cache.get(config.guildId);

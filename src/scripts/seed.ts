@@ -13,18 +13,6 @@ import type { SeedCharacter } from './seed-data.js';
 
 export type SeedOutcome = 'created' | 'skipped';
 
-/** The database name a Mongo connection string targets (the CLI's confirmation
- *  guard reads this — an unparseable URI is reported as such rather than thrown,
- *  since this only feeds a printed prompt, never a connection). */
-export function dbNameFromUri(uri: string): string {
-   try {
-      const name = new URL(uri).pathname.replace(/^\//, '');
-      return name || '(default)';
-   } catch {
-      return '(unparseable connection string)';
-   }
-}
-
 /** Every problem with the roster, as human-readable lines (empty = valid).
  *  Fails LOUDLY on a bad point-buy rather than silently clamping — the file is
  *  hand-edited, so a wrong sum is a typo the owner wants surfaced. */
