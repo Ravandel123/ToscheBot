@@ -12,23 +12,33 @@ The literal math this file's systems use, up front (owner's rule — formulas fi
 numbers/shape not yet locked; ✅ marks what the code computes today.
 
 ```
+AttributeBonus(x)     = floor(x / 10)                          [the shared attribute→bonus scale — combat.md]
 Effective attribute   = racial base (25 ± race mods) + creation allocation + XP-bought raises   ✅ (raises ⬜)
 Creation point-buy    = 50 points, ≤ 20 on any one attribute, Σ must = 50                        ✅ 🟡
-Move speed            = race base Move + floor(Agility / 10)                                      ✅ 🟡
+Move speed            = race base Move + AttributeBonus(Agility)                                ✅ 🟡
                         └ intended full: + encumbrance penalty + injury penalty                  ⬜
-Health max (pool)     = HEALTH_BASE + ConstitutionBonus·k_con + FrameBonus(weight,height)        ⬜ 🟡  (today: flat defaultMax = 20)
-  ConstitutionBonus   = floor((Constitution − 25) / 10)   [attribute "bonus" = tens over base]
+Health max (pool)     = HEALTH_BASE + AttributeBonus(Constitution)·2                             ✅ 🟡
+                            + AttributeBonus(Strength)·1 + AttributeBonus(Willpower)·1
+                        └ intended full: + FrameBonus(weight, height) — R12, not built yet       ⬜
+  HEALTH_BASE = 12   (raceless/unallocated draft → Health max 20, the old flat default)
   Health regen        = +2 / hour, paused while in an ActivitySession (regenWhileBusy=false)     ✅ 🟡
-Stamina max           = STAMINA_BASE + ConstitutionBonus·k_sta                                   ⬜ 🟡  (today: flat defaultMax = 10)
+Stamina max           = STAMINA_BASE + AttributeBonus(Constitution)·2 + AttributeBonus(Willpower)·1 ✅ 🟡
+  STAMINA_BASE = 4   (raceless/unallocated draft → Stamina max 10, the old flat default)
   Stamina regen       = +5 / hour, paused while busy                                             ✅ 🟡
   Stamina cost        = per exerting action (sprint, extra attack/dodge, forced march, labor)    ⬜
-Mental health         = MENTAL_MAX − Stress (a derived "composure" %, MENTAL_MAX 🟡)             ⬜ 🟡
+Sanity                = MENTAL_MAX − Stress (the derived overall-mental-health %, MENTAL_MAX 🟡) ⬜ 🟡
   Stress → insanity    at Stress = MENTAL_MAX: gain 1 insanity point, Stress resets              ⬜  (flavor-progression.md)
 ```
 
-`k_con`, `k_sta`, `HEALTH_BASE`, `STAMINA_BASE`, `MENTAL_MAX` are all 🟡 placeholders to be
-tuned at playtest; the **shapes** are what's decided here. The Health-max computation lands in
-the `recalculateMaxResources` seam (Implementation → Resources); combat.md owns the pool's use.
+Constitution is deliberately weighted **2×** a Strength/Willpower point in both Health and
+Stamina — the owner's call: Constitution is *the* vital stat, Strength/Willpower are lesser
+contributors, not co-equal. `HEALTH_BASE`/`STAMINA_BASE` are tuned so the "average" character
+(no race, no allocation) lands exactly on the old flat defaults — a deliberate anchor so today's
+placeholder combat numbers (duel/Spire) don't silently shift server-wide. `MENTAL_MAX` is still
+🟡 unset. Health/Stamina max are **✅ built** (`game/character/resources.ts`'s
+`recalculateMaxResources`, D39) — the `recalculateMaxResources` seam Implementation → Resources
+used to name as future work now exists; `FrameBonus` (weight/height, R12) is the one addend still
+missing. combat.md owns how the Health pool is spent in a fight.
 
 **Account** (`db/models/account.ts`) — one per Discord user; **server-wide, not game-only** (R19).
 
@@ -50,6 +60,23 @@ Perception · Intelligence (what each governs: Ruleset table below).
 
 **Races** — baseline 25, each **+5/+5 · −5/−5** (net zero); table in Ruleset. **Size tier
 dropped (R20)** — body is derived from weight/height, not a race tier.
+
+**Starting attributes per race** (`ATTRIBUTE_BASE` 25 ± the race's modifiers, BEFORE the
+50-point creation allocation — `game/data/races.ts`):
+
+| Race | STR | CON | AGI | DEX | CHA | WIL | PER | INT |
+|---|---|---|---|---|---|---|---|---|
+| Canid | 30 | 25 | 20 | 25 | 20 | 30 | 25 | 25 |
+| Ermehn | 20 | 25 | 30 | 30 | 20 | 25 | 25 | 25 |
+| Felis | 20 | 20 | 30 | 25 | 25 | 25 | 25 | 30 |
+| Lutren | 20 | 25 | 25 | 30 | 30 | 20 | 25 | 25 |
+| Polcan | 30 | 30 | 20 | 25 | 20 | 25 | 25 | 25 |
+| Tamian | 20 | 20 | 30 | 25 | 25 | 25 | 30 | 25 |
+| Vulpin | 20 | 25 | 25 | 25 | 30 | 20 | 25 | 30 |
+
+Every row sums to 200 (25×8, net-zero modifiers — test-enforced, `attributes.test.ts`). This is
+the racial base only; each player then spends the 50-point allocation on top (max +20 on one
+attribute), so an individual character's actual starting spread varies further.
 
 **Body & condition** (R20): frame (`body.{weightKg,heightCm,age}`) **✅ built** (metric, race
 defaults + a creation step); derived shape/move **✅ built**; the rest ⬜ not built:
@@ -234,30 +261,29 @@ Both are the "texture" the setting wants (flavor-progression.md R9) and both mus
 **auto-managed for casuals** (the bot narrates a limp; it never makes you micromanage one).
 They're the durable counterpart to combat.md's transient Conditions.
 
-### Mental health — one overall gauge, not just "Stress" ✅ direction / ⬜ built
+### Mental health — one overall gauge, not just "Stress" ✅ decided term / ⬜ built
 The owner's note: **"Stress" is the wrong single word** for a character's *overall* mental
 condition — Stress is only the *rising pressure*, one input. We want a legible gauge of how a
-character is doing psychologically, the mental twin of the Health pool. The model (design):
+character is doing psychologically, the mental twin of the Health pool. **Term decided (owner,
+2026-07-07): Sanity.** The model (design):
 
 - **Two things, cleanly split** — a rising **Stress** meter (the *pressure*, from combat, horror,
   hunger, cold, loss — flavor-progression.md R21) and a derived **overall mental-health** read-out.
-  Stress is the *input*; mental health is the *state* you see.
-- **The gauge (a derived %, like a composure bar)** — the working name is **Composure** (candidates:
-  *Composure* / *Psyche* / *Sanity* / *Nerve* / *Resolve*; **owner to pick the term** — see Open
-  questions). `Mental health = MENTAL_MAX − Stress` (Formulas): full Composure = calm and clear;
-  as Stress climbs, Composure drops, and at the bottom it **breaks** — Stress maxes, converts to a
-  lasting **insanity point**, and resets (flavor-progression.md). Willpower resists Stress gain and
-  raises the ceiling (attributes table).
+  Stress is the *input*; **Sanity** is the *state* you see.
+- **The gauge (a derived %, like Health's mental twin)** — `Sanity = MENTAL_MAX − Stress`
+  (Formulas): full Sanity = calm and clear; as Stress climbs, Sanity drops, and at the bottom it
+  **breaks** — Stress maxes, converts to a lasting **insanity point**, and resets
+  (flavor-progression.md). Willpower resists Stress gain and raises the ceiling (attributes table).
 - **Lasting scars of the mind** — insanity points and their disadvantages live in `mentalState[]`
   above (traumas, fears, addictions, quirks): the *durable* record, distinct from the *live* gauge.
-  So there are three layers, not one muddled "stress": **Stress** (live pressure) → **Composure**
+  So there are three layers, not one muddled "stress": **Stress** (live pressure) → **Sanity**
   (live overall read) → **mentalState[]** (permanent aftermath).
 - **Recovered by** rest, safety, drink (with an addiction risk), a matched favorite meal
   (likes/dislikes below), companionship, and treatment for the insanity scars (treatment-only, R21).
 - **Casual-safe** — shown as one bar on the sheet; the bot manages it. A casual never spends or
   tracks Stress by hand — they just occasionally read "shaken" and know to rest.
 
-This keeps the *word the player sees* about **overall mental health** (Composure), with "Stress"
+This keeps the *word the player sees* about **overall mental health** (**Sanity**), with "Stress"
 demoted to the internal pressure input where it belongs. Full number design is in
 flavor-progression.md (Stress/insanity); this file owns the character-facing gauge + terminology.
 
@@ -359,7 +385,7 @@ An account owns up to **`MAX_CHARACTERS_PER_ACCOUNT = 3`** characters (`game/cha
 | `rejectionReason` | string? | ✅ | set on reject |
 | `identity.{name,race,epithet,gender,bio,avatarUrl}` | — | ✅ | filled by the creation wizard |
 | `locationId` | string | ✅ | → world-travel.md's `LocationId`, falls back on unknown |
-| `resources` | {health,stamina}: {current,max} | 🟡 | shape real, values placeholder |
+| `resources` | {health,stamina}: {current,max} | ✅ formula / 🟡 numbers | `max` is attribute-derived (D39) — see Resources below |
 | `actionPoints` | {current, totalEarned} | ✅ rule / 🟡 rate | see world-travel.md |
 | `attributes` | 8 × number | ✅ shape / 🟡 balance | **effective = racial base + allocation**; stored, recomputed on race/allocation change |
 | `attributeAllocation` | 8 × number | ✅ | the creation point-buy (0–20 each, Σ = 50); kept separate so a race switch rebases cleanly |
@@ -376,7 +402,7 @@ An account owns up to **`MAX_CHARACTERS_PER_ACCOUNT = 3`** characters (`game/cha
 | `reputation` | sparse map | ⬜ R15 | per-faction standing — see factions.md |
 | `xp` + attribute-raise unlocks | — | ⬜ R13 | skill-gated XP economy — see skills.md |
 | `fatePoints` | number | ⬜ R21 | reroll / dodge knockout — see combat.md |
-| `stress` (+ insanity) | — | ⬜ R21 | rising pressure; **Composure** (overall mental health) = `MENTAL_MAX − stress`, derived not stored — see flavor-progression.md |
+| `stress` (+ insanity) | — | ⬜ R21 | rising pressure; **Sanity** (overall mental health) = `MENTAL_MAX − stress`, derived not stored — see flavor-progression.md |
 | `questFlags` / NPC `disposition` | — | ⬜ | conversation memory — see conversations.md / npcs.md |
 
 ### Attributes & the creation point-buy — `game/data/attributes.ts`, `game/character/attributes.ts` ✅ D25
@@ -387,26 +413,31 @@ one attribute (both 🟡 tunable) — Submit is gated on spending every point.
 `adjustAllocation` clamps partially (e.g. a `+5` click with 3 points left assigns 3). Stored
 `attributes` = base + allocation; `attributeAllocation` is kept as its own field specifically
 so a **mid-wizard race switch rebases** the same spend instead of corrupting it
-(`characterService.setRace` recomputes atomically in-pipeline).
+(`characterService.setRace` re-reads the doc, recomputes attributes + resource maxes, and
+writes both in one `$set`).
 
-### Resources — `game/data/resources.ts` 🟡
+### Resources — `game/data/resources.ts` + `game/character/resources.ts` ✅ formula built / 🟡 numbers
 The two vitals stored per character, each `{current, max}` clamped to `[0,max]`:
 
-| key | name | defaultMax | regenPerHour | regenWhileBusy |
+| key | name | regenPerHour | regenWhileBusy | max formula (D39, see Formulas) |
 |---|---|---|---|---|
-| `health` | Health | 20 | 2 | false |
-| `stamina` | Stamina | 10 | 5 | false |
+| `health` | Health | 2 | false | `12 + ConBonus·2 + StrBonus·1 + WilBonus·1` |
+| `stamina` | Stamina | 5 | false | `4 + ConBonus·2 + WilBonus·1` |
 
 `regenWhileBusy: false` means the hourly regen job **skips** (not defers) these while a
 character is in an active `ActivitySession` — you don't heal mid-climb or mid-duel. Action
 Points are the deliberate exception: they always accrue even while busy (world-travel.md).
 Rising meters (hunger, stress — flavor-progression.md's Stress) have inverted tick semantics
-and aren't added yet. `max` is a stored default today, not derived from attributes — the
-`recalculateMaxResources` seam (an attribute-driven max) is future work, kept as a deliberate
-simplification so the regen/clamp pipelines stay simple now. **R12 reframes `health`** into a
-larger, intuitive pool with per-location tracking (combat.md); when built, its `max` derives from
-frame (weight/height) + Constitution (replacing the dropped Size term) — the
-`recalculateMaxResources` seam is exactly where that computation lands.
+and aren't added yet. **`max` is attribute-derived (D39, built 2026-07-07)** — `game/character/
+resources.ts`'s `recalculateMaxResources` computes it from the character's current `attributes`;
+`defaultCharacterStats` seeds a fresh character full at that value, and `characterService.setRace`/
+`setAttributeAllocation` recompute + reapply it (`applyMaxResources`: full stays full on a raised
+cap, a damaged character keeps its current wounds under a new ceiling) whenever attributes
+change. `RESOURCES`' `defaultMax` field is now just the reference value at neutral (25-in-
+everything) attributes, kept for display/tuning context, not read by the live formula. **R12
+reframes `health`** into a larger, intuitive pool with per-location tracking (combat.md); when
+built, add a **Frame addend** (weight/height, replacing the dropped Size term) to `healthMax` —
+the same `recalculateMaxResources` function, one more term, no migration.
 
 ### Races — `game/data/races.ts` ✅ ids / 🟡 balance
 `canid, ermehn, felis, lutren, polcan, tamian, vulpin`, each carrying `attributeModifiers` on the
@@ -489,18 +520,17 @@ user (root `CLAUDE.md`'s concurrency model).
 - **Physical/mental state model** *(R20)* — the concrete shape of the two condition lists (bounded
   catalogs, D32), their sources (combat/disease/Stress/forage), and how they auto-manage for
   casuals; heavy overlap with flavor-progression.md's scars/vice/Stress — design them together.
-- **The overall mental-health term** *(R20)* — pick the player-facing name for the derived gauge:
-  **Composure** (leading) / Psyche / Sanity / Nerve / Resolve. Decide before it appears on the
-  sheet, so the word is fixed the first time a player sees it. `MENTAL_MAX` and the Stress→insanity
-  threshold are the attached numbers (flavor-progression.md).
+- ~~**The overall mental-health term**~~ → **resolved (owner, 2026-07-07): Sanity.** `MENTAL_MAX`
+  and the Stress→insanity threshold are the still-open attached numbers (flavor-progression.md);
+  the gauge itself and its terminology are ⬜ not built (the term is fixed, the UI/mechanic isn't).
 - **Stamina drain/cost numbers** *(R20)* — the exertion model's shape is set (a soft, fast-
   recovering vital spent on "push harder" actions), but every cost (sprint, extra attack/dodge,
-  labor, heavy-armour tax) and the `STAMINA_BASE`/`k_sta` max formula are 🟡 unset, and no action
-  spends it yet. Wire the first consumer (travel sprint or a combat extra-action) before tuning.
-- **Health/stamina max formula constants** *(R12/R20)* — the *shape* (`base + ConstitutionBonus·k
-  + FrameBonus`) is in Formulas, but `HEALTH_BASE`, `STAMINA_BASE`, `k_con`, `k_sta` and the
-  frame-bonus curve are all 🟡, and `max` is still a flat default in code until the
-  `recalculateMaxResources` seam is built.
+  labor, heavy-armour tax) is 🟡 unset, and no action spends it yet — only the *max* formula is
+  built (D39). Wire the first consumer (travel sprint or a combat extra-action) before tuning costs.
+- **Health/stamina max formula constants** *(R12/D39)* — the formula is **built**
+  (`HEALTH_BASE = 12`, `STAMINA_BASE = 4`, Constitution weight 2, Strength/Willpower weight 1 —
+  Formulas), but every constant is still a 🟡 placeholder pending playtest, and the **Frame addend**
+  (weight/height, R12) is the one piece of the intended formula not yet in it.
 - **Race/role creation templates** — closing the "casual never allocates a number" gap once
   Roles (skills.md) exist.
 - Resource (`health`/`stamina`) max values, and whether `health` max derives from frame +

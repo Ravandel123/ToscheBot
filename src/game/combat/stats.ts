@@ -1,5 +1,12 @@
+import { attributeBonus } from '../character/attributes.js';
 import { nodePoints } from '../character/skills.js';
 import type { CharacterDoc } from '../../db/models/character.js';
+
+// The tens-digit attribute→bonus scale is a character-domain concept (shared by
+// derived resource maxes, game/character/resources.ts) — canonical definition
+// lives in game/character/attributes.ts; re-exported here since every existing
+// combat import pulls it from this file.
+export { attributeBonus };
 
 export interface CombatStats {
    name: string;
@@ -8,11 +15,6 @@ export interface CombatStats {
    defenseBonus: number;
    strengthBonus: number;
    constitutionBonus: number;
-}
-
-/** Attribute → bonus: the tens digit (Strength 47 → 4), as in RPG/'s derived stats. */
-export function attributeBonus(value: number): number {
-   return Math.floor(value / 10);
 }
 
 /**

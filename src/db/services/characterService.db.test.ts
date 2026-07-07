@@ -82,7 +82,7 @@ describe('characterService.spendActionPoints (atomic check-and-spend)', () => {
    });
 });
 
-describe('characterService.setRace (in-pipeline attribute rebase, D25)', () => {
+describe('characterService.setRace (attribute rebase, D25)', () => {
    it('rebases effective attributes onto the new racial base', async () => {
       const character = await freshCharacter(); // raceless: every attribute = base
 
@@ -106,6 +106,43 @@ describe('characterService.setRace (in-pipeline attribute rebase, D25)', () => {
       // base(canid).strength (30) + allocation.strength (10) = 40.
       expect(after?.attributes.strength).toBe(ATTRIBUTE_BASE + 5 + 10);
       expect(after?.attributeAllocation.strength).toBe(10);
+   });
+
+   it('recomputes attribute-derived resource maxes and heals a full character to the new cap', async () => {
+      const character = await freshCharacter(); // health/stamina start full at the raceless max
+      expect(character.resources.health.max).toBe(20);
+
+      await characterService.setRace(character._id, 'canid'); // +5 STR, +5 WIL raise Health/Stamina
+      const after = await characterService.get(character._id);
+
+      expect(after?.resources.health.max).toBeGreaterThan(20);
+      expect(after?.resources.health.current).toBe(after?.resources.health.max); // stayed full
+      expect(after?.resources.stamina.max).toBeGreaterThan(10);
+      expect(after?.resources.stamina.current).toBe(after?.resources.stamina.max);
+   });
+
+   it('raises the cap without healing an already-damaged character', async () => {
+      const character = await freshCharacter();
+      await characterService.applyResourceDeltas(character._id, { health: -15 }); // down to 5/20
+
+      await characterService.setRace(character._id, 'canid');
+      const after = await characterService.get(character._id);
+
+      expect(after?.resources.health.max).toBeGreaterThan(20);
+      expect(after?.resources.health.current).toBe(5); // still wounded, not healed by the switch
+   });
+});
+
+describe('characterService.setAttributeAllocation (resource recompute)', () => {
+   it('raises Health/Stamina max when Constitution points are spent, healing a full character', async () => {
+      const character = await freshCharacter();
+      const allocation = { ...emptyAllocation(), constitution: 20 };
+
+      await characterService.setAttributeAllocation(character._id, null, allocation);
+      const after = await characterService.get(character._id);
+
+      expect(after?.resources.health.max).toBeGreaterThan(20);
+      expect(after?.resources.health.current).toBe(after?.resources.health.max);
    });
 });
 

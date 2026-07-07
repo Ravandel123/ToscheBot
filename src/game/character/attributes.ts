@@ -46,6 +46,14 @@ export function effectiveAttributes(race: RaceId | null, allocation: AttributeAl
    ) as Record<AttributeKey, number>;
 }
 
+/** Attribute → bonus: the tens digit (Strength 47 → 4). The one shared "how much
+ *  does this attribute's raw number actually swing a formula" scale — combat
+ *  (Soak, initiative, damage — game/combat/stats.ts re-exports this) and derived
+ *  resource maxes (game/character/resources.ts) both read off it. */
+export function attributeBonus(value: number): number {
+   return Math.floor(value / 10);
+}
+
 export function pointsSpent(allocation: AttributeAllocation): number {
    return ATTRIBUTE_KEYS.reduce((sum, key) => sum + allocation[key], 0);
 }

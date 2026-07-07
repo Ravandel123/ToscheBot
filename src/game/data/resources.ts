@@ -5,6 +5,9 @@
 
 export interface ResourceDefinition {
    name: string;
+   /** Reference value at neutral (25-in-everything) attributes — kept for
+    *  display/tuning context. The actual stored max is attribute-derived
+    *  (`game/character/resources.ts`'s `recalculateMaxResources`), not this flat number. */
    defaultMax: number;
    regenPerHour: number;
    /** Whether the hourly regen still applies while the character is busy in a
@@ -19,3 +22,5 @@ export const RESOURCES = {
 } as const satisfies Record<string, ResourceDefinition>;
 
 export type ResourceKey = keyof typeof RESOURCES;
+
+export const RESOURCE_KEYS = Object.keys(RESOURCES) as ResourceKey[];

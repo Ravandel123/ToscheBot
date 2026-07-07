@@ -217,6 +217,8 @@ it; this table is the chronological master list.
 | R24 | **Combat resolution v1 = auto-resolve** (pre-fight stance/style/target menu, one narrated pass, no per-round input); **manual turn-by-turn control is a later, additive upgrade**, not v1. | combat.md |
 | R25 | **Positioning grid + terrain tags** (cramped rooms block 2H weapons, sand hinders footwork styles) — designed direction, explicitly deferred until after R24's manual mode exists. | combat.md |
 | R26 | **Images are optional art** for events/places/characters — code renders text-first and includes an image only if it resolves (never breaks when absent); places carry **variants keyed on weather + time-of-day** (D31 world state), picked most-specific-first with graceful fallback; the id→image mapping is a code catalog (D10), not filenames in the DB. | images.md |
+| D39 | **Health/Stamina max are attribute-derived** (Constitution-led, 2×; Strength/Willpower a lesser 1× nudge each on Health, Willpower alone on Stamina) — closes the `recalculateMaxResources` seam. Constants tuned so a raceless/unallocated draft matches the old flat defaults (Health 20/Stamina 10). | character.md |
+| — | **The overall mental-health gauge term is Sanity** (owner, 2026-07-07) — `Sanity = MENTAL_MAX − Stress`; the gauge/mechanic itself is still ⬜. | character.md |
 
 New decisions get the next free number in whichever series makes sense (a design call →
 next `R#`; keep this table and the topic file in sync in the same change) and are recorded in

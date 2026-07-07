@@ -4,10 +4,10 @@ import { Character, defaultCharacterStats, type CharacterDoc, type CharacterIden
 import { activitySessionService } from './activitySessionService.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
-import { baseAttributes, effectiveAttributes, type AttributeAllocation } from '../../game/character/attributes.js';
+import { effectiveAttributes, type AttributeAllocation } from '../../game/character/attributes.js';
+import { applyMaxResources, recalculateMaxResources } from '../../game/character/resources.js';
 import { creditUse, type SkillLevelUp } from '../../game/character/skills.js';
 import type { CharacterBody } from '../../game/character/body.js';
-import { ATTRIBUTE_KEYS } from '../../game/data/attributes.js';
 import type { SkillNodeId } from '../../game/data/skills.js';
 import type { CurrencyKey } from '../../game/data/currencies.js';
 import type { TraitKey } from '../../game/data/traits.js';
@@ -82,24 +82,34 @@ export const characterService = {
    },
 
    /** Sets the character's race and rebases effective attributes on the new
-    *  racial base in the same atomic write (allocation is preserved — the
-    *  pipeline reads it from the doc itself). */
+    *  racial base (allocation is preserved). Resource maxes (Health/Stamina)
+    *  are attribute-derived, so they're recomputed in the same write — a
+    *  character sitting at full stays full on the new cap (`applyMaxResources`). */
    async setRace(characterId: string, race: RaceId): Promise<void> {
-      const base = baseAttributes(race);
-      const fields: Record<string, unknown> = { 'identity.race': race };
+      const character = await this.get(characterId);
+      if (!character)
+         return;
 
-      for (const key of ATTRIBUTE_KEYS)
-         fields[`attributes.${key}`] = { $add: [base[key], { $ifNull: [`$attributeAllocation.${key}`, 0] }] };
+      const attributes = effectiveAttributes(race, character.attributeAllocation);
+      const resources = applyMaxResources(character.resources, recalculateMaxResources(attributes));
 
-      await Character.updateOne({ _id: characterId }, setStage(fields), PIPELINE);
+      await Character.updateOne({ _id: characterId }, { $set: { 'identity.race': race, attributes, resources } });
    },
 
    /** Persists a creation point-buy state (validated by the caller via
-    *  game/character/attributes.ts) and the effective attributes it implies. */
+    *  game/character/attributes.ts), the effective attributes it implies, and
+    *  the resource maxes those attributes now derive (see `setRace`). */
    async setAttributeAllocation(characterId: string, race: RaceId | null, allocation: AttributeAllocation): Promise<void> {
+      const character = await this.get(characterId);
+      if (!character)
+         return;
+
+      const attributes = effectiveAttributes(race, allocation);
+      const resources = applyMaxResources(character.resources, recalculateMaxResources(attributes));
+
       await Character.updateOne(
          { _id: characterId },
-         { $set: { attributeAllocation: allocation, attributes: effectiveAttributes(race, allocation) } },
+         { $set: { attributeAllocation: allocation, attributes, resources } },
       );
    },
 

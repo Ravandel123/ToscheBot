@@ -5,6 +5,7 @@ import { CURRENCIES, type CurrencyKey } from '../../game/data/currencies.js';
 import { TRAITS, type TraitKey } from '../../game/data/traits.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
 import { effectiveAttributes, emptyAllocation, type AttributeAllocation } from '../../game/character/attributes.js';
+import { recalculateMaxResources } from '../../game/character/resources.js';
 import { emptyProgression, type CharacterProgression } from '../../game/character/skills.js';
 import { defaultBody, type CharacterBody } from '../../game/character/body.js';
 import type { ItemInstance } from '../../game/character/inventory.js';
@@ -130,12 +131,15 @@ export const Character = model('Character', characterSchema) as unknown as Model
  *  Attributes start at the racial base with an untouched allocation — the wizard's
  *  point-buy step (and any later race change) recomputes them via the service. */
 export function defaultCharacterStats(race: RaceId | null = null): Pick<CharacterDoc, 'resources' | 'actionPoints' | 'attributes' | 'attributeAllocation' | 'body' | 'traits' | 'progression' | 'currencies' | 'inventory' | 'equipment'> {
+   const attributes = effectiveAttributes(race, emptyAllocation());
+   const maxResources = recalculateMaxResources(attributes);
+
    return {
       resources: Object.fromEntries(
-         Object.entries(RESOURCES).map(([key, def]) => [key, { current: def.defaultMax, max: def.defaultMax }]),
+         Object.entries(maxResources).map(([key, max]) => [key, { current: max, max }]),
       ) as Record<ResourceKey, ResourceState>,
       actionPoints: { current: 0, totalEarned: 0 },
-      attributes: effectiveAttributes(race, emptyAllocation()),
+      attributes,
       attributeAllocation: emptyAllocation(),
       body: defaultBody(race),
       traits: Object.fromEntries(
