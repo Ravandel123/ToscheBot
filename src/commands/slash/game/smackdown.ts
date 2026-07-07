@@ -69,7 +69,7 @@ export default {
       .addSubcommand((sub) =>
          sub
             .setName('trial')
-            .setDescription('Climb the Spire ladder — browse the PvE champions and pick your next bout. Real wounds, real rewards.'),
+            .setDescription('Climb the Spire ladder — browse PvE champions and pick your next bout.'),
       ),
    category: 'game',
    async execute(client, interaction) {
