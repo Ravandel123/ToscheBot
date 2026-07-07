@@ -458,15 +458,24 @@ rides in the challenge card (so the target consents to *those* rules) and the ac
 `CombatProfile` stat blocks (D10), **not world/town NPCs and not DB characters** (the owner ruled
 town-NPC dueling out): the engine already takes two profiles, so a champion is a stat block with
 no owner and **no consent** needed. A character's cleared rung lives on `SmackdownRecord.trialRung`
-(`$max`, monotonic); `/smackdown trial` fights the **next unbeaten** champion — a win advances the
+(`$max`, monotonic); a win against your **next unbeaten** champion advances the
 rung once and pays its **one-time reward** (Deltrada Coins today; a title/item/reputation is the
 SEAM), a loss costs **real Health** (persisted like a duel, D35 — you can be Downed, then must heal
-before trying again). **Rematches** (`/smackdown trial opponent:<already-beaten champion>`) let you
+before trying again). **Rematches** let you
 re-fight any champion you've cleared — still real Health at stake, but **no reward and no rung
 change**, so the climb's rewards can't be farmed (reward fires only on beating your *next* unbeaten
 rung; a champion above your progress is refused). Fought **as-equipped**; the champion is always at
 full Health, the player at their current pool. Ranked on
-its own **`🏟️ Spire Ladder`** leaderboard category. 🟡 The roster + every stat/reward is a
+its own **`🏟️ Spire Ladder`** leaderboard category.
+
+**The UI is a browsable roster panel, not a name argument** (owner's TODO): `/smackdown trial`
+(no options) opens an ephemeral, **stateless** panel (`_trialView.buildTrialBrowser` + the `trial`
+component handler) — scroll the champions ◀ ▶ one at a time, each showing its blurb, fighting stats,
+reward and a 🖼️ **portrait placeholder** (images.md — art is optional), with a **Fight** button live
+only for a climb or an earned rematch and **🔒 disabled** on a champion above your progress. Clicking
+Fight runs the bout in the Spire channel (same lock/persist choreography as `duel.ts`). This replaced
+the old `opponent:<name>` string option: a bare `/smackdown trial` now always opens a real menu
+instead of guessing, and no typo'd/invalid champion name can reach the engine (the crash it fixed). 🟡 The roster + every stat/reward is a
 placeholder. SEAMs: a per-rung bout mode (bare-knuckle trials), boss loot, and — if ever wanted —
 the separate world/town-NPC duel (`opponent: 'npc'`, consent rolled) the owner flagged as "maybe
 later, not now".

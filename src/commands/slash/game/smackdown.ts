@@ -4,19 +4,15 @@ import { settings } from '../../../settings.js';
 import { accountService } from '../../../db/services/accountService.js';
 import { characterService } from '../../../db/services/characterService.js';
 import { smackdownService } from '../../../db/services/smackdownService.js';
-import { activitySessionService } from '../../../db/services/activitySessionService.js';
 import { combatStatsFromCharacter } from '../../../game/combat/stats.js';
 import { simulateFight, type RoundEvent } from '../../../game/combat/engine.js';
-import { resolveDuel } from '../../../game/combat/duel.js';
-import { combatProfile } from '../../../game/combat/profile.js';
-import { LADDER_LENGTH, SPIRE_LADDER, championProfile, trialTarget, type SpireChampion, type TrialTarget } from '../../../game/combat/spireLadder.js';
+import { LADDER_LENGTH } from '../../../game/combat/spireLadder.js';
 import { COMBAT_MOVES, HIT_LOCATIONS, START_GIFS, FINISH_GIFS } from '../../../game/combat/flavor.js';
 import { canCharacterAct } from '../../../game/character/rules.js';
 import { displayName } from '../../../game/character/identity.js';
 import { DEFAULT_BOUT_MODE, boutMode, selectableBoutModes } from '../../../game/combat/bouts.js';
-import { buildChallengeButtons, buildChallengeCard, renderBlow } from '../../components/_duelView.js';
-import { buildTrialOpening, buildTrialResult } from '../../components/_trialView.js';
-import { postChronicle } from '../../../game/chronicle.js';
+import { buildChallengeButtons, buildChallengeCard } from '../../components/_duelView.js';
+import { buildTrialBrowser } from '../../components/_trialView.js';
 import { randomItem } from '../../../lib/random.js';
 import { resolveGuildChannel } from '../../../lib/discord.js';
 import { sleep } from '../../../lib/async.js';
@@ -73,19 +69,13 @@ export default {
       .addSubcommand((sub) =>
          sub
             .setName('trial')
-            .setDescription('Climb the Spire ladder — fight the next PvE champion. Real wounds, a reward for each win.')
-            .addStringOption((option) => {
-               option.setName('opponent').setDescription('Rematch a champion you have already beaten (no reward). Omit to fight the next.');
-               for (const champion of SPIRE_LADDER)
-                  option.addChoices({ name: `${champion.name}, ${champion.title}`.slice(0, 100), value: champion.id });
-               return option;
-            }),
+            .setDescription('Climb the Spire ladder — browse the PvE champions and pick your next bout. Real wounds, real rewards.'),
       ),
    category: 'game',
    async execute(client, interaction) {
       const sub = interaction.options.getSubcommand();
       if (sub === 'duel') return challengeToDuel(interaction);
-      if (sub === 'trial') return runTrial(client, interaction);
+      if (sub === 'trial') return openTrial(interaction);
 
       await runSparring(client, interaction);
    },
@@ -259,10 +249,11 @@ function actProblem(character: CharacterDoc, subject: string): string | null {
 
 // --- Trial (PvE Spire ladder — D37) --------------------------------------------
 
-/** Fights the active character against their next unbeaten ladder champion. Real
- *  stakes: only the PLAYER's Health is spent/persisted (the champion is a code
- *  stat block, not a character). A win advances the rung once and pays its reward. */
-async function runTrial(client: ToscheClient, interaction: ChatInputCommandInteraction): Promise<void> {
+/** Opens the browsable Spire-ladder panel (the fight itself is owned by the
+ *  `trial` component handler). This replaced the old `opponent:<name>` argument:
+ *  the player now scrolls the roster and clicks Fight, so a bare `/smackdown
+ *  trial` always works and no invalid champion name can reach the engine. */
+async function openTrial(interaction: ChatInputCommandInteraction): Promise<void> {
    if (!interaction.guild) {
       await interaction.reply({ content: 'The Spire ladder is climbed on the server, not in DMs.', ...ephemeral });
       return;
@@ -286,109 +277,13 @@ async function runTrial(client: ToscheClient, interaction: ChatInputCommandInter
       return;
    }
 
-   // Resolve the opponent — a named rematch, or the next unbeaten climb. Peek
-   // pre-lock for a friendly message; re-resolve authoritatively under the lock.
-   const requestedId = interaction.options.getString('opponent');
    const record = await smackdownService.getOrCreate(character._id, displayName(character));
-   const preview = trialFightable(trialTarget(requestedId, record.trialRung ?? 0));
-   if ('reason' in preview) {
-      await interaction.reply({ content: preview.reason, ...ephemeral });
-      return;
-   }
+   const clearedRung = record.trialRung ?? 0;
+   // Open on the next champion they still have to beat (clamped to the top rung
+   // once the ladder is fully cleared).
+   const startIndex = Math.min(clearedRung, LADDER_LENGTH - 1);
 
-   await interaction.reply({
-      content: `⚔️ To the Spire — <#${spire.id}>! ${preview.isRematch ? 'A rematch against' : 'Your next challenger:'} **${preview.champion.name}, ${preview.champion.title}**.`,
-      ...ephemeral,
-   });
-
-   await client.locks.runExclusive([character._id], async () => {
-      const fighter = await characterService.get(character._id);
-      if (!fighter) {
-         await spire.send('The challenger never showed — the bout is off.');
-         return;
-      }
-
-      const act = canCharacterAct(fighter);
-      if (!act.ok) {
-         await spire.send(`**${displayName(fighter)}** is in no shape to fight the ladder right now.`);
-         return;
-      }
-      if (await activitySessionService.getActiveForParticipant(fighter._id)) {
-         await spire.send(`**${displayName(fighter)}** is occupied elsewhere — the ladder can wait.`);
-         return;
-      }
-
-      // Re-resolve under the lock (authoritative — a concurrent trial can't
-      // double-advance or re-award; getOrCreate is idempotent).
-      const rung = (await smackdownService.getOrCreate(fighter._id, displayName(fighter))).trialRung ?? 0;
-      const target = trialFightable(trialTarget(requestedId, rung));
-      if ('reason' in target) {
-         await spire.send(target.reason);
-         return;
-      }
-      const { champion: champ, isRematch } = target;
-
-      const player = combatProfile(fighter); // trials are fought as-equipped
-      const foe = championProfile(champ);
-      const names = { [player.characterId]: player.name, [foe.characterId]: foe.name };
-
-      const result = resolveDuel(player, foe);
-
-      await spire.send({ content: buildTrialOpening(player.name, champ, isRematch), allowedMentions: { parse: [] } });
-      await sleep(INTRO_DELAY_MS);
-      for (const blow of result.blows) {
-         await spire.send({ content: renderBlow(blow, names), allowedMentions: { parse: [] } });
-         await sleep(ROUND_DELAY_MS);
-      }
-
-      // Persist ONLY the player's Health (the champion is not a real character).
-      const playerHp = result.finalHealth[player.characterId];
-      const delta = playerHp - player.health;
-      if (delta !== 0)
-         await characterService.applyResourceDeltas(fighter._id, { health: delta });
-
-      const won = result.winnerId === player.characterId;
-      let rewardCoins = 0;
-      let ladderCleared = false;
-
-      // Reward + rung advance ONLY on a fresh climb win — a rematch pays nothing.
-      if (won && !isRematch) {
-         rewardCoins = champ.reward.coins;
-         await smackdownService.advanceTrial(fighter._id, displayName(fighter), rung + 1);
-         await characterService.applyCurrencyDeltas(fighter._id, { deltradaCoins: rewardCoins });
-         ladderCleared = rung + 1 >= LADDER_LENGTH;
-      }
-
-      await spire.send({
-         content: buildTrialResult({
-            won, champion: champ, playerName: player.name, playerHp, playerMaxHp: player.maxHealth,
-            rungBeaten: target.rung, ladderLength: LADDER_LENGTH, rewardCoins, ladderCleared, isRematch,
-         }),
-         allowedMentions: { parse: [] },
-      });
-
-      await postChronicle(client, chronicleTrialLine(displayName(fighter), champ.name, won, isRematch, rung));
-   });
-}
-
-/** Turns a resolved trial target into a fightable champion, or a refusal reason
- *  (nothing left to climb, or a champion not yet earned). */
-function trialFightable(target: TrialTarget): { champion: SpireChampion; rung: number; isRematch: boolean } | { reason: string } {
-   if (target.kind === 'cleared')
-      return { reason: `You have already bested every fighter in the Spire (${LADDER_LENGTH}/${LADDER_LENGTH}). None remain to challenge you, champion.` };
-   if (target.kind === 'locked')
-      return { reason: `You have not earned a bout with **${target.champion.name}** yet — climb the ladder to them first (\`/smackdown trial\` with no opponent).` };
-
-   return { champion: target.champion, rung: target.rung, isRematch: target.kind === 'rematch' };
-}
-
-function chronicleTrialLine(name: string, championName: string, won: boolean, isRematch: boolean, rung: number): string {
-   if (!won)
-      return `🏟️ **${name}** was knocked out by **${championName}** ${isRematch ? 'in a Spire rematch' : 'on the Spire ladder'}.`;
-   if (isRematch)
-      return `🏟️ **${name}** won a friendly rematch against **${championName}** at the Spire.`;
-
-   return `🏟️ **${name}** bested **${championName}** and climbed to rung ${rung + 1}/${LADDER_LENGTH} of the Spire ladder.`;
+   await interaction.reply({ ...buildTrialBrowser(clearedRung, startIndex), ...ephemeral });
 }
 
 const SPIRE_MISSING = 'The Spire is missing. Set `channels.smackdownSpire` in settings to a real channel.';

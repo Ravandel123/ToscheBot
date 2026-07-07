@@ -21,6 +21,11 @@ top, explanations after" request):
    file: the decided values, catalogs (name + what each does), and formulas/math, with **no
    rationale**. This is the "what we have, raw" layer — read this first to know the numbers; read
    Ruleset below for *why*. Where a value is still a placeholder it's marked 🟡 here too.
+   **Exact formulas go FIRST, in a `### Formulas` block at the very top of this section**
+   (owner's rule): any file that computes something — a health/stamina pool, move speed, a
+   damage/soak line, a price, an XP cost — opens with the literal formula (`Health max = …`),
+   marked 🟡 if the numbers aren't locked, so the math is never buried in prose. A reader
+   should get every formula the system uses without scrolling past the first screen.
 1. **Ruleset** — the design: the rule as currently decided (or the leading proposal, if not
    yet locked), and the reasoning behind it. This is the "what should happen / why" layer.
 2. **Implementation** — what exists in `src/` today: which models/services/files carry the

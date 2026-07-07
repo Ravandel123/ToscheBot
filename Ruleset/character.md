@@ -6,6 +6,30 @@ See [README.md](README.md) for the legend and how this file is structured.
 
 ## Reference (decided data & math)
 
+### Formulas
+
+The literal math this file's systems use, up front (owner's rule — formulas first). 🟡 marks
+numbers/shape not yet locked; ✅ marks what the code computes today.
+
+```
+Effective attribute   = racial base (25 ± race mods) + creation allocation + XP-bought raises   ✅ (raises ⬜)
+Creation point-buy    = 50 points, ≤ 20 on any one attribute, Σ must = 50                        ✅ 🟡
+Move speed            = race base Move + floor(Agility / 10)                                      ✅ 🟡
+                        └ intended full: + encumbrance penalty + injury penalty                  ⬜
+Health max (pool)     = HEALTH_BASE + ConstitutionBonus·k_con + FrameBonus(weight,height)        ⬜ 🟡  (today: flat defaultMax = 20)
+  ConstitutionBonus   = floor((Constitution − 25) / 10)   [attribute "bonus" = tens over base]
+  Health regen        = +2 / hour, paused while in an ActivitySession (regenWhileBusy=false)     ✅ 🟡
+Stamina max           = STAMINA_BASE + ConstitutionBonus·k_sta                                   ⬜ 🟡  (today: flat defaultMax = 10)
+  Stamina regen       = +5 / hour, paused while busy                                             ✅ 🟡
+  Stamina cost        = per exerting action (sprint, extra attack/dodge, forced march, labor)    ⬜
+Mental health         = MENTAL_MAX − Stress (a derived "composure" %, MENTAL_MAX 🟡)             ⬜ 🟡
+  Stress → insanity    at Stress = MENTAL_MAX: gain 1 insanity point, Stress resets              ⬜  (flavor-progression.md)
+```
+
+`k_con`, `k_sta`, `HEALTH_BASE`, `STAMINA_BASE`, `MENTAL_MAX` are all 🟡 placeholders to be
+tuned at playtest; the **shapes** are what's decided here. The Health-max computation lands in
+the `recalculateMaxResources` seam (Implementation → Resources); combat.md owns the pool's use.
+
 **Account** (`db/models/account.ts`) — one per Discord user; **server-wide, not game-only** (R19).
 
 | field | default | note |
@@ -210,12 +234,69 @@ Both are the "texture" the setting wants (flavor-progression.md R9) and both mus
 **auto-managed for casuals** (the bot narrates a limp; it never makes you micromanage one).
 They're the durable counterpart to combat.md's transient Conditions.
 
+### Mental health — one overall gauge, not just "Stress" ✅ direction / ⬜ built
+The owner's note: **"Stress" is the wrong single word** for a character's *overall* mental
+condition — Stress is only the *rising pressure*, one input. We want a legible gauge of how a
+character is doing psychologically, the mental twin of the Health pool. The model (design):
+
+- **Two things, cleanly split** — a rising **Stress** meter (the *pressure*, from combat, horror,
+  hunger, cold, loss — flavor-progression.md R21) and a derived **overall mental-health** read-out.
+  Stress is the *input*; mental health is the *state* you see.
+- **The gauge (a derived %, like a composure bar)** — the working name is **Composure** (candidates:
+  *Composure* / *Psyche* / *Sanity* / *Nerve* / *Resolve*; **owner to pick the term** — see Open
+  questions). `Mental health = MENTAL_MAX − Stress` (Formulas): full Composure = calm and clear;
+  as Stress climbs, Composure drops, and at the bottom it **breaks** — Stress maxes, converts to a
+  lasting **insanity point**, and resets (flavor-progression.md). Willpower resists Stress gain and
+  raises the ceiling (attributes table).
+- **Lasting scars of the mind** — insanity points and their disadvantages live in `mentalState[]`
+  above (traumas, fears, addictions, quirks): the *durable* record, distinct from the *live* gauge.
+  So there are three layers, not one muddled "stress": **Stress** (live pressure) → **Composure**
+  (live overall read) → **mentalState[]** (permanent aftermath).
+- **Recovered by** rest, safety, drink (with an addiction risk), a matched favorite meal
+  (likes/dislikes below), companionship, and treatment for the insanity scars (treatment-only, R21).
+- **Casual-safe** — shown as one bar on the sheet; the bot manages it. A casual never spends or
+  tracks Stress by hand — they just occasionally read "shaken" and know to rest.
+
+This keeps the *word the player sees* about **overall mental health** (Composure), with "Stress"
+demoted to the internal pressure input where it belongs. Full number design is in
+flavor-progression.md (Stress/insanity); this file owns the character-facing gauge + terminology.
+
 ### Movement speed ✅ built R20 (formula 🟡, no consumer yet)
-A derived `moveSpeed` (`game/character/body.ts`) = race base **Move** + an Agility bonus. Shown on
-`/character view`. 🟡 The **encumbrance** penalty (pack weight vs carry capacity —
-items-equipment.md) and body/injury terms aren't in the formula yet, and nothing *consumes*
-moveSpeed (travel pacing, chase/flee opposed tests — combat.md — are future). Derived, never
-stored, so it always reflects current attributes.
+A derived `moveSpeed` (`game/character/body.ts`) = race base **Move** + `floor(Agility / 10)` (see
+Formulas). Shown on `/character view`. Derived, never stored, so it always reflects current
+attributes/gear. 🟡 The **encumbrance** penalty (pack weight vs carry capacity —
+items-equipment.md) and injury/age terms aren't in the formula yet.
+
+**What speed is *for*** (the intended consumers — all ⬜ not wired):
+- **Travel pacing** — a faster character spends fewer Action Points (or less game-clock time) per
+  edge on the location graph (world-travel.md); a heavily-laden slow one pays more. This is the
+  first natural consumer and the cheapest to add (a multiplier on the AP cost).
+- **Initiative / turn order** in combat (combat.md) — speed (with Agility) decides who acts first.
+- **Chase & flee** — an opposed speed test to escape an encounter or run someone down, the honest
+  reason "how fast" should be a number and not just flavor (world-travel.md's fight-or-flight).
+- **Positioning** (R25, deferred) — closing distance / kiting on the future combat grid.
+
+Until at least travel pacing consumes it, `moveSpeed` is **display groundwork**: the formula is
+real so the number means something, but no rule reads it yet. Wiring travel pacing first is the
+recommended next step (it needs no combat grid).
+
+### Stamina — the exertion vital ✅ direction / ⬜ mechanics (later)
+A second regenerating vital besides Health (`resources.stamina`, already stored `{current,max}`,
+regen +5/h, paused while busy). Today **nothing drains or spends it** — it is structural
+groundwork. The intended design (deferred, D14 stance — structure now, numbers later):
+- **What it is** — short-term physical energy / wind, distinct from Health (lasting injury). You
+  don't die from 0 Stamina; you're *winded* — penalised, not wounded.
+- **Drained by** exertion: sprinting/forced march on travel, an *extra* attack or dodge beyond
+  the free one in combat (combat.md), heavy labor in professions (mining, hauling, smithing —
+  professions.md), and fighting in heavy armour. A single normal action is free; stamina is the
+  budget for pushing *harder* than baseline.
+- **Regenerated by** rest (the hourly tick), sitting at a tavern/campfire, food. `max` will
+  derive from Constitution (see Formulas) via the same `recalculateMaxResources` seam as Health.
+- **Used for** — being **out of stamina** blocks the exertion options (no sprint, no extra swing)
+  and/or applies a penalty to physical checks, giving Constitution a clear second job and making
+  long fights/marches a resource to manage. It is the *soft* limiter (recovers fast) to Health's
+  *hard* one (recovers slow). Kept auto-managed for casuals: the bot never asks you to spend
+  stamina; it just refuses the "push harder" button when you're spent and narrates why.
 
 ### Likes & dislikes ✅ direction R20 (⬜ built)
 A character has **preferences** — liked/disliked **food** (professions.md cooking: a matched dish
@@ -295,7 +376,7 @@ An account owns up to **`MAX_CHARACTERS_PER_ACCOUNT = 3`** characters (`game/cha
 | `reputation` | sparse map | ⬜ R15 | per-faction standing — see factions.md |
 | `xp` + attribute-raise unlocks | — | ⬜ R13 | skill-gated XP economy — see skills.md |
 | `fatePoints` | number | ⬜ R21 | reroll / dodge knockout — see combat.md |
-| `stress` (+ insanity) | — | ⬜ R21 | see flavor-progression.md |
+| `stress` (+ insanity) | — | ⬜ R21 | rising pressure; **Composure** (overall mental health) = `MENTAL_MAX − stress`, derived not stored — see flavor-progression.md |
 | `questFlags` / NPC `disposition` | — | ⬜ | conversation memory — see conversations.md / npcs.md |
 
 ### Attributes & the creation point-buy — `game/data/attributes.ts`, `game/character/attributes.ts` ✅ D25
@@ -408,6 +489,18 @@ user (root `CLAUDE.md`'s concurrency model).
 - **Physical/mental state model** *(R20)* — the concrete shape of the two condition lists (bounded
   catalogs, D32), their sources (combat/disease/Stress/forage), and how they auto-manage for
   casuals; heavy overlap with flavor-progression.md's scars/vice/Stress — design them together.
+- **The overall mental-health term** *(R20)* — pick the player-facing name for the derived gauge:
+  **Composure** (leading) / Psyche / Sanity / Nerve / Resolve. Decide before it appears on the
+  sheet, so the word is fixed the first time a player sees it. `MENTAL_MAX` and the Stress→insanity
+  threshold are the attached numbers (flavor-progression.md).
+- **Stamina drain/cost numbers** *(R20)* — the exertion model's shape is set (a soft, fast-
+  recovering vital spent on "push harder" actions), but every cost (sprint, extra attack/dodge,
+  labor, heavy-armour tax) and the `STAMINA_BASE`/`k_sta` max formula are 🟡 unset, and no action
+  spends it yet. Wire the first consumer (travel sprint or a combat extra-action) before tuning.
+- **Health/stamina max formula constants** *(R12/R20)* — the *shape* (`base + ConstitutionBonus·k
+  + FrameBonus`) is in Formulas, but `HEALTH_BASE`, `STAMINA_BASE`, `k_con`, `k_sta` and the
+  frame-bonus curve are all 🟡, and `max` is still a flat default in code until the
+  `recalculateMaxResources` seam is built.
 - **Race/role creation templates** — closing the "casual never allocates a number" gap once
   Roles (skills.md) exist.
 - Resource (`health`/`stamina`) max values, and whether `health` max derives from frame +

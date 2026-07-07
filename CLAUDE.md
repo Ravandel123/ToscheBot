@@ -327,7 +327,7 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
   throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
   must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Nine consumers
+  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Ten consumers
   so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
   D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details + body
   modals, Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
@@ -337,8 +337,10 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   panel + the D33 Store transfer), `stash` (the D33 withdraw panel over the `Item`
   collection — reuses the `/inventory` renderers), `play` (the D30/D31 game hub —
   travel select + condition-gated local-action buttons; the shared hub VIEW + context
-  loader live in `_hubView.ts`), `duel` (the D35 consent card + fight orchestration), and
-  `charskills` (the read-only `/character skills` tree viewer — D34).
+  loader live in `_hubView.ts`), `duel` (the D35 consent card + fight orchestration),
+  `charskills` (the read-only `/character skills` tree viewer — D34), and `trial` (the
+  D37 Spire-ladder **browser** — ◀ ▶ scroll the champions + a Fight button; owns the PvE
+  bout orchestration, mirroring `duel`).
   All are fully
   **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
   and never expire, unlike a per-message collector. A modal opened from a panel button can
@@ -360,6 +362,13 @@ otherwise optional ambient behaviors later (random reactions/replies, throttled)
   run against a half-ready client.
 - Ephemeral replies use `flags: MessageFlags.Ephemeral` (the `ephemeral` option is
   deprecated).
+- **Every command path must do something sensible on its own** (owner's TODO/General): a
+  subcommand invoked with no optional arg, or the barest form a user can send, must resolve to
+  a usable menu/interface or a clear message — never a crash or a silent no-op. Prefer an
+  **interface over a free-text argument** where the choice is from a known set (the `/smackdown
+  trial` roster browser replaced an `opponent:<name>` option that crashed on a typo/bare call —
+  scroll + click, not type a name). Discord already forces a subcommand to be picked for
+  subcommand-group commands, so the failure mode to guard is an *optional argument's* empty path.
 
 ### Helpers — do NOT port OldBot's `common.js`
 
@@ -743,6 +752,8 @@ The owner has smoke-tested
 `/profile` and `/smackdown` live; the bot has not yet been run end-to-end against a live
 Atlas cluster (needs `.env` + `npm run deploy` — **`/stash` is a NEW command so a redeploy
 is required again**; the D33 Store button + `Item` collection add NO other slash changes).
+**`/smackdown` also needs a redeploy**: `trial` dropped its `opponent` string option when it
+became a roster-browser interface (the `trial` component handler adds no other slash changes).
 See `Ruleset/` for the concrete game model (one file per topic) and what is still placeholder.
 
 **What works today:**
@@ -770,8 +781,11 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   (round-by-round in `#smackdown-spire`, commits Elo only) and `smackdown duel [mode]` (the real
   bout — D35: consent-gated, opposed-d100/Health/Soak, persists damage to both fighters,
   0 HP = Downed with no other cost; **bout modes** Full Gear / Bare-Knuckle — D36) and
-  `smackdown trial` (the PvE **Spire ladder** — D37: fight the next of 10 escalating champions,
-  real HP at stake, a coin reward per rung), `play` (the D30/D31 game hub —
+  `smackdown trial` (the PvE **Spire ladder** — D37: opens a **browsable roster panel** — ◀ ▶
+  scroll the 10 escalating champions, each with a stat card + 🖼️ portrait placeholder, then a
+  Fight button live only for a climb/earned rematch; real HP at stake, a coin reward per rung.
+  Replaced the old `opponent:<name>` argument, so a bare `/smackdown trial` always works),
+  `play` (the D30/D31 game hub —
   the default entry point: the location's weather/time/danger/prosperity, running events,
   **who is standing there** (players + NPCs), travel across the location graph via a
   select, encounters as flavor lines or **multi-approach d100 challenges** — D26, rolled
@@ -799,7 +813,9 @@ See `Ruleset/` for the concrete game model (one file per topic) and what is stil
   `play` (the D30/D31 game hub — travel select + condition-gated local-action buttons,
   re-validated at click time), `duel` (D35 — the `/smackdown duel` consent card's
   Accept/Decline + the auto-resolve fight orchestration: lock, resolve, narrate, persist HP),
-  `charskills` (the `/character skills` viewer — read-only, no lock).
+  `charskills` (the `/character skills` viewer — read-only, no lock), `trial` (D37 — the
+  `/smackdown trial` Spire-ladder browser: ◀ ▶ roster nav + a Fight button that runs the PvE
+  bout under the character lock, persisting only the player's HP).
 - **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
   (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
   `game/chronicle.ts` (public game log — D24).
