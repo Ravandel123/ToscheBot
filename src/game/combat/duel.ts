@@ -1,6 +1,6 @@
 import { randomInt } from '../../lib/random.js';
 import { CHECK_MAX_TARGET, CHECK_MIN_TARGET, rollAgainst } from '../checks.js';
-import { fightingStyle, styleEffect, type FightingStyleId, type StyleFamily } from './styles.js';
+import { fightingStyle, styleEffect, type FightingStyleId, type StyleFamily, type StyleTempo } from './styles.js';
 import { activePlanStyle, type FamilyPlan } from './plan.js';
 import type { SkillNodeId } from '../data/skills.js';
 
@@ -13,12 +13,19 @@ import type { SkillNodeId } from '../data/skills.js';
 // pool, Soak, auto-resolve. Fighting styles + the combat plan are LIVE (D41):
 // each exchange re-evaluates both fighters' plans (default style + conditional
 // switches), applies the active style's modifiers to the opposed targets and
-// runs its effects (hamper, riposte). The layers combat.md still defers — named
-// signature moves, hit-location trauma tallies + concentrated-damage critical
-// injuries, armour × weapon-type multipliers, criticals/fumbles on doubles,
-// `knowsStyle` counter-play — keep their marked SEAMs (a field carried but
-// unused, or a step in `computeDamage`) so adding one is filling in a hook, not
-// reshaping the engine.
+// runs its effects (hamper, riposte). MOMENTUM is live too (D42, the owner's
+// realism ask): initiative is not alternating but FLOWS — a connecting blow
+// gives the attacker a CHANCE to press on and swing again (never a certainty),
+// a miss hands it over, and a decisive defence (≥ SEIZE_MARGIN SL) seizes it
+// with a story beat (and the riposte styles' counter window). That chance rises
+// with how decisively the blow landed and the attacker's style tempo, and
+// decays per follow-up, so a fighter rarely — but sometimes — strings blows
+// together (see followUpChance). The layers combat.md
+// still defers — named signature moves, hit-location trauma tallies +
+// concentrated-damage critical injuries, armour × weapon-type multipliers,
+// criticals/fumbles on doubles, `knowsStyle` counter-play — keep their marked
+// SEAMs (a field carried but unused, or a step in `computeDamage`) so adding
+// one is filling in a hook, not reshaping the engine.
 
 /** Weapon damage family — carried on the profile for the future armour × type
  *  multiplier (combat.md); NOT yet consumed by damage math (v1). */
@@ -107,6 +114,12 @@ export interface DuelBlow {
    styleSwitches: StyleSwitch[];
    /** The attacker swung fouled by the foe's previous controlling hit (hamper). */
    hampered: boolean;
+   /** A follow-up swing in a press — the attacker kept the initiative off a
+    *  connecting blow and swings again, at a mounting penalty (D42 momentum). */
+   pressed: boolean;
+   /** The defender stopped this swing decisively (≥ SEIZE_MARGIN SL) and takes
+    *  the initiative with a story beat — the riposte styles' counter window. */
+   seized: boolean;
    riposte?: RiposteBlow;
 }
 
@@ -135,11 +148,55 @@ export type Rng = (min: number, max: number) => number;
 // remaining Health. Kept modest so a bout never floods the channel. 🟡 tunable.
 export const MAX_ROUNDS = 24;
 
+// --- Momentum (D42) --------------------------------------------------------
+// Initiative FLOWS instead of strictly alternating: a landed blow gives the
+// attacker a CHANCE to press the advantage and swing again; a miss (or a failed
+// press) always hands the initiative over. The chance (followUpChance below) is
+// driven by how DECISIVELY the blow landed (net Success Levels) and the
+// attacker's active style's TEMPO — aggressive styles chain, defensive ones
+// reset to guard — and DECAYS with each consecutive follow-up. The decisiveness
+// term is deliberately the strong one: two even fighters trade mostly single
+// blows (net SL ~0–2 → the chance dies fast), but a badly OUTCLASSED foe (a
+// lopsided net SL every exchange) can get cut down in a long flurry — sometimes
+// ten-plus swings — because the gap keeps the chance high faster than the decay
+// erodes it. It is never a certainty (capped below 100), so a fight never
+// stalls on one fighter. A pressed swing is also a little less controlled —
+// every follow-up stacks this (small) overextension attack penalty on top.
+export const PRESS_ATTACK_PENALTY = 3; // a follow-up swings slightly sloppier. 🟡 tunable
+
+// followUpChance = base + decisiveness − overextension, shifted by style tempo,
+// clamped [0, FOLLOW_UP_MAX]. The high PER_SL vs low DECAY is what lets a big
+// skill gap sustain a long "cut them down" flurry while even fights stay short.
+// All 🟡 tunable.
+export const FOLLOW_UP_BASE = 15;
+export const FOLLOW_UP_PER_SL = 12;
+export const FOLLOW_UP_DECAY = 5;
+export const FOLLOW_UP_MAX = 95;
+export const FOLLOW_UP_TEMPO: Record<StyleTempo, number> = { aggressive: 15, neutral: 0, defensive: -15 };
+
+/**
+ * The % chance a landed blow lets the attacker keep the initiative and swing
+ * again (D42). Rises with how decisively the blow connected (`netSuccessLevels`)
+ * and the attacker's style tempo; falls with each follow-up already taken
+ * (`priorPresses`). Clamped [0, FOLLOW_UP_MAX] — a chain is never guaranteed. Pure.
+ */
+export function followUpChance(netSuccessLevels: number, style: FightingStyleId | null, priorPresses: number): number {
+   const tempo = FOLLOW_UP_TEMPO[style ? fightingStyle(style).tempo ?? 'neutral' : 'neutral'];
+   const raw = FOLLOW_UP_BASE + netSuccessLevels * FOLLOW_UP_PER_SL + tempo - priorPresses * FOLLOW_UP_DECAY;
+   return Math.max(0, Math.min(FOLLOW_UP_MAX, raw));
+}
+
+/** A defence won by at least this SL margin SEIZES the initiative (a narrated
+ *  turning of the tide; also the riposte styles' counter window). Mechanically
+ *  any miss passes the initiative — the seize is the emphatic version. 🟡 */
+export const SEIZE_MARGIN = 2;
+
 /**
  * Auto-resolves a whole duel in one pass (combat.md R24: v1 is auto-resolve,
  * manual turn-by-turn is a later layer that reuses this same profile/round math).
- * Alternating single exchanges, first strike to the higher Initiative — the
- * proven sparring narration shape, now on real d100/Health/Soak.
+ * First strike to the higher Initiative; from there momentum decides who swings
+ * (D42: a landed blow may press on, a miss passes the turn) — the proven
+ * sparring narration shape, now on real d100/Health/Soak.
  */
 export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = randomInt): DuelResult {
    const health: Record<string, number> = { [a.characterId]: a.health, [b.characterId]: b.health };
@@ -155,6 +212,8 @@ export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = rando
       : b.initiative > a.initiative ? b
          : (rng(0, 1) === 0 ? a : b);
    let defender = attacker.characterId === a.characterId ? b : a;
+   // Consecutive follow-up swings by the current initiative holder (D42).
+   let press = 0;
 
    for (let round = 1; round <= MAX_ROUNDS && health[a.characterId] > 0 && health[b.characterId] > 0; round++) {
       // Re-evaluate both plans at the top of the exchange. Triggers are
@@ -174,7 +233,7 @@ export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = rando
             used.push(style);
       }
 
-      const blow = exchange(attacker, defender, currentStyle, pendingHamper, rng);
+      const blow = exchange(attacker, defender, currentStyle, pendingHamper, press * PRESS_ATTACK_PENALTY, rng);
       health[defender.characterId] = Math.max(0, health[defender.characterId] - blow.record.damage);
       if (blow.riposteDamage > 0)
          health[attacker.characterId] = Math.max(0, health[attacker.characterId] - blow.riposteDamage);
@@ -182,6 +241,7 @@ export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = rando
       blows.push({
          ...blow.record,
          styleSwitches,
+         seized: !blow.record.hit && blow.defenseMargin >= SEIZE_MARGIN,
          defenderHealthAfter: health[defender.characterId],
          defenderDowned: health[defender.characterId] <= 0,
          riposte: blow.riposteDamage > 0
@@ -193,7 +253,15 @@ export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = rando
             : undefined,
       });
 
-      [attacker, defender] = [defender, attacker];
+      // Momentum (D42): a connecting blow gives a decaying, style-shaded CHANCE
+      // to press on and swing again; a miss — or a failed press roll — hands the
+      // initiative over and resets the flurry.
+      if (blow.record.hit && rng(1, 100) <= followUpChance(blow.record.netSuccessLevels, currentStyle[attacker.characterId], press)) {
+         press++;
+      } else {
+         [attacker, defender] = [defender, attacker];
+         press = 0;
+      }
    }
 
    const aHp = health[a.characterId];
@@ -248,19 +316,24 @@ function clampTarget(target: number): number {
 }
 
 interface ExchangeOutcome {
-   record: Omit<DuelBlow, 'defenderHealthAfter' | 'defenderDowned' | 'styleSwitches' | 'riposte'>;
+   record: Omit<DuelBlow, 'defenderHealthAfter' | 'defenderDowned' | 'styleSwitches' | 'riposte' | 'seized'>;
    /** Counter damage the defender dealt back (0 = none). */
    riposteDamage: number;
+   /** How decisively the defence won (defender SL − attacker SL; 0 on a hit) —
+    *  the loop reads it against SEIZE_MARGIN (D42). */
+   defenseMargin: number;
 }
 
 /** One opposed exchange. Both roll their own d100 test under their active
  *  style's targets/modifiers; the higher Success Level connects (a target
- *  tiebreak favours the sharper fighter, else the defender). */
+ *  tiebreak favours the sharper fighter, else the defender). `pressPenalty`
+ *  is the attacker's overextension debt from pressing the initiative (D42). */
 function exchange(
    attacker: CombatProfile,
    defender: CombatProfile,
    styles: Record<string, FightingStyleId | null>,
    pendingHamper: Record<string, number>,
+   pressPenalty: number,
    rng: Rng,
 ): ExchangeOutcome {
    const attackerStyle = styles[attacker.characterId];
@@ -273,7 +346,8 @@ function exchange(
    const attackTarget = clampTarget(
       styleBases(attacker, attackerStyle).attack
       + (attackerStyle ? fightingStyle(attackerStyle).modifiers?.attack ?? 0 : 0)
-      - hamperPenalty,
+      - hamperPenalty
+      - pressPenalty,
    );
    const defenseTarget = clampTarget(
       styleBases(defender, defenderStyle).defense
@@ -312,8 +386,10 @@ function exchange(
          attackerStyle,
          defenderStyle,
          hampered: hamperPenalty > 0,
+         pressed: pressPenalty > 0,
       },
       riposteDamage,
+      defenseMargin: hit ? 0 : def.successLevels - atk.successLevels,
    };
 }
 

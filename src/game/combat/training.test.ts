@@ -84,7 +84,7 @@ describe('trainingNodes', () => {
    });
 
    it('keeps an armed fighter training the weapon branch under any style', () => {
-      const armed = profile({ family: 'melee', attackNode: 'one_handed' });
+      const armed = profile({ family: 'one_handed', attackNode: 'one_handed' });
       expect(trainingNodes(armed, ['warden'])).toEqual(expect.arrayContaining(['warding', 'one_handed']));
    });
 });

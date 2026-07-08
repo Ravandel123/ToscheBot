@@ -49,7 +49,7 @@ describe('combatplan handler — default style', () => {
       expect((await storedPlan(characterId, 'unarmed'))?.style).toBeNull();
    });
 
-   it('refuses a wrong-family style (a melee style on the unarmed select)', async () => {
+   it('refuses a wrong-family style (an armed style on the unarmed select)', async () => {
       const characterId = await withActiveCharacter();
 
       await combatPlanHandler.handle(fakeClient(), fakeSelect('combatplan:style:unarmed', ['warden'], USER).interaction);
@@ -57,14 +57,16 @@ describe('combatplan handler — default style', () => {
       expect((await storedPlan(characterId, 'unarmed'))?.style).toBeNull();
    });
 
-   it('families are independent: a melee default leaves unarmed untouched', async () => {
+   it('families are independent: a one-handed default leaves unarmed untouched', async () => {
       const characterId = await withActiveCharacter();
 
       await combatPlanHandler.handle(fakeClient(), fakeSelect('combatplan:style:unarmed', ['grappler'], USER).interaction);
-      await combatPlanHandler.handle(fakeClient(), fakeSelect('combatplan:style:melee', ['warden'], USER).interaction);
+      await combatPlanHandler.handle(fakeClient(), fakeSelect('combatplan:style:one_handed', ['warden'], USER).interaction);
+      await combatPlanHandler.handle(fakeClient(), fakeSelect('combatplan:style:two_handed', ['iron_gate'], USER).interaction);
 
       expect((await storedPlan(characterId, 'unarmed'))?.style).toBe('grappler');
-      expect((await storedPlan(characterId, 'melee'))?.style).toBe('warden');
+      expect((await storedPlan(characterId, 'one_handed'))?.style).toBe('warden');
+      expect((await storedPlan(characterId, 'two_handed'))?.style).toBe('iron_gate');
    });
 });
 

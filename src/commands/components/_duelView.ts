@@ -90,8 +90,9 @@ export function buildStyleIntro(openingStyles: Record<string, FightingStyleId | 
 
 /** One narrated exchange. Numbers stay backstage where they can; the HP note is
  *  the one figure worth showing so a watcher can feel the fight turning. Style
- *  switches (the combat plan firing), a hampered swing and a riposte all read as
- *  extra story beats on the same line block. */
+ *  switches (the combat plan firing), a hampered swing, a pressed follow-up
+ *  (momentum, D42), a riposte and a seized initiative all read as extra story
+ *  beats on the same line block. */
 export function renderBlow(blow: DuelBlow, names: Record<string, string>): string {
    const attacker = names[blow.attackerId] ?? 'A fighter';
    const defender = names[blow.defenderId] ?? 'their foe';
@@ -103,8 +104,12 @@ export function renderBlow(blow: DuelBlow, names: Record<string, string>): strin
       lines.push(`🔄 **${names[change.characterId] ?? 'A fighter'}** shifts to ${style.emoji} **${style.name}**!`);
    }
 
-   // A hampered attacker is still fouled from the foe's last controlling hit.
-   const swing = blow.hampered ? `**${attacker}**, still tangled up, goes` : `**${attacker}** goes`;
+   // A hampered attacker is still fouled from the foe's last controlling hit;
+   // a pressed one keeps swinging off their own momentum (never both at once).
+   const swing = blow.hampered ? `**${attacker}**, still tangled up, goes`
+      : blow.pressed ? `**${attacker}** presses on, going`
+         : `**${attacker}** goes`;
+   const flavored = blow.hampered || blow.pressed;
 
    if (!blow.hit) {
       let line = `${swing} for **${defender}**'s ${location} — turned aside!`;
@@ -112,14 +117,16 @@ export function renderBlow(blow: DuelBlow, names: Record<string, string>): strin
          line += blow.riposte.attackerDowned
             ? ` **${defender}** answers on the counter for **${blow.riposte.damage}** — and **${attacker}** goes down! 💫`
             : ` **${defender}** answers on the counter for **${blow.riposte.damage}**! _(${attacker}: ${blow.riposte.attackerHealthAfter} HP)_`;
+      if (blow.seized && !blow.riposte?.attackerDowned)
+         line += ` **${defender}** turns the tide and takes the momentum!`;
       lines.push(line);
       return lines.join('\n');
    }
 
    if (blow.defenderDowned)
-      lines.push(`${blow.hampered ? `${swing} in and` : `**${attacker}**`} ${randomItem(COMBAT_MOVES)} **${defender}**'s ${location} for **${blow.damage}** — and **${defender}** goes down! 💫`);
+      lines.push(`${flavored ? `${swing} in and` : `**${attacker}**`} ${randomItem(COMBAT_MOVES)} **${defender}**'s ${location} for **${blow.damage}** — and **${defender}** goes down! 💫`);
    else
-      lines.push(`${blow.hampered ? `${swing} in and` : `**${attacker}**`} ${randomItem(COMBAT_MOVES)} **${defender}**'s ${location} for **${blow.damage}**! _(${defender}: ${blow.defenderHealthAfter} HP)_`);
+      lines.push(`${flavored ? `${swing} in and` : `**${attacker}**`} ${randomItem(COMBAT_MOVES)} **${defender}**'s ${location} for **${blow.damage}**! _(${defender}: ${blow.defenderHealthAfter} HP)_`);
 
    return lines.join('\n');
 }

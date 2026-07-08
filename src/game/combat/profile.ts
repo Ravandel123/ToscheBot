@@ -58,9 +58,10 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
    const strengthBonus = attributeBonus(attributes.strength);
    const constitutionBonus = attributeBonus(attributes.constitution);
 
-   // Styles are family-specific (D41): what's in your hands decides which
-   // catalog (and which stored plan) applies to this bout.
-   const family: StyleFamily = weapon ? 'melee' : 'unarmed';
+   // Styles are family-specific (D41/D42): what's in your hands — and how it's
+   // gripped — decides which catalog (and which stored plan) applies to this
+   // bout. A one-handed ward and a greatsword ward are different schools.
+   const family: StyleFamily = weapon ? weaponFamily(weapon) : 'unarmed';
    const plan = sanitizeFamilyPlan(character.combatPlan?.[family], family);
 
    return {
@@ -92,8 +93,10 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
  * repaint would show and what the engine rolls can never disagree). Each style
  * draws on its skill node (D41): unarmed, the node replaces the attack draw;
  * armed, the weapon branch and the style branch are summed together (extraNodes
- * — the shared melee root dedupes). Defence is the style node's path both ways
- * — the owner's rule: knowing your style well means defending better in it.
+ * — since D42 the style node sits UNDER the grip, so the shared grip+melee
+ * path dedups; the sum stays correct when weapon-leaf nodes like Blades land).
+ * Defence is the style node's path both ways — the owner's rule: knowing your
+ * style well means defending better in it.
  */
 function buildStyleTargets(
    subject: CheckSubject,
@@ -111,9 +114,9 @@ function buildStyleTargets(
    for (const styleId of referenced) {
       const node = fightingStyle(styleId).node;
       targets[styleId] = {
-         attack: family === 'melee'
-            ? checkTarget(subject, { node: attackNode, extraNodes: [node], modifier: COMBAT_ATTACK_BASE })
-            : checkTarget(subject, { node, modifier: COMBAT_ATTACK_BASE }),
+         attack: family === 'unarmed'
+            ? checkTarget(subject, { node, modifier: COMBAT_ATTACK_BASE })
+            : checkTarget(subject, { node: attackNode, extraNodes: [node], modifier: COMBAT_ATTACK_BASE }),
          defense: checkTarget(subject, { node, modifier: COMBAT_DEFENSE_BASE }),
       };
    }
@@ -149,6 +152,11 @@ export function equippedWeapon(character: CharacterDoc): WeaponDefinition | null
  *  under the `melee` root, so it also rewards training the root). SEAM: map to the
  *  specific blade/axe/polearm leaf once weapons carry a skill tag. */
 function weaponSkillNode(weapon: WeaponDefinition): SkillNodeId {
+   return weapon.hands === 2 ? 'two_handed' : 'one_handed';
+}
+
+/** The style family a weapon's grip puts its wielder in (D42). */
+function weaponFamily(weapon: WeaponDefinition): StyleFamily {
    return weapon.hands === 2 ? 'two_handed' : 'one_handed';
 }
 

@@ -62,14 +62,21 @@ describe('combatProfile', () => {
       expect(combatProfile(armoured).soak).toBe(attributeBonus(30) + 1);
    });
 
-   it('resolves the style family from the hands: fists = unarmed, a weapon = melee', () => {
+   it('resolves the style family from the hands: fists = unarmed, a weapon = its grip (D42)', () => {
       expect(combatProfile(character()).family).toBe('unarmed');
 
       const armed = character({
          inventory: [{ instanceId: 'w1', itemId: 'iron_sword', quality: 'common', quantity: 1, durability: 60, acquiredAt: new Date() }],
          equipment: { mainHand: 'w1' },
       });
-      expect(combatProfile(armed).family).toBe('melee');
+      expect(combatProfile(armed).family).toBe('one_handed');
+
+      const greatArmed = character({
+         inventory: [{ instanceId: 'w2', itemId: 'war_maul', quality: 'common', quantity: 1, durability: 80, acquiredAt: new Date() }],
+         equipment: { mainHand: 'w2' },
+      });
+      expect(combatProfile(greatArmed).family).toBe('two_handed');
+
       // Bare-knuckle strips the sword → the unarmed catalog (and plan) applies.
       expect(combatProfile(armed, { loadout: 'unarmed-unarmored' }).family).toBe('unarmed');
    });
@@ -101,9 +108,9 @@ describe('combatProfile', () => {
    });
 
    it('drops a wrong-family plan instead of carrying it into the bout', () => {
-      // A melee plan on a bare-fisted fighter: the unarmed family has no plan
-      // stored, so the profile fights plain.
-      const p = combatProfile(character({ combatPlan: { melee: { style: 'warden', rules: [] } } }));
+      // A one-handed plan on a bare-fisted fighter: the unarmed family has no
+      // plan stored, so the profile fights plain.
+      const p = combatProfile(character({ combatPlan: { one_handed: { style: 'warden', rules: [] } } }));
       expect(p.plan).toEqual({ style: null, rules: [] });
       expect(p.styleTargets).toEqual({});
    });

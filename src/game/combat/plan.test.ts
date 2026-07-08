@@ -50,10 +50,10 @@ describe('sanitizeFamilyPlan', () => {
    });
 
    it('drops unknown and wrong-family styles (D10 rule 3)', () => {
-      // A melee style stored under unarmed (or a renamed style) must never fight.
+      // An armed style stored under unarmed (or a renamed style) must never fight.
       const plan = { style: 'warden', rules: [{ trigger: { kind: 'round-at-least', value: 3 }, style: 'gone_style' }] };
       expect(sanitizeFamilyPlan(plan, 'unarmed')).toEqual(emptyFamilyPlan());
-      expect(sanitizeFamilyPlan(plan, 'melee').style).toBe('warden');
+      expect(sanitizeFamilyPlan(plan, 'one_handed').style).toBe('warden');
    });
 
    it('clamps trigger values and caps the rule count', () => {

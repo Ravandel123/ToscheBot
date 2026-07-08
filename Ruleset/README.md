@@ -45,6 +45,15 @@ Status markers (used throughout, consistent with the old docs):
 - ⬜ **planned** — not decided and not built.
 - ❓→`Pn` — an open fork; see that topic file's "Open questions" section for the proposal.
 
+**Balance is a first-class concern here, not an afterthought.** A 🟡 number is not "any
+number that type-checks" — before marking a mechanic built, weigh how it interacts with the
+rest of the system, whether it can be exploited or feel degenerate, and whether it holds up at
+the *extremes* (a lopsided matchup, a maxed build) as well as the average case. When reasoning
+alone can't settle it, **verify empirically** — a throwaway simulation over representative
+scenarios, read the distribution, tune the constants against it (combat momentum, `combat.md`
+D42, is the worked example). This is the owner's standing instruction for all new/changed work;
+the full statement lives in `CLAUDE.md`'s "Working agreement".
+
 Topic files:
 
 | File | Covers |

@@ -6,10 +6,12 @@ import { pathToRoot } from '../data/skills.js';
 // node outside its family's tree, a nonsense effect) must fail `npm test`, not
 // surface as a wrong-tree training credit or a broken exchange.
 
-/** The tree root each family's styles must draw under. */
+/** The tree node each family's styles must draw under (D42: an armed style's
+ *  node sits inside its GRIP branch, not loose under the melee root). */
 const FAMILY_ROOT: Record<StyleFamily, string> = {
    unarmed: 'brawling',
-   melee: 'melee',
+   one_handed: 'one_handed',
+   two_handed: 'two_handed',
    ranged: 'ranged',
 };
 

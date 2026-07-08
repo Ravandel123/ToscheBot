@@ -127,20 +127,26 @@ export const SKILL_NODES = {
    // opposed-roll model; no live solo consumer yet — sparring uses the old
    // engine — so the magnitude is free to tune) =============================
    melee: { name: 'Melee', parent: null, attributes: { agility: 0.5 }, description: 'Fighting hand-to-hand with a weapon.' },
+   // Armed STYLE branches (D41/D42) live INSIDE each grip branch (owner's call:
+   // one-handed and two-handed fighting are different systems — a sword-and-hand
+   // ward is not a greatsword ward). A fighting style (game/combat/styles.ts)
+   // draws on its grip's style node — summed into the attack alongside the weapon
+   // branch (extraNodes; the shared grip+melee path dedups) and the base of the
+   // style's defence, so knowing your style well means attacking AND defending
+   // better in it. Explicit `growth: 'branch'` keeps them training at the same
+   // rate as the unarmed style branches (their depth would default them to leaf).
    one_handed: { name: 'One-Handed', parent: 'melee', description: 'Single-hand weapons, freeing a hand for a shield.' },
    blades: { name: 'Blades', parent: 'one_handed', description: 'Swords and daggers.' },
    axes_maces: { name: 'Axes & Maces', parent: 'one_handed', description: 'One-handed choppers and bludgeons.' },
+   pressing: { name: 'Pressing', parent: 'one_handed', growth: 'branch', description: 'Relentless single-hand offence — point and edge, pressure over caution.' },
+   binding: { name: 'Binding', parent: 'one_handed', growth: 'branch', description: 'Binds, hooks and beats — fouling the foe\'s weapon and rhythm.' },
+   warding: { name: 'Warding', parent: 'one_handed', growth: 'branch', description: 'A measured single-hand guard — parries, distance and patient counters.' },
    two_handed: { name: 'Two-Handed', parent: 'melee', description: 'Great weapons wielded in both hands.' },
    great_blades: { name: 'Great Blades', parent: 'two_handed', description: 'Greatswords and longblades.' },
    polearms: { name: 'Polearms', parent: 'two_handed', description: 'Spears, halberds and reach weapons.' },
-   // Armed STYLE branches (D41): approach knowledge, orthogonal to the weapon-grip
-   // branches above. A fighting style (game/combat/styles.ts) draws on one of
-   // these — summed into the attack alongside the weapon branch (extraNodes,
-   // dedup shares the melee root) and the base of the style's defence, so knowing
-   // your style well means attacking AND defending better in it (owner's rule).
-   onslaught: { name: 'Onslaught', parent: 'melee', description: 'Relentless armed aggression — pressure over caution.' },
-   binding: { name: 'Binding', parent: 'melee', description: 'Binds, hooks and beats — fouling the foe\'s weapon and rhythm.' },
-   warding: { name: 'Warding', parent: 'melee', description: 'A measured armed guard — parries, distance and patient counters.' },
+   cleaving: { name: 'Cleaving', parent: 'two_handed', growth: 'branch', description: 'Great committed blows — weight and momentum over caution.' },
+   halfswording: { name: 'Halfswording', parent: 'two_handed', growth: 'branch', description: 'Gripping blade or haft to bind, hook and wrestle the foe\'s weapon.' },
+   iron_ward: { name: 'Iron Ward', parent: 'two_handed', growth: 'branch', description: 'The braced two-handed guard — let the storm break, then answer.' },
    ranged: { name: 'Ranged', parent: null, attributes: { dexterity: 0.5 }, description: 'Bows, slings and thrown weapons.' },
    // The brawling branches double as the unarmed STYLES' nodes (D41): unarmed,
    // the technique IS the approach, so a style draws its attack and defence

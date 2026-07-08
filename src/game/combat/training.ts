@@ -65,7 +65,7 @@ export function trainingNodes(profile: CombatProfile, stylesUsed: readonly (Figh
          continue;
       }
       nodes.add(fightingStyle(styleId).node);
-      if (profile.family === 'melee')
+      if (profile.family !== 'unarmed')
          nodes.add(profile.attackNode);
    }
 

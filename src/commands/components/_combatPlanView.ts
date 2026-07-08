@@ -22,8 +22,10 @@ import type { CharacterDoc } from '../../db/models/character.js';
 
 const PANEL_COLOR = 0x8B2B2B; // matches the duel views — this feeds the same fights
 
-/** The families a player can plan for. Ranged joins when ranged combat exists. */
-export const PLAN_FAMILIES = ['unarmed', 'melee'] as const;
+/** The families a player can plan for (D42: armed splits by grip). Ranged joins
+ *  when ranged combat exists. Three families = 3 select rows + 2 button rows —
+ *  exactly Discord's 5-row cap; a fourth family needs a paged panel. */
+export const PLAN_FAMILIES = ['unarmed', 'one_handed', 'two_handed'] as const;
 
 export type PlanFamily = (typeof PLAN_FAMILIES)[number];
 
@@ -33,7 +35,8 @@ export function isPlanFamily(family: string): family is PlanFamily {
 
 const FAMILY_LABEL: Record<PlanFamily, string> = {
    unarmed: '🥊 Unarmed',
-   melee: '⚔️ Armed',
+   one_handed: '🗡️ One-Handed',
+   two_handed: '⚔️ Two-Handed',
 };
 
 // The discrete trigger menu (v1): fixed, legible steps beat free-text values —
@@ -71,31 +74,34 @@ export function buildCombatPlanPanel(character: CharacterDoc): PanelView {
          value: planLines(character, familyPlanOf(character, family)),
          inline: false,
       })))
-      .setFooter({ text: 'Styles are family-specific — fists and blades are different schools.' });
+      .setFooter({ text: 'Styles are family-specific — fists, sidearms and great weapons are different schools.' });
 
    const styleRows = PLAN_FAMILIES.map((family) => styleSelectRow(character, family));
 
-   const ruleButtons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-      ...PLAN_FAMILIES.flatMap((family) => {
-         const rules = familyPlanOf(character, family).rules;
-         return [
-            new ButtonBuilder()
-               .setCustomId(`combatplan:newrule:${family}`)
-               .setLabel(`Rule (${FAMILY_LABEL[family].split(' ')[1]})`)
-               .setEmoji('➕')
-               .setStyle(ButtonStyle.Secondary)
-               .setDisabled(rules.length >= MAX_PLAN_RULES),
-            new ButtonBuilder()
-               .setCustomId(`combatplan:clearrules:${family}`)
-               .setLabel(`Clear (${FAMILY_LABEL[family].split(' ')[1]})`)
-               .setEmoji('🧹')
-               .setStyle(ButtonStyle.Secondary)
-               .setDisabled(rules.length === 0),
-         ];
-      }),
+   // One row of add-rule buttons + one of clear buttons (a combined per-family
+   // pair would overflow Discord's 5 components per row at three families).
+   const addRuleRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      ...PLAN_FAMILIES.map((family) =>
+         new ButtonBuilder()
+            .setCustomId(`combatplan:newrule:${family}`)
+            .setLabel(`Rule (${FAMILY_LABEL[family].split(' ')[1]})`)
+            .setEmoji('➕')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(familyPlanOf(character, family).rules.length >= MAX_PLAN_RULES),
+      ),
+   );
+   const clearRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      ...PLAN_FAMILIES.map((family) =>
+         new ButtonBuilder()
+            .setCustomId(`combatplan:clearrules:${family}`)
+            .setLabel(`Clear (${FAMILY_LABEL[family].split(' ')[1]})`)
+            .setEmoji('🧹')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(familyPlanOf(character, family).rules.length === 0),
+      ),
    );
 
-   return { embeds: [embed], components: [...styleRows, ruleButtons] };
+   return { embeds: [embed], components: [...styleRows, addRuleRow, clearRow] };
 }
 
 /** Step 1 of the rule builder: pick the trigger. */

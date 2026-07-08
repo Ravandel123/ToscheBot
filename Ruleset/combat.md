@@ -44,25 +44,42 @@ not StrengthBonus). `attributeBonus(v) = floor(v/10)`.
 **Armour ✕ weapon type** ✅ direction — damage type (slash/pierce/impact) vs armour type
 (cloth/leather/mail/plate) has a **multiplier** (slash ≈ useless vs plate; impact/pierce better).
 
-**Fighting styles & the combat plan** ✅ v1 BUILT (D41, owner-designed) — styles are
-**family-specific** (unarmed ≠ melee ≠ ranged — muay thai doesn't help a swordsman; the
-family resolves from what's wielded). Catalog `game/combat/styles.ts`, 3 per family
-(🥊 Striker / 🤼 Grappler / 🧱 Stonewall unarmed; ⚔️ Onslaught / ⛓️ Binder / 🛡️ Warden armed;
-ranged = typed seam, no engine), each an optional mix of flat **modifiers**
-(attack/defence/damage — Striker +10/−10/+2) and **effects** (**hamper**: a connecting hit
-fouls the foe's next swing −15; **riposte**: a defence won by ≥2 SL counters for 1–3+StrB−Soak,
-≥1). A style is a switchable DECISION, not a skill — but it **draws on a node**
-(unarmed = its brawling branch; armed = a style branch under `melee`, summed with the weapon
-branch via `extraNodes`): the path feeds the style's attack AND defence (owner's rule — knowing
-your style well means striking *and* defending better in it) and fighting in it **trains that
-branch** (D40). No unlock gate — an untrained style rolls its untrained path. The **combat
-plan** (`/character combat` → `Character.combatPlan`) is the async agency layer: per-family
-default style + up to 3 conditional switch rules (own HP below X% · foe HP below X% · from
-round N), first match wins, re-evaluated each exchange (triggers are monotonic → no flapping),
-switches narrated. Supersedes the old **Stances** placeholder (the inert `stance` field is
-gone — "defensive stance" is now the Stonewall/Warden style). 🟡 all numbers.
+**Fighting styles & the combat plan** ✅ v1 BUILT (D41, owner-designed; grip-split D42) —
+styles are **family-specific**, and the armed family is the **weapon GRIP** (D42: unarmed ≠
+one-handed ≠ two-handed ≠ ranged — muay thai doesn't help a swordsman, and a sidearm ward is
+not a greatsword ward; the family resolves from what's wielded — fists ⇒ unarmed, a weapon ⇒
+its grip). Catalog `game/combat/styles.ts`, 3 per family — one aggressive, one control, one
+defensive: 🥊 Striker / 🤼 Grappler / 🧱 Stonewall (unarmed); 🗡️ Duelist / ⛓️ Binder / 🛡️ Warden
+(one-handed); ⚔️ Wrath / 🪝 Halfsword / 🏰 Iron Gate (two-handed); ranged = typed seam, no
+engine. Each is an optional mix of flat **modifiers** (attack/defence/damage — Striker
++10/−10/+2), a **tempo** (aggressive/neutral/defensive — how eagerly it presses a landed blow;
+see Momentum) and **effects** (**hamper**: a connecting hit fouls the foe's next swing −15;
+**riposte**: a defence won by ≥2 SL counters for 1–3+StrB−Soak, ≥1). A style is a switchable
+DECISION, not a skill — but it **draws on a node** (unarmed = its brawling branch; armed = a
+style branch **under its grip branch**, summed with the weapon branch via `extraNodes` — the
+shared grip+melee path dedups): the path feeds the style's attack AND defence (owner's rule —
+knowing your style well means striking *and* defending better in it) and fighting in it
+**trains that branch** (D40). No unlock gate — an untrained style rolls its untrained path.
+The **combat plan** (`/character combat` → `Character.combatPlan`) is the async agency layer:
+per-family default style + up to 3 conditional switch rules (own HP below X% · foe HP below
+X% · from round N), first match wins, re-evaluated each exchange (triggers are monotonic → no
+flapping), switches narrated. Supersedes the old **Stances** placeholder (the inert `stance`
+field is gone — "defensive stance" is now the Stonewall/Warden style). 🟡 all numbers.
 
-**Initiative** = `AgilityBonus + PerceptionBonus`.
+**Momentum** ✅ BUILT (D42, owner-requested) — initiative FLOWS instead of strictly
+alternating attacker↔defender. A landed blow gives the attacker a **chance to press on and
+swing again** (a follow-up); a miss — or a failed press — hands the initiative to the foe. The
+chance = `15 (base) + 12·netSL (how decisively the blow landed) + tempo (±15 by style) − 5·(prior
+follow-ups)`, clamped `[0, 95]` (never a certainty). The decisiveness term is deliberately the
+strong one: **even fighters trade mostly single blows** (net SL ~0–2, the chance dies fast),
+but a badly **outclassed foe gets cut down in a long flurry** — sometimes ten-plus swings —
+because a lopsided net SL keeps the chance high faster than the decay erodes it. A follow-up
+also carries a small overextension attack penalty (−3/press). *(Once active defence — dodge/
+parry/block — lands, some of those pressed swings will be turned aside, shortening the longest
+flurries naturally.)* 🟡 all numbers.
+
+**Initiative** = `AgilityBonus + PerceptionBonus` (decides only the FIRST attacker; momentum
+carries it from there).
 
 **Resolution mode** ✅ direction R24 — **v1 = auto-resolve**: set your standing orders ahead of
 time, one button, the engine rolls every round and narrates with a delay (no per-round input).
@@ -299,9 +316,20 @@ arsenal.
 
 ### Combat styles & counter-play ✅ v1 BUILT (D41) / counter-play deferred *(owner-requested)*
 The owner wants styles that *interact*, not just flat buffs. **The v1 style system is live** —
-see the Reference block above for the full built shape (family-specific catalogs, node-backed
-proficiency, modifiers + effects, the combat plan with conditional switches). Design notes that
-still matter:
+see the Reference block above for the full built shape (grip-based family catalogs, node-backed
+proficiency, modifiers + effects + tempo, the combat plan with conditional switches, and
+momentum-driven turn order). Design notes that still matter:
+- **Armed styles split by grip (D42).** The owner's call that one-handed and two-handed fighting
+  are different schools: the armed family is the weapon's grip, so a 🗡️ Duelist / ⛓️ Binder /
+  🛡️ Warden (sidearm) set sits beside a ⚔️ Wrath / 🪝 Halfsword / 🏰 Iron Gate (great-weapon) set,
+  each drawing on a style branch **under its grip branch** in the tree (zero migration, D34).
+  Future grips (dual-wield, sword-and-board) join the same way — a family + three styles.
+- **Momentum makes a mismatch *feel* like one (D42).** The owner's realism ask — a fight isn't
+  strict you-hit-then-I-hit; sometimes a fighter strings blows together. Built as a per-blow
+  follow-up chance driven mostly by how decisively the blow landed (net SL) and the style's
+  tempo (see Reference → Momentum): even fights stay to short trades, a badly outclassed foe can
+  be cut down in a long press. Deferred active defence (dodge/parry/block) will later turn some
+  pressed swings aside, so the longest flurries self-shorten once it lands.
 - **A style shapes the fight, with trade-offs.** Built as the modifiers/effects mix: Striker
   trades guard for pressure, Grappler trades raw output for control (hamper), Stonewall/Warden
   trade offence for defence + the riposte. The owner's further levers (speed/initiative, Fatigue
@@ -437,8 +465,11 @@ model*, as D25/D34 did for attributes/skills). Three pieces:
 - **`game/combat/duel.ts`** — the pure resolver. Each exchange is an **opposed d100** (both roll
   their own `checks.ts` test; the higher Success Level connects, skill-tiebreak else defender);
   damage = `weapon + net SL + StrengthBonus − Soak`, floored to the **≥1 connecting-hit** rule;
-  auto-resolved in one alternating-exchange pass (the sparring narration shape on real math).
-  Fields for the deferred layers (`damageType`, `stance`) are carried but **inert**, and
+  auto-resolved in one pass whose turn order is **momentum-driven** (D42, `followUpChance`): a
+  landed blow may keep the initiative and press again, a miss passes it — the sparring narration
+  shape on real math, no longer strict alternation. Styles + the combat plan are LIVE (D41):
+  each exchange re-evaluates both plans and applies the active style's targets/modifiers/effects
+  (hamper, riposte). Fields for the deferred layers (`damageType`) are carried but **inert**, and
   `computeDamage` has commented insertion points for the armour✕type multiplier and the
   crit/hit-location step — so each layer is a fill-in, not a reshape (owner: "start WITHOUT
   styles/named-moves/location-crits, but take them into account").
