@@ -1,964 +1,405 @@
 # CLAUDE.md — ToscheBot
 
-This file is the single source of truth for the project. It is written for both humans
-and AI assistants continuing this work in a fresh session. **Keep it updated**: whenever
-a design decision is made, a phase is completed, or a convention changes, record it here.
+Handoff doc for humans and AI assistants continuing this work in a fresh session.
+**Keep it updated but keep it SLIM**: when a decision lands, add a 1–3-line row to the
+decision-log index below; put the game-design detail + why in the matching `Ruleset/` topic
+file, and infra/architecture rationale in `DECISIONS.md` (which also archives the full
+pre-2026-07-10 texts of D1–D42). The build queue lives in **`PLAN.md`**; the 2026-07-06
+code audit in **`AUDIT.md`**.
 
 ## What this project is
 
-A Discord bot named **Tosche**, roleplaying the character **Tosch** (a general) from the
-webcomic *Beyond the Western Deep* (BtWD) by Alex Kain & Rachel Bennett. The bot serves
-exactly **one private guild** (the owner's server with friends, called "Deltrada").
-Multi-guild support is explicitly a non-goal — this assumption may simplify code anywhere.
+A Discord bot named **Tosche**, roleplaying **Tosch** (a general) from the webcomic *Beyond
+the Western Deep* (BtWD). It serves exactly **one private guild** (the owner's server,
+"Deltrada") — multi-guild support is a non-goal and this assumption may simplify code anywhere.
 
-The bot has three faces:
+Three faces:
 
-1. **Fun / utility / troll commands** — random flavored responses, generators, converters,
-   chance rolls, etc. (the bulk of the old bot).
-2. **Admin commands** — server management, usable only by the owner.
-3. **The server RPG** — the Discord server itself is a persistent RPG game run by the bot.
-   Members are players with profiles (resources, attributes, skills, currencies) stored in
-   MongoDB. Includes interactive activities: turn-based combat, fishing, economy, etc.
-   Styled after the BtWD universe.
+1. **Fun / utility / troll commands** — random flavored responses, generators, converters.
+2. **Admin commands** — owner-only server management.
+3. **The server RPG** — the server itself is a persistent RPG run by the bot: players have
+   characters (resources, attributes, skills, currencies) in MongoDB, with interactive
+   activities (combat, travel, professions…), styled after the BtWD universe.
 
-Planned future module (design for it, don't build yet): a **separate pen-and-paper style
-RPG campaign** run by the bot — *not* tied to the server RPG or its characters. It will be
-its own domain module with its own data models.
+Planned future module (design for it, don't build yet): a separate pen-and-paper style RP
+campaign — its own `rp/` domain module and models, unrelated to the server RPG (D9).
 
-> **`Ruleset/`** (repo root) is the **single source of truth for the server-RPG** — both the
-> design (what the rule should be, and why) and the implementation (what's actually built).
-> One file per topic (`character.md`, `skills.md`, `combat.md`, `world-travel.md`,
-> `items-equipment.md`, `economy.md`, `flavor-progression.md`, `factions.md`, `conversations.md`,
-> `professions.md`, `npcs.md`, `images.md`), each opening with a raw **Reference** (decided data/math) section,
-> then a **Ruleset** section (the design + why), an **Implementation** section, and **Open
-> questions**. **Read the relevant topic file before touching anything RPG-mechanical**; keep it
-> in sync with the code in the same change whenever the RPG model changes. `RPG_SYSTEM.md` and
-> the `RPG/` design workspace (its `CLAUDE.md`, `Ruleset.md`, `Propositions.md`, `Examples.md`)
-> predated `Ruleset/`, were fully folded into it, and have been **deleted** (2026-07-05) — if you
-> ever see a decision-log entry below citing a path under `RPG/`, treat it as historical and look
-> in `Ruleset/` instead.
+> **`Ruleset/`** (repo root) is the **single source of truth for the server-RPG** — design AND
+> implementation status. One file per topic (`character`, `skills`, `combat`, `world-travel`,
+> `items-equipment`, `economy`, `flavor-progression`, `factions`, `conversations`,
+> `professions`, `npcs`, `images`), each shaped **Reference → Ruleset → Implementation → Open
+> questions**. **Read the relevant topic file before touching anything RPG-mechanical**, and
+> keep it in sync with the code in the same change. (The older `RPG_SYSTEM.md` / `RPG/` were
+> folded in and deleted — old paths citing them are historical.)
 
 ## Working agreement with the owner (Ravandel)
 
 - The owner communicates in **Polish**; reply in Polish. All code, comments, docs, and
   bot-facing text are in **English**.
-- The owner explicitly wants better ideas proposed instead of having their initial
-  concepts followed blindly. Push back with rationale when a design is weak — and
-  **always pair the pushback with a concrete alternative** ("this is weak because X;
-  here's how I'd do it instead: Y"), not just an objection. A plain "yes, doing it" is
-  only the right answer when the idea genuinely is the best option.
-- **Whenever we add or change anything, weigh its BALANCE before and while building it**
-  (not only its correctness): how it interacts with existing systems, whether it can be
-  degenerate/exploited, whether the numbers feel right at the extremes as well as the
-  average. When balance isn't obvious from reasoning alone, **verify it empirically the way
-  we did for combat momentum (D42)** — write a throwaway simulation over representative
-  scenarios (e.g. evenly-matched vs a big skill gap), read the resulting distribution, tune
-  the constants against it, and report the numbers — before calling it done. Tuning values
-  stay 🟡 until the owner signs off (see `Ruleset/`).
-- The `OldBot/` folder is reference-only legacy code (see "OldBot reference" below).
-  Never import from it; port ideas, not code.
+- Push back on weak designs — **always paired with a concrete alternative**, not just an
+  objection. A plain "yes" is right only when the idea genuinely is the best option.
+- **Weigh BALANCE before and while building** (interactions, exploits, extremes — not just
+  correctness). When balance isn't obvious, **verify empirically** (D42 pattern): throwaway
+  simulation over representative scenarios, read the distribution, tune, report the numbers.
+  Tuning values stay 🟡 until the owner signs off.
+- `OldBot/` is reference-only legacy code. Never import from it; port ideas, not code.
 
 ## Tech stack & toolchain
 
-- **TypeScript 6** (strict), Node >= 22.14, **discord.js v14**, **mongoose 9** (MongoDB
-  Atlas **free tier M0** — 512 MB storage, limited connections; keep documents lean and
-  prefer bulk operations), **node-cron 4**, **ESLint 10** (flat config, type-checked
-  rules via typescript-eslint, plus `@stylistic` for formatting and
-  `eslint-plugin-perfectionist` for import-group order).
-- **No dotenv**: `config.ts` loads `.env` with Node's native `process.loadEnvFile()`
-  (wrapped in try/catch — on the VPS, vars may come from the service environment) and
-  fails fast on any missing variable. No `uuid` either — use `crypto.randomUUID()`.
-- **Module system: ESM.** `package.json` has `"type": "module"`; `tsconfig.json` must use
-  `"module": "NodeNext"` + `"moduleResolution": "NodeNext"`. Consequence: relative imports
-  in source must use the `.js` extension (`import { config } from './config.js'`).
-  Never use `module.exports` / `require` in `src/`.
-- Runner: **tsx** in both dev (`tsx watch`) and production (D11). Do not use ts-node /
-  ts-node-dev (poor ESM support). tsx is a regular `dependency`, not a devDependency.
-- Hosting: **Sparkedhost** (managed Node bot hosting). The panel's startup-command
-  template is fixed (`git pull` → `npm install --production` → `node /home/container/bot.js`)
-  unless you file a support ticket — support confirmed tsx-style TS runners are allowed,
-  but changing the template is friction worth avoiding. **`bot.js`** (repo root) is a
-  hand-written shim — not compiled output — that makes that fixed `node bot.js` invocation
-  run the real TS entry point with zero ticket and zero `dist/` (see D29). Host Node
-  version: **26** (panel dropdown, self-service, no ticket); `engines.node` still floors at
-  `>=22.14.0`, the actual minimum the code needs. One always-on process; the single-process
-  assumption is load-bearing: in-memory locks and queues are valid because nothing else
-  touches the DB.
-- **Deploy gate**: production runs TS directly, so nothing type-checks at startup. Before
-  every upload run `npm run build` + `npm run lint` locally; **CI (GitHub Actions,
-  `.github/workflows/ci.yml`) also enforces build + lint + test on every push**
-  (2026-07-07, AUDIT §2.9). Never commit `dist/` to git.
-- Code style: **3-space indentation** (existing convention), semicolons, single quotes.
-  See "Code style & naming conventions" below for naming, import order, and file layout.
+- **TypeScript 6** (strict), Node ≥ 22.14 (host runs 26), **discord.js v14**, **mongoose 9**
+  (MongoDB Atlas **free tier M0**: 512 MB, few connections — lean docs, bulk ops), **node-cron 4**,
+  **ESLint 10** (flat, type-checked + `@stylistic` + perfectionist import groups), **Vitest**.
+- **No dotenv**: `config.ts` uses `process.loadEnvFile()` (try/catch — VPS may inject env) and
+  fails fast on missing vars. `ENV_FILE` picks an alternative env file (`.env.production`,
+  `.env.test`). No `uuid` — use `crypto.randomUUID()`.
+- **ESM**: `"type": "module"` + NodeNext ⇒ relative imports **must** use the `.js` extension.
+  Never `require`/`module.exports` in `src/`.
+- **tsx runs TS directly in dev AND production** (D11); no build step, never commit `dist/`.
+  Hosting (Sparkedhost) has a fixed `node bot.js` startup command — **`bot.js`** is a
+  hand-written shim that installs tsx via its own `register()` export and imports
+  `src/index.ts` (D29; raw `node:module` `register('tsx/esm')` throws — verified).
+- **One always-on process** — load-bearing: in-memory locks/queues/cooldowns are valid only
+  because nothing else touches the DB (see AUDIT §2.4 before ever running dev against prod).
+- **Deploy gate**: run `npm run build` + `npm run lint` locally before upload; CI
+  (`.github/workflows/ci.yml`) enforces build + lint + test on every push.
 
-### Code style & naming conventions
+### Code style & naming
 
-Formalizes what the codebase already does consistently — don't introduce new patterns,
-match these. **Most of this section is machine-enforced by `eslint.config.mjs`**
-(2026-07-06): indentation/quotes/semicolons/trailing commas (`@stylistic`), the class
-member order (`member-ordering`), the import group order (`perfectionist/sort-imports` —
-groups only; order within a group is the author's), `import type` (`consistent-type-imports`,
-inline fix style), guard-clause braces (`curly: multi, consistent` — braces only around
-multi-statement bodies, consistent across an if/else chain) and `no-else-return`. Also on:
+Machine-enforced by `eslint.config.mjs` — match the codebase, don't introduce new patterns:
+3-space indent, semicolons, single quotes, member ordering, import groups (node: → packages →
+relative with `.js`), inline `import type`, guard-clause `curly: multi`, `no-else-return`,
 `no-console` outside `src/scripts/` + `lib/log.ts`, `switch-exhaustiveness-check`,
-`prefer-nullish-coalescing` (strings exempt — `|| fallback` on possibly-empty strings is a
-deliberate pattern here) and `no-deprecated` (which caught the discord.js modal-builder
-rework — modals now use `addLabelComponents` + `LabelBuilder`, not action rows). When a
-convention changes, change the rule and this section together.
+`prefer-nullish-coalescing` (possibly-empty strings may use `||`), `no-deprecated`
+(discord.js modals = `addLabelComponents` + `LabelBuilder`, not action rows).
 
-- **Naming**: `PascalCase` for types/interfaces/classes, `camelCase` for functions/
-  variables/files, `SCREAMING_SNAKE_CASE` for module-level constants (especially catalog/
-  tunable values: `RESOURCES`, `MAX_CHARACTERS_PER_ACCOUNT`, `AP_REGEN_PER_HOUR`).
-  Boolean-returning functions are prefixed `is`/`can`/`has` (`canEdit`, `isIdentityComplete`).
-  A file's default export name matches its filename (`rate.ts` → command `rate`,
-  `characterService.ts` → `characterService`).
-- **`interface` vs `type`**: `interface` for object/entity shapes (things with fields,
-  possibly methods — `CharacterDoc`, `AiService`); `type` for unions, mapped/derived types,
-  and generic aliases (`Partial<Record<...>>`, `Pick<...>`).
-- **Imports**, in order, one blank-line-free block: Node builtins (`node:crypto`) → third-
-  party packages (`discord.js`, `mongoose`) → local modules (relative, **always with the
-  `.js` extension** — D-required by NodeNext). Use `import type` (or an inline `type`
-  in a named import) for type-only imports.
-- **Class member order** (classes are for genuinely stateful singletons only — see below):
-  public `readonly` fields → other private fields → constructor → public methods → private
-  methods last. `client.ts` and `core/locks.ts` are the reference examples.
-- **Prefer plain object literals over classes** for stateless modules — DB services
-  (`export const characterService = { ... }`), the AI service, etc. Reserve `class` for
-  things that actually hold runtime state across calls (`ToscheClient`, `CharacterLockManager`,
-  `CooldownManager`).
-- **Guard clauses**: early-return with a braceless single-line `if` (`if (!ok) return;`),
-  one per validation step, no `else` after a `return`. Reserve `{ }` blocks for bodies with
-  more than one statement.
-- **Doc comments**: a `/**...*/` above an exported function/method only when its behavior
-  or *why* isn't obvious from its name and signature (same bar as inline comments per
-  "Doing tasks" — non-obvious constraints, heuristics, invariants). Don't add one to every
-  export by default.
+- **Naming**: `PascalCase` types/classes, `camelCase` functions/variables/files,
+  `SCREAMING_SNAKE_CASE` module-level catalogs/tunables. Boolean fns prefixed `is`/`can`/`has`.
+  A file's default export name matches its filename.
+- **`interface`** for object/entity shapes; **`type`** for unions/mapped/derived.
+- **Plain object literals over classes** for stateless modules (services, AI); `class` only
+  for real runtime state (`ToscheClient`, `CharacterLockManager`, `CooldownManager`).
+- **Guard clauses**: braceless single-line early returns, no `else` after `return`.
+- **Doc/inline comments** only for non-obvious constraints/heuristics/invariants.
+- When a convention changes, change the ESLint rule and this section together.
 
 ### Environment variables (`.env`, never committed)
 
 | Variable | Purpose |
 |---|---|
 | `BOT_TOKEN` | Discord bot token |
-| `CLIENT_ID` | Application id (slash command registration) |
+| `CLIENT_ID` | Application id (slash registration) |
 | `GUILD_ID` | The single guild id |
-| `OWNER_ID` | Owner's Discord user id (gates `ownerOnly` commands) |
+| `OWNER_ID` | Owner's Discord user id (`ownerOnly` gate) |
 | `MONGODB_URI` | Atlas connection string |
-| `OPENAI_API_KEY` | **Optional** — enables the AI persona; absent → AI disabled, bot still runs |
-| `OPENAI_MODEL` | Optional — overrides the default model (`gpt-5-nano`) |
+| `OPENAI_API_KEY` | Optional — AI persona; absent ⇒ AI disabled, bot still runs |
+| `OPENAI_MODEL` | Optional — overrides default model (`gpt-5-nano`) |
 
 ### npm scripts
 
-- `dev` — `tsx watch src/index.ts`
-- `build` — `tsc --noEmit` (type-check gate only; production runs TS via tsx, so no
-  emit is needed — D11)
-- `start` — `tsx src/index.ts` (what Sparkedhost runs)
-- `lint` — `eslint .`
-- `test` — `vitest run` (`test:watch` for watch mode)
-- `deploy` — `tsx src/scripts/deploy-commands.ts` (registers slash commands,
-  **guild-scoped only** — instant propagation, no global commands ever). Rerun after
-  adding/changing any slash command's definition.
-- `clear-commands` — `tsx src/scripts/clear-commands.ts` (wipes the guild slash commands of
-  whichever application the active env resolves to — used to clean the local test bot's
-  (Tyril's) registrations off the shared guild after a testing session).
-- `seed` — `tsx src/scripts/seed-characters.ts` (rebuilds the alpha roster —
-  accounts + approved active characters — after a DB wipe, from the owner-edited
-  `src/scripts/seed-data.ts`; idempotent, replays creation through the normal
-  services — D38). Connects to whatever `MONGODB_URI` resolves to (default `.env`,
-  or `ENV_FILE=.env.production` for the live DB), so it prints the target database
-  name and **requires it confirmed before connecting**: typed back in an
-  interactive terminal, or via `SEED_CONFIRM_DB=<name>` when run non-interactively
-  (scripts, CI, an agent) — there is no way to proceed blindly against the wrong DB.
-  (The confirmation guard itself lives in `src/scripts/confirmDb.ts`, shared with `restore`.)
-- `restore` — `tsx src/scripts/restore-backup.ts <file>` (disaster recovery — AUDIT §2.3:
-  restores a `db-backup`/`h!backup` dump from `#espionage` by wiping every collection and
-  re-inserting the snapshot; collections not in the dump are dropped. Same typed DB-name
-  confirmation as the seed, with its own `RESTORE_CONFIRM_DB=<name>` for non-interactive
-  runs. Dumps are relaxed EJSON since 2026-07-07 (dates survive the file losslessly);
-  older plain-JSON dumps still restore — their ISO date strings are revived by shape.)
+- `dev` (tsx watch) · `start` (tsx — what the host runs) · `build` (`tsc --noEmit`, gate only)
+  · `lint` · `test` (vitest; `test:watch`).
+- `deploy` — **guild-scoped** slash registration (never global). Rerun after ANY slash
+  definition change.
+- `clear-commands` — wipes the guild slash registrations of whatever app the active env
+  resolves to (cleans the local test bot off the shared guild).
+- `seed` — rebuilds the alpha roster from owner-edited `src/scripts/seed-data.ts` by replaying
+  **wizard inputs** through the real services (D38); idempotent. Requires a **typed DB-name
+  confirmation** (interactive, or `SEED_CONFIRM_DB=<name>`); guard in `scripts/confirmDb.ts`.
+- `restore` — disaster recovery from a `db-backup`/`h!backup` dump: wipes and re-inserts the
+  snapshot (collections absent from the dump are dropped). Same confirmation
+  (`RESTORE_CONFIRM_DB`). Dumps are relaxed EJSON; legacy plain-JSON dumps revived by shape.
 
-## Decision log
+## Decision log (index)
 
-| # | Decision | Rationale |
-|---|---|---|
-| D1 | Slash commands are used **only for the server RPG** (profiles, combat, activities). | Discoverable UI, autocomplete, buttons/modals fit game flows; the 100-command limit is irrelevant for a scoped game surface. |
-| D2 | All other commands are **text commands with the single prefix `h!`** (fun, utility, admin). | Prefix commands have no registration limits and take freeform args — right for a growing pile of troll commands. |
-| D3 | **No separate admin prefix or AdminCommand class.** Admin commands are normal prefix commands carrying `ownerOnly: true`. The old `m!` prefix is retired. | Permission is a property of a command, not a taxonomy. One parser, no name-collision rules, trivial to add `requiredPermissions` later. |
-| D4 | **Composition over inheritance** for commands: plain typed objects implementing an interface, loaded from files. The empty `Command`/`SlashCommand`/`PrefixCommand` class hierarchy is deleted. | Class hierarchies added nothing; options like `ownerOnly`, `cooldown`, `category` cover all variation. |
-| D5 | Concurrency: **per-character async locks + per-character deferred-operation queues** (see "Concurrency model"). Chosen over a single global action queue. | A global queue serializes the whole server behind one slow fight. Per-character locks confine blocking to participants. |
-| D6 | DB writes prefer **atomic clamped deltas** (`$inc` via aggregation-pipeline update with min/max clamping) over read-modify-write. | Removes most conflicts outright; cron regen and combat results compose instead of overwriting each other. |
-| D7 | Cron jobs must be **idempotent and bulk-first**: one `updateMany` for unlocked characters, per-character deferred ops for locked ones. | Free-tier friendly (few round trips), safe on restart/replay. |
-| D8 | AI persona (OpenAI, Tosch-styled replies) behind an `ai/` seam (interface), optional via `OPENAI_API_KEY`. **Done (Phase 5).** | Core bot and game first; keep the bot runnable with AI absent. |
-| D9 | Future pen-and-paper RPG is a **separate domain module** (`rp/`), own models, not sharing server-RPG profiles. No dedicated prefix reserved; it will likely use a `/rp` slash group or session channels. | Owner confirmed it's unrelated to the server game. |
-| D10 | **Static game content lives in code** as typed data modules (fish, items, word lists...); the DB stores only **instances/state** referencing content by a **stable string id** (see "Content vs state"). | Content is owner-authored and ships with deploys; code gives type-checked ids, git history, and zero free-tier storage/round-trip cost. |
-| D11 | **Production runs TypeScript directly via tsx** (`npm run start`); no build step on the host, no `dist/` in git. Type checking (`npm run build`) and lint are a local pre-deploy gate. | Sparkedhost has no build pipeline (host staff confirmed TS runners are fine); dev/prod use the identical runner, eliminating stale-build bugs. Compiling to `dist/` remains available if hosting ever changes. |
-| D12 | **Account ↔ Character split** (built in 6A): `Account` = one Discord user (settings, owns characters, `activeCharacterId`); `Character` = the game entity (identity, resources, action points, location, stats), player-owned or **NPC** (`ownerId: null`). **Currencies and Smackdown ELO live per character**, not per account. | A user controls one character at a time and can switch; NPCs are characters with no owner. Replaced the old single `Profile` (keyed by user id) with `Character` (uuid-keyed) + a thin `Account`. |
-| D13 | **Characters have an approval lifecycle**: `draft → pending → approved/rejected`. An unapproved character exists (the account is real) but **cannot take character-actions** (serious combat, travel...). Approval requests go to an **owner-only thematic channel** (`settings.channels.imperialDecrees`), not DMs. | Stops low-effort names ("abc"); the owner vets that each character is a real, fitting persona before it can act/appear on ladders. |
-| D14 | **`attributes` and `skills` are placeholders pending a dedicated RPG-system design.** Do NOT build stat/combat *mechanics* (max-HP-from-attributes recompute, damage formulas, progression) until the ruleset is designed with the owner. The Account/Character *structure* is fine to build; the *numbers/rules* are not. **Narrowed by D25/D26 (owner, 2026-07-03):** the attribute set, racial bases, the creation point-buy and the d100 check engine are now real; combat math, derived maxes, skill growth and balance numbers still wait for `Ruleset/`'s open questions. | Owner's explicit call (2026-06-15): "we can't program the system before the RPG system is ready." Structure ≠ mechanics. |
-| D15 | **Action Points: no cap.** They accumulate indefinitely via an hourly `$inc` (a week away → a week's worth to spend in a day; no forced daily login — this is for fun). Serious actions (later) cost AP via a single atomic `spendActionPoints` (clamp `>= 0`). | Owner prefers no cap for now; revisit only if hoarding becomes a balance problem (cap is then a one-line clamp in the regen pipeline). |
-| D16 | **Smackdown has two tiers.** `/smackdown sparring` = the existing for-fun brawl: **no approval, any active character, pure-random**. It keeps Elo *for now* but Elo will be **removed from sparring later**. A future serious fight (`/smackdown duel`) requires an **approved** character, uses HP/attributes, and **costs AP**. **Built + narrowed by D35 (owner, 2026-07-06):** duel now exists (approved, real persisted HP, opposed-d100/Soak) but **costs NO AP** and has no other penalty — the owner's explicit brief was a knockout with no AP loss, so the "costs AP" clause here is dropped. | Players enjoy the silly sparring; keep it. Real stakes belong to the approval-gated, RPG-driven fight. |
-| D17 | **Long, interactive, multi-step activities are durable** (turn-based duel, multi-room exploration…). An `ActivitySession` doc (Mongo) holds the per-step `state` AND is the cross-restart "this character is busy" lock; components are **stateless** (keyed by `sessionId`); each step is an **optimistic, step-guarded** atomic update (`{_id, step:N} → $inc step`), making it idempotent against double-clicks and crash-replay; idle sessions are reaped by a **TTL index** on `expiresAt`. **AP policy (default, tunable):** charged at start; clean cancel refunds; **timeout/abandon forfeits** (so a TTL delete needs no side effect). Short, auto-resolved actions stay atomic-commit (D5 rule 1 unchanged for them). | A restart/crash/abandon mid-activity must not corrupt state or strand a player. Persisting **per step** (not just at the end) makes activities resumable + crash-safe, reusing the stateless-component + DB-state pattern already proven by the character panel / comic browser. Seam built (`game/activity/`, `models/activitySession.ts`, `activitySessionService.ts`); first consumer is the serious duel / 6C travel. |
-| D18 | **Locks are keyed per character** (`CharacterLockManager`), not per Discord user, and deferred queues **drain before the lock is released**. | Characters are what the writes target (resources/AP/ELO), and NPCs (`ownerId: null`, 6C) have no user id to lock. "One user, one live activity" is already enforced by the active-character switch guard. Draining before release means a deferred op can never interleave with the next holder's critical section — the invariant Phase 7 activities can rely on. |
-| D19 | **One currency (`deltradaCoins`) until the economy layer exists.** The lore's regional per-race currencies (amber drops, pearl flakes, obsidian chips…) are reserved for the exchange/trade system designed in `Ruleset/economy.md` (its P17) and get appended to the catalog when that ships. | Six parallel wallets with no economy were pure bookkeeping. The D10 asymmetry decides the direction: appending a currency later is one catalog line; removing one after players hold balances is a migration. |
-| D20 | **Character creation is a step-driven wizard over the draft doc.** Steps live in a typed catalog (`game/character/creationSteps.ts`: id, kind `modal\|select`, `required`, `isComplete`/`summary`); the panel renders FROM it (checklist + step picker + Continue + Submit gate) and `canSubmit` = all required steps complete. **No stored cursor**: the draft `Character` doc IS the wizard state; progress is derived from filled fields. | Interruptible + resumable-across-restarts falls out of the existing stateless-panel pattern with nothing to desync; adding a creation step (origin, starting kit, Phase 7 attribute allocation…) = one catalog entry + one renderer case, not a new flow. Editable-until-approved was already `canEdit` (D13). |
-| D21 | **The world is a data-driven location graph with a travel-encounter seam.** `locations.ts` edges are **undirected and test-validated** (a dangling/one-way edge fails `npm test`); `/travel` is the first `canCharacterAct` + `spendActionPoints` consumer (cost placeholder 0 — D14). Each move may roll an encounter from `game/data/encounters.ts`: kind `flavor` (instant line, move completes) or `activity` (the move is **interrupted** by a durable ActivitySession; arrival only on success — forced-back/timeout leaves the character at the origin). | Travel that is "a button that renames a string" is not worth building (backlog note); the encounter seam is where locations become gameplay. Deferring arrival makes an obstacle *mean something* without any stat mechanics. |
-| D22 | **Durable activities dispatch through a handler registry.** `ActivitySession.type → ActivityHandler { render(session), onAction(…) }` (`commands/components/_activities/registry.ts`, fail-fast on duplicates); the generic `activity` component namespace routes `activity:<action>:<sessionId>` — the router checks session liveness (incl. lazy expiry) and that the clicker **owns** a participant character; handlers own the step logic. **Busy = has an active session**: the switch guard treats it like a lock (cross-restart), and a gated command run while busy **re-enters** (re-renders the current step) instead of erroring. Reference consumer: `obstacle` (pure-random placeholder à la sparring, D16). | D17 built the durability layer but nothing consumed it; the registry + router make "add an interactive activity" = one handler file + one registry line, with double-click idempotency, crash recovery (terminal outcome derived from state + a finalize re-entry) and restart-surviving buttons solved once, here. |
-| D23 | **Regen splits on busyness: vitals pause, AP always accrues.** Resources carry `regenWhileBusy` (health/stamina: `false`); the hourly job writes three bulk-first groups — free characters (full tick), session-busy (AP-only tick; paused vitals are **skipped, not deferred**), in-memory-locked (deferred single tick that decides full-vs-busy when it lands). The lock-free AP `$inc` on busy characters is safe because AP is only ever written via atomic deltas. | You don't heal mid-climb (and pausing regen keeps future in-activity damage meaningful), but AP is "time owned" (D15) and must not punish being mid-adventure. Skipping (not deferring) vitals keeps TTL-reaped sessions side-effect-free (D17). |
-| D24 | **Gameplay is ephemeral; noteworthy outcomes go to the public chronicle.** Activity steps and travel replies are ephemeral (only the actor sees their journey); results worth an audience (arrivals, cleared/failed obstacles, future duels) are posted as short in-character lines to `settings.channels.chronicle` via `game/chronicle.ts` — fire-and-forget, never failing the action, never pinging. | Keeps game channels unspammed while giving the server a shared "what's happening in the game" feed (the owner's requested server log); ephemeral play still survives restarts because components re-resolve all state from the DB, never from the message. |
-| D25 | **Eight attributes with hardcoded racial bases + a creation point-buy.** The catalog is the owner's set (locks `Ruleset/character.md`'s attribute table, minus Luck): `strength, constitution, agility, dexterity, charisma, willpower, perception, intelligence`. Racial base = `ATTRIBUTE_BASE` (25) shifted by the race's **net-zero ±5 modifiers** (`races.ts`, from `Ruleset/character.md`'s race table, with Toughness→Constitution, Fellowship→Charisma). A **required wizard step** distributes **50 points, max +20 on one attribute** (`game/character/attributes.ts` owns the pure math). Stored `attributes` = base + allocation; the allocation is kept as its own field so a mid-wizard race switch **rebases** instead of corrupting the spend (`setRace` recomputes atomically in-pipeline). | Owner's explicit call (2026-07-03), superseding the point-buy half of D14; aligns the bot with the `Ruleset/` design instead of waiting for it. Values are 🟡 balance placeholders — tuning is a catalog edit, and the pre-launch DB makes a clean cut free. |
-| D26 | **Travel encounters are multi-approach challenges resolved by d100 roll-under checks.** `game/checks.ts` is the core test engine (the R1 shape from `Ruleset/combat.md`: target %, roll ≤ target, Success Levels, difficulty modifier, per-race **affinity multipliers** — a lutren swims at ×1.5; the skill term is a 🟡 flat bonus until the skill-tree model's tree math fully lands). An `activity` encounter carries **options**: each a check with `success`/`failure` outcomes (`proceed` = arrive, `turn-back` = stay, `retry` = setback toward `maxSetbacks`) or a check-free choice; outcomes may add **deed traits** (`game/data/traits.ts` — the `Ruleset/flavor-progression.md` direction: ignore a drowning stranger → `cowardice`). The generic **`challenge`** handler replaced the single-button `obstacle`; per-option targets are computed at session start and stored in state, so the stateless panel shows honest % odds on every repaint. | The owner wants WHFRP-style choices — several solutions per obstacle, pick the one your build is good at — which is exactly `Ruleset/world-travel.md`'s multi-approach model, designed once, here. Adding an encounter = one catalog entry (test-validated), zero new handlers. |
-| D27 | **Account-level settings live on `Account`; `/profile` is the account surface, `/character view` is the character sheet.** `Account.settings`: `activeGame` (opt-out from future random/ambient game events; default **true**) and `dmNotifications` (already consumed by the approval-verdict DM). `/profile` shows an ephemeral panel with toggle buttons (`profile` component namespace, rendered from a `SETTING_META` map — adding a setting = model field + one map entry); the old `/profile` character embed moved to **`/character view [user]`** and now shows attributes + earned traits. | The account is the *player*, the character is the *piece* — settings must survive switches/rerolls (D12 finally has user-level state). The placeholder flags were chosen to have real consumers (ambient-events backlog; the DM flow) instead of dead toggles. |
-| D28 | **Inventory & equipment prototype (WHFRP-flavored).** Items are a **discriminated-union catalog** (`game/data/items.ts`): kinds `weapon/shield/armor/consumable/material/clutter` (adding a kind = one union member + one `ITEM_KINDS` meta entry — the panel renders categories FROM the meta), WHFRP-style **weapon properties** (piercing, entangling…), reach, materials, and a per-INSTANCE **craftsmanship quality** ladder (poor→masterwork; 🟡 scales durability/value only — quality×damage interplay waits for Phase 7). The DB stores only **instances** (`Character.inventory[]`: 8-char `instanceId` riding in customIds, `itemId`, `quality`, `quantity` on stackable kinds, `durability`) and an **`equipment` slot→instanceId map** over the slot catalog (`equipmentSlots.ts` — **adding a slot = one catalog entry, no migration**; the schema field is a plain object). Equipped gear applies `attributeModifiers` (plate −10 AGI) → **effective attributes** consumed by challenge-check targets and `/character view`; `attributeRequirements` gate equipping and are checked against **base** attributes (donning order must never matter); **two-handed weapons occupy both hands** (equip vacates the off hand; the off hand refuses while one is wielded). **Every mutation runs under the character lock with a fresh re-read** (equip/use/drop from a second panel degrades to a typed "no longer in your pack" note — never a double-spend), is **refused while busy** (in-memory lock or active session: gear is frozen mid-adventure so stored challenge targets stay honest — D26), and every write is additionally filter-guarded server-side. `/inventory` = stateless ephemeral panel (hub → category list with sort + pages → item card; browse state `kind.sort.page` rides in customIds); **`/item grant` (ownerOnly) is the prototype's only loot source**. Encumbrance 🟡: `INVENTORY_STACK_LIMIT` 50 entries (bounds the embedded array on M0) + carry capacity = strength in kg, enforced on acquisition. | The owner wants gear closer to WHFRP than D&D: weight, penalties, requirements and properties make equipment a real *choice*, and armor penalties give D25 attributes + D26 checks an immediate consumer instead of waiting for combat. Per-instance quality = loot variety at zero catalog cost. Embedded instances (not a separate items collection) keep every panel action one doc read and every mutation one atomic single-doc write under the existing per-character lock. |
-| D29 | **Production launches through a `bot.js` shim at the repo root, not a changed startup command.** Sparkedhost's startup-command template is fixed to (effectively) `node bot.js` unless a support ticket changes it. `bot.js` is hand-written, not compiled: it calls tsx's own `register()` export (`import { register } from 'tsx/esm/api'`) to install tsx's loader hook on the already-running `node` process, then `await import('./src/index.ts')`. It sits outside `src/` (not type-checked by `npm run build`, excluded from `eslint.config.mjs`'s lint set alongside `eslint.config.mjs` itself) since it's hosting glue, not domain code. | Calling raw `node:module`'s `register('tsx/esm', parentURL)` directly is **not** enough and throws ("tsx must be loaded with `--import` instead of `--loader`") — tsx's `initialize` hook requires a `data` payload that only tsx's own `register()` wrapper supplies. Verified with a repo-local smoke test before relying on it. Avoids a support ticket entirely and keeps D11 (no `dist/`, tsx everywhere) intact. |
-| D30 | **`/play` is the game's single entry point — a location-centric hub — and the standalone `/travel` is folded into it.** `/play` opens an ephemeral, stateless hub (`play` component namespace, panel in `_playPanel.ts`) showing the active character's place (name/description), vitals (HP/AP) and two kinds of interaction: a **"Travel to…" select** of the connected locations and a **button per local action**. The travel select carries the whole execution that used to be the `/travel` command (validate → spend AP → roll encounter → move-or-start-challenge); a plain arrival **re-renders the hub at the destination** so the play loop continues, an 'activity' encounter hands the message to the challenge activity exactly as before. Local actions come from a **data-driven catalog** (`game/data/hubActions.ts`: id, label, emoji, `locations` filter `'anywhere'`|ids, `comingSoon` line — the backlog's "locations = activity tables" made concrete and **test-validated** against `LOCATIONS`); **every one is a PLACEHOLDER today** (button → in-character "coming soon" ephemeral, hub stays up). Opening `/play` while mid-activity re-enters the current step (D22). The standalone `/travel` slash command is **removed** (its pure rules in `game/world/travel.ts` and the encounter/challenge stack are unchanged). | The owner wants one discoverable "default to the game" surface instead of a scatter of slash commands, and the hub is where the "each location has its own things to do" constraint (backlog) actually lands — turning a placeholder into a real activity is one catalog flip + one handler case. Folding travel in avoids two parallel travel entry points; reviving `/travel` is a one-file restore if ever wanted. |
-| D31 | **Locations live: static catalog + a dynamic `LocationState` collection + DERIVED presence.** The static half stays in code (D10): `locations.ts` gains `climate` (weather-weight overrides), discoverable `features` and `baseStats`; new catalogs `weather.ts`, `locationEvents.ts`, `locationStats.ts` (danger, prosperity) — extending any of them = one entry, no migration. The dynamic half is the **`LocationState`** collection (one doc per location, **lazily created on first read** by `locationStateService.getFresh`): the current **weather spell** (re-rolled by a filter-guarded update once `until` lapses), **running events** (started by guarded rolls on qualifying arrivals — `game/world/events.ts` — and swept on read), **server-wide `discoveredFeatureIds`**, clamped **stats** (danger biases the travel-encounter chance via `travelEncounterChance`; `adjustStat` is the write seam) and a `visits` counter. **Presence is never stored**: "who is here" = an indexed query over `Character.locationId` (`characterService.atLocation` — approved characters + NPCs; benched alts count, drafts don't), shown on the hub. One typed **condition language** (`game/world/conditions.ts`: `timeOfDay`/`weather`/`duringEvent`/`requiresDiscovery`/`minTraits`, evaluated against a `WorldContext` snapshot; the game clock in `world/time.ts` runs on the owner's timezone via a fixed UTC offset) gates **hub actions** (closed-with-reason 🔒 and disabled, or `hidden` until discovered), **encounters** (the owner's "walk in and if a criterion holds, something happens" — also the first trait consumer) and **event starts**; flavor encounters and challenge outcomes may `discovers` a feature (revealed + chronicled exactly once — `revealFeature`). Every LocationState write is an atomic filter-guarded single-doc update and travel still re-reads the character under its lock, so N stale `/play` panels race safely; `play:act` clicks **re-validate location AND availability at click time**. The hub view moved to `commands/components/_hubView.ts` (shared by `_playPanel` and the challenge finalize/retreat, which now return the player TO the hub). | The owner wants living places — weather, events, secrets, "who is standing here" — that stay one-catalog-line extensible. His instinct (a locations collection) is right for location-OWNED state, but storing presence there too would mean two writes per move and drift under concurrency; deriving it from the already-authoritative `Character.locationId` (+1 index) is one cheap query that cannot lie. Server-wide (not per-character) discoveries fit a ~10-person co-op server: one scout unlocks the jetty for everyone and the chronicle gets a story; a per-character scope can be added later as another condition field. |
-| D32 | **Persistence follows access pattern, not document size: embed bounded + hot-path state, split unbounded state into its own collection.** The deciding axis is NOT "big vs small" but (a) is it read *together with the character on the hot path* (every check / combat / `/play`) and (b) is it *bounded* (finite by a code catalog)? **Both yes ⇒ embed** on `Character`; **either no ⇒ its own collection.** So **skills, talents and progression are embedded** — bounded by the catalogs and read on every d100 check — stored **sparse** (only non-zero nodes; an absent key = 0) under a **`progression`** subdoc (`{ skills, talents, points }`); the current dense 6×`{level,progress}` skills map becomes this sparse node map when `Ruleset/skills.md`'s skill-tree model lands. The unbounded counterpart is D33 (owned items split out). | A separate skills/talents collection would break the architecture's single-document atomicity (D5/D6/D28: one lock → one re-read → one filter-guarded write) and bolt a hot-path join onto every check, for data that is small and always needed with the character. Sparse storage keeps hundreds of catalog nodes off a fresh character (M0-friendly, D10). It is the same bounded-vs-unbounded line CLAUDE already draws with "avoid unbounded arrays" (the old `gFishing.fish[]`): skill *state* is bounded ⇒ embed; an append-only skill-*use log* (if ever built) is unbounded ⇒ its own collection. |
-| D33 | **Owned items are two-tier: an embedded carried pack + a separate per-instance `Item` collection for storage; equip goes through the pack only.** The **carried pack** stays embedded (`Character.inventory[]`, capped by `INVENTORY_STACK_LIMIT`/encumbrance) with the `equipment` slot→instanceId map — it feeds challenge check targets (D28), so it must be one cheap read with the character and every equip/use/drop stays a single-doc atomic write under the lock. **Owned-but-not-carried** items (home chest, bank, future property — a hoard can reach thousands, i.e. **unbounded** per D32) live in a separate **`Item` collection: one document per instance/stack** (never one-doc-per-character — that just recreates the giant embedded array), `_id = instanceId` (8-char, D28 — a free unique index ⇒ idempotent transfers), indexed `{ ownerId, container }`, browsed **server-side paginated + aggregated** (a normal character read never touches it; the `/inventory` renderer is reused, only the data source paginates/sorts/counts in Mongo). **Transfers** (deposit/withdraw) run under the character lock, crash-safe by insert-then-remove idempotent on the unique `instanceId` (dedup-on-read prefers the `Item` copy); withdraw re-checks encumbrance (the pack has a carry limit, the stash does not). **Equip is only ever from the pack** — the `equipment` map may reference only embedded pack instances (equipped gear feeds hot-path checks ⇒ must be embedded), so **direct equip-from-stash is out (owner, 2026-07-05)**: withdraw to the pack, then equip (a one-click "withdraw+equip" convenience may wrap the two later, but must not break the "equipment references the pack" invariant). | 2000 items on one character fit under Mongo's 16 MB doc cap but would tax *every* character read (checks/combat/`/play` all hydrate the whole doc) and make array mutation/sort expensive — the classic large-embedded-array trap. Row-per-item lets a browse fetch a *page* (~25 docs) instead of a ~250 KB doc; "one big document" forces loading everything, always, and Mongo can't cheaply page *into* an embedded array. Keeping carried/equipped gear embedded preserves every D28 guarantee (atomic single-doc equip, busy-freeze, honest challenge targets) that a cross-collection equip would wreck. **Built 2026-07-05:** `db/models/item.ts` + `itemService` + `game/data/containers.ts` (one container, `home_chest`) + `/stash` (server-side paged browse, reusing the `/inventory` renderers) + a 🗄️ **Store** button on the `/inventory` item card. **One divergence from the literal `_id = instanceId`:** the 8-char pack `instanceId` is unique only *within one pack*, so as a global `_id` two characters could collide (silently clobbering an item), and a full-uuid handle overflows the 100-char customId budget beside the character id — so `Item._id` is a fresh uuid and a separate short `instanceId` (re-minted unique within the owner's stash) rides customIds. Transfers aren't transactional (D5/D6 stay single-doc atomic), so each **inserts the destination copy before removing the source** — a crash mid-transfer yields a recoverable **duplicate, never a lost item**; a double-click is serialized by the character lock; withdraw lands as a fresh pack entry (no auto-merge — keeps it idempotent). Category browse filters on the catalog's `itemId $in` set (kind is NOT stored — derived from itemId), so no denormalization violates D10. |
-| D34 | **Skills are arbitrary-depth TREES in code; a character stores a SPARSE FLAT node map (`progression.skills`).** This is the owner's nested-vs-flat DB question answered: the tree (parent links, per-node attribute blends, growth curves) is **static content** (`game/data/skills.ts`, D10) — a character persists only `{ nodeId → {points, progress} }` for nodes they've **touched**, so adding a branch or a whole new tree is a catalog edit with **zero migration** and a fresh character stores `{}` (M0-friendly). **Effective (the summed R10 model, `game/character/skills.ts`)** = the primary node's **weighted attribute blend** (`{strength:0.25, charisma:0.25}` = 50% STR + 50% CHA; **inherited** from the nearest ancestor that declares one, **overridable** per node — set CHA once on Speechcraft, override only on Intimidate) **+ Σ points on every unique node root→leaf** (parents give a baseline, the leaf makes the master), **+ `extraNodes`** material cross-paths (a longsword sums the smithing path AND iron-metallurgy). `checkEffective` is **UNCAPPED** (surplus = future crafting quality / combat Mastery); `checkTarget` shapes it by difficulty + race affinity and clamps to a d100 % `[5,95]`. **Learn-by-doing (`creditUse`)**: one meaningful use credits **+1 use to every node on the path**, each converting uses→points at its **growth profile**'s rate (named `GROWTH_PROFILES` root/branch/leaf, band tables of uses-per-point that steepen with points — the owner's numbers: leaf 5→20, branch 10→30, root 10→50; default tier derived from depth, per-node override allowed). Replaces the old dense 6-skill `{level,progress}` placeholder and the flat `level×5` skill term in checks; `combat/stats.ts` reads node points. **Built 2026-07-05** (owner-designed): the engine + prototype trees (smithing + metallurgy, speechcraft, athletics, placeholder combat roots) + the `checks.ts` integration + a `characterService.creditSkillUse` seam — the seam went LIVE with D40 (Spire combat + travel challenges credit use, opposition-weighted); all tree *content* + *numbers* stay 🟡. | A per-character nested skill tree would bloat M0 and let relationships drift; the tree is **content**, so it lives in code once (D10) and the character stores only the sparse delta — the owner's "flat + mark relationships in code" instinct, made concrete, and the cheapest possible extensibility (new depth/tree = zero migration). **Per-node weighted blends** make "what a skill depends on" one edit (his explicit ask); **summing the path** yields the generalist-does-basics / specialist-does-masterwork feel with no extra rules; **named growth profiles** encode the diminishing-returns curve in one place instead of on every node. Realizes `RPG/` R10 + P-skilltree + D32 in code, superseding the D14 "skills are placeholder" stance for the *model* (the *numbers* still wait on `RPG/`, exactly as D25 did for attributes). |
-| D35 | **Real combat engine + consent-gated `/smackdown duel` (Health/Soak/opposed-d100/auto-resolve), built in layers.** `game/combat/duel.ts` is the serious resolver (owner-requested, superseding the D14 "no combat mechanics" stance for the *v1 model*, as D25/D34 did for attributes/skills): each exchange is an **opposed d100** (both roll their own `checks.ts` test; higher Success Level connects, skill-tiebreak else defender), damage = `weapon + net SL + StrengthBonus − Soak` floored to the **≥1 connecting-hit** rule, `Soak = ConstitutionBonus + Armour Value`, auto-resolved in one alternating-exchange pass (the sparring narration shape on real math). `game/combat/profile.ts` derives a `CombatProfile` from the REAL systems — equipment-modified attributes (D28), the melee/brawling skill-tree Effective (D34 via `checks.ts`), worn AV into Soak, and the character's **actual `resources.health`** as the pool. **v1 is deliberately thin** (owner: "start WITHOUT styles/named-moves/location-crits, but take them into account"): fighting styles + `knowsStyle` counter-play, named signature moves, hit-location trauma tallies + concentrated-damage critical injuries, armour × weapon-type multipliers, criticals/fumbles on doubles, and stances are all **marked SEAMs** (inert `CombatProfile` fields / commented `computeDamage` steps) — each layer is a fill-in, not a reshape. The throwaway sparring engine (`engine.ts`/`stats.ts`, d20) is **left untouched** (D16: sparring stays for-fun, Elo-only); duel is a separate engine + separate slash subcommand. `/smackdown duel @opponent` is the first consumer: **consent-gated** (combat.md's locked async-fairness rule — a card is posted with the fight uncommitted; only the challenged player's **Accept** button starts it, so nobody loses Health while offline — approved characters only, D16), **real HP persisted** to BOTH fighters via atomic clamped `applyResourceDeltas` deltas under the character lock (it does NOT mend at once; slow hourly regen is the only recovery), and **0 Health = Downed** (unconscious — `canCharacterAct` already reports `incapacitated` at ≤0, so no new field; healing above 0 clears it) with **no other cost** (no AP loss, no permadeath — the owner's brief: a KO is "wake with a dented pride"). Auto-resolve is a **short action** (D5 rule 1: resolve in memory, commit once), NOT an ActivitySession — the **manual turn-by-turn** upgrade (combat.md R24 option 2) is the documented next layer over this same profile/engine; wagers, a duel W/L record, and Trial/PvE are the other seams. **Built 2026-07-06**; numbers (attack/defence bases, unarmed damage, the flat pool size) stay 🟡. A **`/smackdown` redeploy is required** (new `duel` subcommand); the `duel` component handler + `game/combat` additions bring no other slash changes. | The owner wants real combat now and calls it "a very important system" — so the SHAPE (opposed-d100/Health/Soak/Side-A-vs-B-ready/auto-resolve) is stabilised while the deferred depth stays one-file-per-layer additive, and the *numbers* stay 🟡 exactly as D25/D28/D34 kept their tuning open. Reusing `resources.health` as the pool honours the owner's "faktyczne hp" ask and needs no migration; deriving Downed from health ≤0 reuses the existing `canCharacterAct` gate instead of a parallel status; persisting via clamped deltas keeps the one-lock-one-atomic-write invariant (D5/D6) every other mutation follows; consent + auto-resolve are exactly combat.md's R24/async-fairness design, built once, here. |
-| D36 | **Smackdown customization is a data-driven bout-mode catalog + leaderboard categories, with PvE/arena seams (the Spire is a "big feature").** `game/combat/bouts.ts` (`BoutMode`, D10) is everything that shapes a fight *before* the engine rolls; `/smackdown duel [mode]` shows the modes as choices, the pick rides in the challenge card (the target consents to *those* rules) and the accept customId (short slug, budget-safe). **Consumed now — `loadout`:** **Full Gear** (`geared`, default) and **Bare-Knuckle** (`bare` — gear set aside at the door: bare attributes, fists, no AV, no equip penalties; the pack is untouched), applied by `combatProfile(character, { loadout })` (the D35 profile now takes options). **Designed SEAMs** (typed + authored, mechanics deferred): `arena` (terrain tags + obstacles — R25, the owner's sandy-arena-with-obstacles), `allowedWeaponKinds` (a future axes-only bout), `opponent` (`'player'` PvP today / `'npc'` PvE Trial), `stakes` (`'real'`/`'fantasy'` — folds sparring in later); a `selectable: false` **`sand_axes`** mode already sits in the catalog as end-to-end proof of the shape (flip the flag when R25 lands, no other wiring). **Leaderboards** (`game/combat/leaderboards.ts`): `/leaderboard [category]` ranks the one record set by a catalog field (**Ranking** = ELO, **Most Victories** = wins), `smackdownService.getLeaderboard(sortField, limit)` sorts dynamically — a per-mode/PvE board is a `mode` dimension on `SmackdownRecord` + a filter (SEAM). **PvE #1:** `resolveDuel` already takes two `CombatProfile`s, so an ever-tougher NPC is a hand-authored profile (no DB character needed) or an `ownerId:null` `Character` with consent auto-granted — not built (no NPC content), engine ready. **Built 2026-07-06** (extends D35); a **`/smackdown` + `/leaderboard` redeploy** registers the new `mode`/`category` options. All bout numbers/content stay 🟡. | The owner wants the Spire to be a large, customizable feature — so the *variation* (loadout now; arena/weapon-filter/PvE/per-mode-ladder later) lives in one catalog each, extended by an entry not a refactor, exactly the D10 content-in-code discipline every other system uses; wiring the picker + consent + customId now means a future mode/board is content, not plumbing. Bare-Knuckle reuses the D35 engine untouched (only the profile derivation changes), and gating `sand_axes` off proves the arena/weapon seams compile against the real shape before their mechanics exist. |
-| D37 | **PvE Spire ladder — `/smackdown trial` (owner-requested #PvE).** `game/combat/spireLadder.ts` is a fixed gauntlet of **Spire-only champions** — hand-authored `CombatProfile` stat blocks (D10), **explicitly NOT world/town NPCs and NOT DB characters** (the owner ruled town-NPC dueling out: "if not built, don't add it"): the D35 engine already takes two `CombatProfile`s, so a champion is a stat block with no owner and **no consent** needed. `SmackdownRecord.trialRung` (new field, `$max`-monotonic, absent → 0 for pre-D37 records) tracks the cleared rung; `/smackdown trial` fights the **next unbeaten** champion — a win `advanceTrial`s the rung once and pays its **one-time reward** (Deltrada Coins via `applyCurrencyDeltas`; title/item/reputation is the SEAM), a loss costs **real Health** (persisted like a duel — Downable, then must heal to try again). **Rematch** (`/smackdown trial opponent:<beaten champion>`, D37 addendum): re-fight any *already-cleared* champion — real Health still at stake, but **no reward, no rung change** (`trialTarget` classifies the pick as climb/rematch/locked/cleared; reward fires only on a `climb` win), so the reward loop can't be farmed and a champion above your progress is refused; fought **as-equipped**; the champion is always at full Health, the player at their current pool; only the PLAYER's HP is persisted (the champion isn't a real character — its `spire:<id>` synthetic id can't collide with a Character uuid). Ranked on its own **`🏟️ Spire Ladder`** leaderboard category (D36 catalog + the `trialRung` sort field). Reuses the D35 `resolveDuel` + `combatProfile` + the duel's `renderBlow` narration untouched; the orchestration (single-character lock, persist-one, progress+reward) lives in `runTrial` in `smackdown.ts`. **Built 2026-07-06**; roster + every stat/reward 🟡; a **`/smackdown` + `/leaderboard` redeploy** registers the `trial` subcommand + `🏟️` category. **Superseded UI (2026-07-07):** the `opponent:<name>` string option described above is GONE — `/smackdown trial` now opens a browsable roster panel (see D37 addendum in combat.md, and the `trial` component handler in root's component-handler list); the orchestration/engine text above is otherwise unchanged. | The owner's PvE vision was concrete (10 escalating fighters, beat them, reward) and is the natural next consumer of the D35 engine — champions-as-code-profiles is the cleanest path (no NPC seeding, no Phase 6C dependency, no consent flow), and gating progress to the current rung makes the reward loop non-exploitable with a real-HP cost as the pace-limiter. Keeping champions OUT of the world-`Character` collection respects the owner's "don't build town-NPC dueling" and keeps the ladder pure content (one catalog edit to add/retune a rung). |
-| D38 | **Alpha DB-wipe recovery: `npm run seed` replays a hand-maintained roster (`src/scripts/seed-data.ts`) through the normal creation services.** The alpha wipes the DB often; instead of making ~10 players redo the wizard, the owner records each player's **wizard inputs only** (ownerId, username, name, race, gender, epithet/bio/avatar, the 50-pt attribute allocation, optional body frame, optional `active`) once per character in `seed-data.ts`, and `seed-characters.ts` replays them through the real domain path — `accountService.getOrCreate` → `characterService.create` (`defaultCharacterStats`) → `setAttributeAllocation`/`setBody` → the **guarded** `submitForApproval`+`approve` transitions → `setActiveCharacter` — **never raw model writes**. Validates everything up front (point-buy sum/caps, name/gender/lengths, duplicate owner+name) and writes nothing on any error; **idempotent** (an existing owner+name is skipped), so rerunning after adding entries is safe. **MAINTENANCE RULE for every future session:** because the seed stores only creation inputs and derives the rest from catalogs/services, schema/catalog changes normally need NO seed edit — but any change to the **creation-input shape** (a new required wizard step, changed identity fields, changed point-buy rules) MUST extend `SeedCharacter` + the runner **in the same commit**, and populated `seed-data.ts` entries must be migrated by hand. | Replaying creation through services means the seed auto-absorbs new fields/catalogs (derive, don't copy — the same D10 instinct); a raw-document dump would rot on exactly the schema changes that force the wipes. Walking the real approval lifecycle (not a status `$set`) makes the seed break visibly if the flow ever changes instead of minting corrupt characters. |
-| D39 | **Attribute-derived Health/Stamina maxes are BUILT (owner-requested 2026-07-07), closing the `recalculateMaxResources` seam D14/D23 named.** `game/character/resources.ts`: `healthMax` = Constitution-led (weight 2) + a lesser Strength + Willpower nudge (weight 1 each); `staminaMax` = Constitution-led (weight 2) + a lesser Willpower nudge (weight 1) — both read the shared `attributeBonus` (tens-digit scale, moved to `game/character/attributes.ts` as the canonical definition; `game/combat/stats.ts` now re-exports it instead of defining its own copy). Constants (`HEALTH_BASE = 12`, `STAMINA_BASE = 4`, the weights) are tuned so a raceless/unallocated draft lands exactly on the old flat defaults (Health 20 / Stamina 10) — today's placeholder combat numbers don't silently shift for the "average" character. Wired at `defaultCharacterStats` (fresh character starts full at its computed max) and recomputed by `characterService.setRace`/`setAttributeAllocation` via `applyMaxResources` (full stays full on a raised cap; a damaged character keeps its wounds, only the ceiling moves). Frame (weight/height, R12) is still a documented future addend to the formula, not built. | Constitution as the dominant driver with Strength/Willpower as lesser contributors was the owner's explicit call — mirrors the shape the throwaway sparring engine already used informally (`combatStatsFromCharacter`'s `str*5+wp*5+end*10`) but wires it into the REAL persisted pool that duel/trial actually fight over, not just the fantasy sparring stat. Tuning constants to match the old flat baseline avoids a silent balance shift for every character that already exists. |
-| D40 | **Learn-by-doing is LIVE — skill use is credited with an opposition-scaled training weight; first consumers: Spire combat + travel challenges (owner-requested 2026-07-07).** `creditUse`/`characterService.creditSkillUse` now take fractional `uses` (the weight; ≤0 = no-op, banked progress stored to 2 decimals), and `GROWTH_PROFILES` gained knees at 20/40 points to land the owner's pacing example (~10 fights per point on a fresh fighting skill → ~100 at 20 points; root slowest — one fight still trains the WHOLE path root→leaf, D34). **Combat weight** (`game/combat/training.ts`): `foePower / yourPower` over `combatPower(CombatProfile)` (attack+defence targets + damage/StrB/Soak/Health) — capped at **2.0**, linear below 1, **0 at ≤ 0.5** (beating up novices or an outgrown Spire rematch teaches literally nothing — the anti-farm). `/smackdown duel` credits BOTH fighters' `attackNode` path (a new `CombatProfile` field; unarmed attack now draws on the `striking` leaf, not the bare `brawling` root, so the whole brawling path trains) **win or lose**, under the existing bout locks; `/smackdown trial` credits the player against the champion's stat-block power. **Non-combat checks**: `checkTrainingWeight(target) = 2·(1 − target/100)` (a coin-flip = 1.0, a near-certainty ≈ 0.1) — travel-challenge ROLLED options credit their check's node after the step-guard win (the guard makes the read-modify-write safe: a session-busy character can't equip/duel/switch); checkless choices and attribute-only checks credit nothing. **Sparring credits nothing** (D16 fantasy stakes); the "meaningful use" house rule is now LOCKED in `Ruleset/skills.md` (*rolled and could have failed → counts; free/auto → never*). Rank-ups announce in the narration (`📈 … rises to N`, shared `buildTrainingLine`); `/character skills` shows fractional banked progress. All weights/bands stay 🟡. | The owner's explicit brief: growth through use with diminishing returns, a stronger opponent teaching more, a much weaker one nothing, roots slowest. Expressing "how instructive" as fractional USES keeps the engine's single growth currency (the bands) instead of bolting on a parallel XP meter; deriving the combat weight from the already-derived `CombatProfile`s prices PvP fighters and hand-authored PvE champions identically (no new stat surface); crediting inside the existing locks/step-guards adds zero new concurrency rules. The check-difficulty weight is the same "edge of your ability teaches most" principle applied where there is no opponent — one idea, two formulas, both in `Ruleset/skills.md`'s Reference. |
-| D41 | **Fighting styles + the combat plan (owner-designed 2026-07-07): family-specific, node-backed styles, switched by standing orders set on `/character combat`.** Two axes, deliberately separate: the **tree = what you know** (new branches: `brawling → {striking, grappling, guard}`; `melee → {onslaught, binding, warding}` style branches beside the weapon-grip ones — catalog edits, zero migration per D34) and the **style = how you fight** (`game/combat/styles.ts`, D10): 3 per family (🥊 Striker/🤼 Grappler/🧱 Stonewall unarmed; ⚔️ Onslaught/⛓️ Binder/🛡️ Warden armed; `ranged` a typed no-content seam), each a flexible mix of `modifiers` {attack/defense/damage} and/or typed `effects` (**hamper** — a connecting hit fouls the foe's next swing −15; **riposte** — a ≥2-SL defence counters through Soak, ≥1). Styles are **family-specific** (owner: muay thai doesn't help a swordsman; the family resolves from the main hand at profile build) and are NOT tree nodes themselves — but each **draws on a node**: unarmed the node IS the attack draw, armed it sums with the weapon branch via `extraNodes` (path dedup handles the shared `melee` root — the metallurgy pattern verbatim), and **defence rolls the style node's path in both families** — the owner's added rule "know your style well → strike AND defend better in it", which also makes styles **self-gating** (no unlock economy; an untrained style rolls its untrained path) and **trainable** (D40 extension: `trainingNodes` credits each style actually fought in — a whole bout in Grappler banks nothing into Striking; armed always keeps the weapon branch). The **combat plan** (`Character.combatPlan`, sparse Mixed; `characterService.setCombatPlan`, per-family atomic `$set`) is R24's "pre-fight menu" landed as something better for an async game: per-family default style + ≤3 conditional switch rules (own-HP-below% / foe-HP-below% / round ≥ N — triggers monotonic in-fight, so styles never flap), first-match-wins, re-evaluated at the top of every exchange and narrated (`🔄 … shifts to …`). Edited on **`/character combat`** (`combatplan` handler + `_combatPlanView` — ephemeral/personal/stateless like `/profile`; the rule builder is a two-step select flow whose half-built rule rides the customId — discrete trigger menu, no free text, honoring the "modals host only text inputs" convention); per-style base targets are precomputed at profile build (the challenge-panel honest-odds discipline) with a base-target fallback for styles without them. Spire champions may carry a hand-authored `plan` (their stat block IS their style's base; Osk grapples, Marrow/Dourmane stonewall, Sela/Vesh strike, Busk/Sand Widow/Aurok switch under pressure — the ladder demos the system to players); the inert `stance` field died unbuilt, replaced by this. Deferred with seams: `knowsStyle` counter-play (now cheap — key it on the defender's points in the attacker's active style's node), ranged styles (family typed, no engine), named canon schools as learned talents, more effect kinds. All numbers 🟡. **`/character` needs a redeploy** (new `combat` subcommand; no other slash changes). | The owner asked for a deeper unarmed tree, ~3 behavior-changing switchable styles and a `/character combat` panel with conditionals — and the panel idea is structurally right: under R24 auto-resolve the challenged player makes NO decision after Accept, so standing orders set ahead of time are the only agency shape that works async (FF12 gambits). Splitting knowledge (tree) from decision (style) answers his "lower leaf or something different?" fork: a conditional can't switch a *skill*, only a *choice* — while backing every style with a node keeps proficiency trainable through the one existing growth engine (no parallel XP surface, no unlock catalog). Family-specific catalogs honor his muay-thai point without a per-weapon-leaf style explosion (style branches beside grip branches, joined by the already-proven `extraNodes` summing). |
-| D42 | **Grip-split armed styles + flowing MOMENTUM (owner-requested 2026-07-08), extending D41's engine.** Two refinements to the D41 combat, both additive: **(1) the armed style family is the weapon GRIP** — `StyleFamily` becomes `unarmed \| one_handed \| two_handed \| ranged` (was `unarmed \| melee \| ranged`), resolved from `weapon.hands` at profile build. The old `melee`-rooted style branches move UNDER their grip branch (`one_handed → {pressing, binding, warding}`, `two_handed → {cleaving, halfswording, iron_ward}`; the shared grip+`melee` path still dedups via `extraNodes`, zero migration per D34), and each grip gets its own three styles: 🗡️ Duelist/⛓️ Binder/🛡️ Warden (one-handed, Onslaught renamed→Duelist) and ⚔️ Wrath/🪝 Halfsword/🏰 Iron Gate (two-handed, all new). `/character combat` now plans three families (3 select rows + 2 button rows = Discord's 5-row cap exactly; a 4th grip needs a paged panel). The owner's call: a sidearm ward is not a greatsword ward — future grips (dual-wield, sword-and-board) join as a family + three styles, nothing else moves. **(2) Initiative FLOWS (momentum)**: a duel is no longer strict attacker↔defender alternation — a landed blow gives the attacker a **chance to press on and swing again**, a miss (or failed press) hands the initiative over; a decisive defence (≥`SEIZE_MARGIN` SL) flags a narrated "seize". `followUpChance(netSL, style, priorPresses) = clamp(15 + 12·netSL + tempo±15 − 5·priorPresses, 0, 95)` — a new `tempo` field on each style (aggressive/neutral/defensive) shades it; a small −3/press overextension attack penalty rides on top. **Decisiveness (net SL) is the dominant term by design**: two even fighters trade mostly single blows (verified sim ~67/25/6 for 1/2/3-hit streaks), but a badly outclassed foe can be **cut down in a 10+ swing flurry** ~a few % of the time (the owner's "czasem postać wycina w pień słabszą") — the gap keeps the chance high faster than the decay erodes it. All numbers 🟡; deferred active defence (dodge/parry/block) will later turn some pressed swings aside, self-shortening the longest flurries. **No slash-command changes beyond D41's already-pending `/character combat` redeploy.** | The owner wanted armed combat to distinguish grips (one-handed finesse vs two-handed commitment are genuinely different, and muay-thai-doesn't-help-a-swordsman generalizes to sword-doesn't-help-a-greatswordsman) and a less mechanical, more realistic exchange flow where a strong fighter can occasionally dominate a run of blows rather than politely alternating. Grip-as-family reuses D41's family plumbing verbatim (the split is a catalog edit + a `weapon.hands` branch, no engine reshape); momentum is one pure `followUpChance` + a loop change over the existing profile/engine, and expressing "how instructive/dominant" through net SL reuses the number the damage math already computes instead of a new stat. Tuning (high PER_SL vs low DECAY) was chosen by simulation to preserve the even-fight distribution the owner liked while unlocking the rare long cut-down; the redundant-with-chance overextension penalty was cut from −10 to −3 so a dominant fighter isn't self-throttled. |
+One line per decision — **full original text + rationale in `DECISIONS.md`**; game-design
+detail in `Ruleset/`. Numbers are append-only; new entries stay 1–3 lines here.
+
+| # | Decision |
+|---|---|
+| D1–D3 | Slash commands only for the server RPG; everything else = `h!` prefix commands; admin = a normal prefix command with `ownerOnly: true` (no admin prefix/class). |
+| D4 | Commands are plain typed objects (`satisfies PrefixCommand/SlashCommand`), no class hierarchy. |
+| D5 | Concurrency = per-character async locks + per-character deferred FIFO queues (no global queue). |
+| D6 | DB writes prefer atomic clamped deltas (aggregation-pipeline `$inc` with min/max) over read-modify-write. |
+| D7 | Cron jobs are idempotent + bulk-first: one `updateMany` for unlocked characters, deferred ops for locked. |
+| D8 | AI persona behind the `ai/` seam, optional via `OPENAI_API_KEY`. |
+| D9 | Future pen-and-paper RP = separate `rp/` domain module, own models, not sharing server-RPG profiles. |
+| D10 | Static content lives in code as typed catalogs; DB stores only instances/state referencing stable string ids — see "Content vs state". |
+| D11 | Production runs TS via tsx; `build` is a type-check-only local gate; no `dist/` in git. |
+| D12 | Account (per Discord user: settings, `activeCharacterId`) ↔ Character (uuid-keyed entity; NPC = `ownerId: null`); currencies + ELO live per character. |
+| D13 | Approval lifecycle `draft → pending → approved/rejected`; unapproved characters can't take character-actions; petitions go to the owner channel, not DMs. |
+| D14 | (historic) "No stat/combat mechanics before the ruleset" — since superseded by D25/D26/D34/D35/D39–D42; balance **numbers** still stay 🟡 until owner sign-off. |
+| D15 | Action Points: no cap, hourly `$inc`; spending only via atomic clamped `spendActionPoints`. |
+| D16 | Smackdown two tiers: `sparring` = for-fun, any active character, pure random (its Elo to be removed someday); serious = `duel` (D35). |
+| D17 | Long interactive activities are durable: `ActivitySession` doc = per-step state AND the cross-restart busy lock; step-guarded atomic advances; TTL reap. AP charged at start; clean cancel refunds; timeout forfeits. |
+| D18 | Locks keyed by `Character._id` (not user id); deferred queues drain BEFORE lock release. |
+| D19 | One currency (`deltradaCoins`) until the economy exists; regional per-race currencies reserved. |
+| D20 | Character creation = step-driven wizard over the draft doc; steps in a typed catalog; no stored cursor — progress derived from filled fields. |
+| D21 | World = data-driven location graph; edges undirected + test-validated; each move may roll an encounter (`flavor` line, or `activity` that interrupts the move until resolved). |
+| D22 | Durable activities dispatch via a `type → handler` registry; busy = has an active session; gated commands **re-enter** (re-render current step) instead of erroring. |
+| D23 | Regen splits on busyness: vitals pause while busy (skipped, not deferred), AP always accrues. |
+| D24 | Gameplay replies are ephemeral; noteworthy outcomes post short in-character lines to the public chronicle channel (fire-and-forget, never failing the action). |
+| D25 | 8 attributes; racial base = 25 ± net-zero ±5 modifiers; creation point-buy 50 pts (max +20 on one); allocation stored separately so a race switch rebases, not corrupts. |
+| D26 | Travel encounters = multi-approach challenges on the d100 roll-under engine (`game/checks.ts`: Success Levels, difficulty, race affinity); per-option targets precomputed at session start (honest % on repaints); outcomes may grant deed traits. |
+| D27 | Account-level settings live on `Account`; `/profile` = account panel, `/character view` = character sheet. |
+| D28 | Inventory/equipment: discriminated-union item catalog (WHFRP properties, per-instance craftsmanship quality); embedded pack + `equipment` slot→instance map; equipped gear modifies **effective** attributes; requirements checked vs **base**; 2H occupies both hands; every mutation = lock + fresh re-read + filter-guarded atomic write, refused while busy. |
+| D29 | Host startup is fixed `node bot.js` — the shim calls tsx's own `register()` then imports `src/index.ts`. |
+| D30 | `/play` = the single game hub (location, vitals, travel select, per-location action buttons from `hubActions.ts`); standalone `/travel` removed. |
+| D31 | Living locations: static catalog + lazy per-location `LocationState` doc (weather spells, running events, server-wide discoveries, clamped stats, visits); **presence derived** from indexed `Character.locationId`, never stored; one typed condition language (time/weather/event/discovery/traits) gates hub actions, encounters, event starts; clicks re-validate at click time. |
+| D32 | Persistence follows access pattern: bounded + hot-path ⇒ embed on Character (sparse `progression` {skills, talents, points}); unbounded or rarely-read ⇒ own collection. |
+| D33 | Stash = per-instance `Item` collection (indexed `{ownerId, container}`, server-side paged); the carried pack stays embedded; **equip only ever from the pack**; transfers insert-before-remove under the character lock (crash ⇒ recoverable duplicate, never a lost item). |
+| D34 | Skills are arbitrary-depth **trees in code**; a character stores a **sparse flat node map**. Effective = weighted attribute blend (inherited from nearest ancestor, overridable) + Σ points along root→leaf (+ `extraNodes` cross-paths); uncapped, clamped [5,95] only in check targets; growth via named band profiles (root slowest). Adding a branch/tree = catalog edit, zero migration. |
+| D35 | Real duel engine: opposed d100 per exchange; damage = weapon + net SL + StrengthBonus − Soak (min 1 on a connecting hit); Soak = ConstitutionBonus + AV; fights over real persisted `resources.health`; 0 = Downed, no other cost; consent-gated `/smackdown duel`; auto-resolve = short in-memory action (D5 rule 1); styles/hit-locations/crits were marked seams (styles landed in D41). |
+| D36 | Bout modes are a catalog (`loadout`: Full Gear / Bare-Knuckle live; arena / weapon-filter / NPC-opponent / stakes = typed seams); leaderboard categories data-driven (`/leaderboard [category]`). |
+| D37 | PvE Spire ladder (`/smackdown trial`): champions = hand-authored `CombatProfile` stat blocks (never DB characters, no consent); `trialRung` is `$max`-monotonic; reward only on a climb win; rematches allowed (no reward); roster browser panel, no free-text opponent arg. |
+| D38 | `npm run seed` replays hand-recorded creation **inputs** through the real services (guarded approval transitions, never raw writes); idempotent. **MAINTENANCE RULE**: any change to the creation-input shape must extend `SeedCharacter` + the runner in the same commit. |
+| D39 | Health/Stamina max derived from attributes (Constitution-led; + minor STR/WP for health, WP for stamina), recomputed on race/allocation change via `applyMaxResources` (full stays full; wounds keep their value under a new cap); constants tuned so a blank draft = the old flat 20/10. |
+| D40 | Learn-by-doing is LIVE: `creditUse` takes fractional uses; combat weight = foePower/yourPower (cap 2.0; 0 at ≤ 0.5 — anti-farm), non-combat = 2·(1 − target/100); sparring credits nothing; only rolled-and-could-fail uses count (locked in `Ruleset/skills.md`); rank-ups narrated. |
+| D41 | Fighting styles are family-specific catalog entries (modifiers + typed effects: hamper, riposte), each drawing attack AND defence from a skill node (self-gating, trainable via `trainingNodes`); the combat plan (`/character combat`) = per-family default style + ≤3 conditional switch rules (own/foe HP %, round ≥ N), first-match-wins, re-evaluated every exchange and narrated. |
+| D42 | Style family = weapon GRIP (`unarmed \| one_handed \| two_handed \| ranged` seam), style branches under their grip branch; initiative FLOWS: a landed blow may press a follow-up (`followUpChance`: net-SL-dominant + style tempo − per-press decay, sim-verified ~67/25/6% streaks for even fights, rare 10+ flurries only across big gaps). |
 
 ## Target architecture
 
 ```
 src/
   index.ts              entry: env check → DB connect → client → login
-  config.ts             typed env config (fail fast on missing vars)
-  client.ts             ToscheClient extends Client: command registries, lock manager
-  core/
-    loader.ts           discovers & loads commands/events/jobs from folders
-    locks.ts            CharacterLockManager (locks + deferred queues)
-    scheduler.ts        registers cron jobs from jobs/
-    cooldowns.ts        per-command per-user cooldowns
+  config.ts             typed env config (fail fast)
+  client.ts             ToscheClient: command registries, lock manager, AI seam
+  core/                 loader (commands/events/jobs), locks, scheduler, cooldowns
   commands/
-    prefix/<category>/*.ts    one file = one command (categories: fun, utility, admin)
-    slash/<category>/*.ts     one file = one command (categories: game, ...)
-    components/*.ts           one file = one button/select/modal handler ({ namespace, handle }),
-                              routed by customId namespace (_-prefixed files = colocated builders)
-    components/_activities/   activity handlers (D22): registry.ts (type → handler) + one file
-                              per ActivitySession type (challenge…); dispatched by components/activity.ts
-  events/*.ts           one file = one Discord event: { name, once?, execute }
-  jobs/*.ts             one file = one cron job: { name, schedule, run }
+    prefix/<category>/*.ts    one file = one command (fun, utility, admin)
+    slash/<category>/*.ts     one file = one command (game)
+    components/*.ts           one file = one customId namespace ({ namespace, handle });
+                              _-prefixed files = colocated builders/views
+    components/_activities/   registry.ts (session type → handler) + one file per activity
+  events/*.ts           one file = one Discord event (defineEvent)
+  jobs/*.ts             one file = one cron job
   db/
-    connect.ts
-    models/*.ts         mongoose schemas + exported TS types
-    services/*.ts       all DB access goes through services (accountService, characterService,
-                        smackdownService, activitySessionService, inventoryService,
-                        locationStateService — D31; itemService — D33, the stored-item (stash) collection)
+    connect.ts, models/*.ts
+    services/*.ts       ALL DB access goes through services
   game/                 server-RPG domain logic, Discord-agnostic where possible
-    checks.ts           the d100 roll-under test engine (Effective from skill nodes or a bare
-                        attribute; SL/difficulty/race affinity — D26/D34)
-    character/          pure rules + identity helpers (canCharacterAct/canEdit/canSubmit, limits)
-                        + creationSteps.ts (the wizard step catalog — D20)
-                        + attributes.ts (racial bases + creation point-buy math — D25)
-                        + skills.ts (the skill-tree engine: sparse progression, path sum,
-                          attribute-blend resolution, effectiveSkill, learn-by-doing — D34)
-                        + inventory.ts (item instances, stacking, encumbrance, equip planning,
-                          equipment attribute modifiers, browse state — D28)
-    combat/             two engines (both pure + testable): the throwaway sparring d20
-                        (engine/stats/elo, D16) AND the real duel (duel.ts opposed-d100 /
-                        Health / Soak + profile.ts derivation — D35); styles.ts (the
-                        fighting-style catalog) + plan.ts (combat-plan triggers) — D41;
-                        training.ts (D40 weights + D41 trainingNodes); flavor data
-    activity/           durable-activity pure logic: session timing helpers (D17 seam) +
-                        per-activity step reducers (challenge.ts — D22/D26)
-    world/              travel rules over the location graph + encounter rolling (D21)
-                        + time.ts (the game clock), conditions.ts (the D31 condition
-                        language + WorldContext), events.ts (location-event rolling)
-    chronicle.ts        Discord adapter (marked): posts noteworthy actions to the public log (D24)
-    data/               static content catalogs (locations, weather, locationEvents,
-                        locationStats, encounters, hubActions, traits, items, equipment
-                        slots, containers, fish...) — see D10
-    ...
-  lexicon.ts            GENERAL flavour vocabulary (adjectives, adverbs, nouns, terms…) — reused
-                        by fun, the RPG and real commands; NOT fun-only (ported from dataSpeech.js).
-                        A single file for now; promote to a lexicon/ folder when it splits.
-  fun/                  fun-command response pools + generators (oracle, insults, cost, names, …)
-  ai/                   persona prompt + optional OpenAI service (behind AiService) + trigger
+    checks.ts           d100 roll-under engine (skill nodes/attributes, SL, difficulty, affinity)
+    character/          pure rules: creation steps, attributes, skills engine, inventory,
+                        resources (attribute-derived maxes), identity/limits
+    combat/             sparring d20 (throwaway) + real duel (duel/profile/styles/plan/
+                        training/bouts/spireLadder/leaderboards)
+    activity/           durable-activity pure step reducers (challenge…)
+    world/              travel rules, time (game clock), conditions, events
+    chronicle.ts        Discord adapter (marked): public game log
+    data/               static content catalogs (locations, items, skills, races, encounters,
+                        hubActions, weather, traits, currencies…) — see D10
+  lexicon.ts            GENERAL flavour vocabulary (not fun-only)
+  fun/                  fun-command response pools + generators
+  ai/                   persona prompt + optional OpenAI service + trigger
   moderation/           banned-word matcher + #espionage reporting
-  settings.ts           guild-specific tunables (channel names, banned words, AI triggers)
-  lib/                  generic helpers + English mechanics (log, random, text [a/an, syllables,
-                        past tense], number, units, discord, grammar, person, async)
-  types/*.ts            contracts: BotConfig, PrefixCommand/SlashCommand, ComponentHandler, BotEvent (+ defineEvent), CronJob
-  scripts/
-    deploy-commands.ts  guild-scoped slash registration (inside src/ so the build gate type-checks it)
+  settings.ts           guild tunables (channel names, banned words, AI triggers)
+  lib/                  small typed helpers (log, random, text, number, units, discord,
+                        grammar, person, async)
+  types/*.ts            contracts: BotConfig, PrefixCommand/SlashCommand, ComponentHandler,
+                        BotEvent (+ defineEvent), CronJob
+  testing/              memoryDb (useTestDb), fakeInteraction harness
+  scripts/              deploy-commands, clear-commands, seed(+data), restore, confirmDb
 ```
 
-Layering rule: **commands are thin**. They parse/validate input, call `game/` or
-`db/services/`, and format the reply. Domain logic never imports discord.js types
-except in clearly marked adapter spots.
+**Layering rule: commands are thin** — parse/validate, call `game/`/services, format the
+reply. Domain logic never imports discord.js except in clearly marked adapters. The exact
+command/event/job shapes live in `src/types/` (slash/events/jobs get `ToscheClient` injected;
+prefix commands are message-first, `botClient(message)` is the one documented widening cast).
 
-### Command shapes (sketch)
-
-```ts
-interface PrefixCommand {
-   name: string;
-   aliases?: string[];
-   description: string;
-   usage?: string;
-   category: 'fun' | 'utility' | 'admin';
-   ownerOnly?: boolean;
-   requiredPermissions?: PermissionResolvable[];
-   cooldownSeconds?: number;
-   execute(message: Message, args: string[]): Promise<void>;
-}
-
-interface SlashCommand {
-   data: AnySlashCommandBuilder;     // name/options/permissions live here (builder union)
-   category: 'game';
-   ownerOnly?: boolean;
-   cooldownSeconds?: number;         // default: none (slash); prefix commands default to 1 s
-   execute(client: ToscheClient, interaction: ChatInputCommandInteraction): Promise<void>;
-   autocomplete?(client: ToscheClient, interaction: AutocompleteInteraction): Promise<void>;
-}
-```
-
-Slash commands (like events and jobs) get the `ToscheClient` injected as the first
-argument. Prefix commands stay **message-first** on purpose — almost none need the client,
-so the rare one that does (`h!help`) uses `botClient(message)` from `lib/discord.ts` (the
-single documented widening cast) instead of every command carrying a dead parameter.
-
-`messageCreate` routing: ignore bots → guild check (single guild only) → if content
-starts with `h!` resolve & run prefix command (ownerOnly → permissions → cooldown) →
-otherwise optional ambient behaviors later (random reactions/replies, throttled).
-
-### Core runtime conventions (Phase 1)
+### Core runtime conventions
 
 - Command files: `export default { ... } satisfies PrefixCommand` (or `SlashCommand`).
-- Event files: `export default defineEvent({ name, once?, execute(client, ...args) })` —
-  every event receives the `ToscheClient` as its first argument (no `message.client`
-  casting). Use `clientReady`, not the deprecated `ready`.
-- **Fail fast at startup**: the loader throws on a missing default export, duplicate
-  command name/alias, or invalid cron expression. **Never crash at runtime**: every
-  dispatch boundary (event listener, command execute, job run) catches, logs, and
-  replies with a generic in-character error.
-- Loader skips `_`-prefixed files — use them for helpers/data colocated with commands.
-- **Component handlers** (buttons/selects/modals, Phase 6B): one file per `commands/
-  components/` exporting `{ namespace, handle } satisfies ComponentHandler`. CustomIds are
-  `<namespace>:<action>[:...args]`; `interactionCreate` routes by the first segment to the
-  owning handler (parallel to slash-command-by-name). Same fail-fast (duplicate namespace
-  throws at load) + never-crash (handler errors caught, generic ephemeral reply). A handler
-  must respond exactly once — `reply`, `update`, or `showModal` (the last acknowledges, so
-  no follow-up after it). Colocate Discord builders as `_`-prefixed siblings. Eleven consumers
-  so far: `character` (the creation **wizard panel** — step picker/Continue driven by the
-  D20 step catalog, race/gender selects, the attribute point-buy view, Edit-details + body
-  modals, Submit — plus the owner's approval buttons/modal), `comic` (the `h!comic` browser),
-  `activity` (the generic durable-activity router — D22: resolves the session by id, verifies
-  the clicker owns a participant, dispatches to the `_activities/` registry by session type),
-  `profile` (the D27 account-settings toggles), `inventory` (the D28 pack/equipment
-  panel + the D33 Store transfer), `stash` (the D33 withdraw panel over the `Item`
-  collection — reuses the `/inventory` renderers), `play` (the D30/D31 game hub —
-  travel select + condition-gated local-action buttons; the shared hub VIEW + context
-  loader live in `_hubView.ts`), `duel` (the D35 consent card + fight orchestration),
-  `charskills` (the read-only `/character skills` tree viewer — D34), `trial` (the
-  D37 Spire-ladder **browser** — ◀ ▶ scroll the champions + a Fight button; owns the PvE
-  bout orchestration, mirroring `duel`), and `combatplan` (the D41 `/character combat`
-  plan editor — default-style selects + a two-step rule builder whose half-built rule
-  rides the customId).
-  All are fully
-  **stateless** — all state rides in the customIds (+ the DB), so they survive restarts
-  and never expire, unlike a per-message collector. A modal opened from a panel button can
-  `interaction.update()` that panel (`ModalSubmitInteraction.isFromMessage()`).
-- **Component mutations on game state** (the `inventory` handler is the reference pattern):
-  fast-fail if the character is in-memory locked (don't queue a button click behind a whole
-  fight), `deferUpdate()` (the lock wait + writes can pass the ~3 s ack window), then
-  `runExclusive` → **re-read the doc** → re-check session-busy → validate against the FRESH
-  state → one atomic, filter-guarded service write → repaint via `editReply`. Read-only
-  navigation skips the lock entirely — staleness self-heals because every view renders from
-  the DB, never from the message.
-- **Slash commands that may wait on a lock** (e.g. `/smackdown` queued behind another fight) must
-  `deferReply` *before* `runExclusive` — an interaction only waits ~3 s for its first ack —
-  and use `editReply` inside. The component equivalent (the `/play` travel select, D30) uses
-  `deferUpdate` + `editReply` instead. Autocomplete handlers must be **read-only**
-  (`peekActiveCharacter`, not `getOrCreate`): they fire per keystroke.
-- The owner bypasses cooldowns and permission checks (but not command logic).
-- Jobs are loaded and validated in `init()`, but started by `clientReady` so they never
-  run against a half-ready client.
-- Ephemeral replies use `flags: MessageFlags.Ephemeral` (the `ephemeral` option is
-  deprecated).
-- **Every command path must do something sensible on its own** (owner's TODO/General): a
-  subcommand invoked with no optional arg, or the barest form a user can send, must resolve to
-  a usable menu/interface or a clear message — never a crash or a silent no-op. Prefer an
-  **interface over a free-text argument** where the choice is from a known set (the `/smackdown
-  trial` roster browser replaced an `opponent:<name>` option that crashed on a typo/bare call —
-  scroll + click, not type a name). Discord already forces a subcommand to be picked for
-  subcommand-group commands, so the failure mode to guard is an *optional argument's* empty path.
+  Events: `defineEvent({ name, once?, execute(client, ...args) })` — use `clientReady`.
+- **Fail fast at startup** (loader throws on missing export, duplicate name/alias/namespace,
+  invalid cron); **never crash at runtime** (every dispatch boundary catches, logs, replies
+  with a generic in-character error). Loader skips `_`-prefixed and test files.
+- **Component handlers**: customIds are `<namespace>:<action>[:...args]` routed by first
+  segment. A handler must respond **exactly once** (`reply` / `update` / `showModal`). Fully
+  **stateless**: all state rides in customIds + the DB, so panels survive restarts. A modal
+  opened from a panel can `interaction.update()` it (`isFromMessage()`).
+- **Mutating component clicks** (reference: `inventory`): fast-fail if in-memory locked →
+  `deferUpdate()` → `runExclusive` → **re-read doc** → re-check session-busy → validate
+  against fresh state → one atomic filter-guarded service write → repaint via `editReply`.
+  Read-only navigation skips the lock (views render from the DB, staleness self-heals).
+- **Slash commands that may wait on a lock** must `deferReply` BEFORE `runExclusive` (~3 s
+  ack window) and `editReply` inside. Autocomplete must be **read-only** (`peekActiveCharacter`).
+- The owner bypasses cooldowns/permission checks (not command logic). Jobs are validated in
+  `init()` but started by `clientReady`. Ephemeral = `flags: MessageFlags.Ephemeral`.
+- **Every command path must do something sensible bare** (no-arg subcommand ⇒ usable
+  menu/message, never a crash/silent no-op). Prefer an interface (buttons/selects) over a
+  free-text argument when the choice is from a known set.
 
-### Helpers — do NOT port OldBot's `common.js`
+### Helpers & response composition
 
-OldBot's `modules/common.js` is an 1820-line god-module. **Do not port it wholesale.**
-Grow small, cohesive, typed `lib/` modules on demand instead:
+Grow small typed `lib/` modules on demand — never port OldBot's `common.js` god-module, its
+validator family, array-or-scalar polymorphism, or stringly-typed dispatchers; helpers return
+real values and throw on genuine errors.
 
-- `lib/random.ts` — `randomInt`, `randomItem`, `chance`, `weightedItem` (the typed
-  replacement for the old 2D-array frequency lists).
-- `lib/text.ts` — pure `string → string` flavor helpers (`bold`, `capitalize`, ...).
-- `lib/discord.ts` — `chunkMessage` / `replyChunked` (the > 2000-char splitter that
-  OldBot's naive `.send()` lacked — the AI persona replies through it too),
-  `botClient(message)` (the one documented `message.client` cast), member/channel
-  resolvers as needed.
-- `lib/grammar.ts` — a tiny Tracery-style `expand(grammar)`: composes *varied* sentences
-  from interchangeable parts. Grammars are plain data (`symbol → rules`), so they're
-  reusable, combinable (merge with spread), and accept a runtime symbol injected per call.
-
-**Response composition (ports the old `responses.js`/`dataSpeech.js`/`generators.js` cleanly).**
-Three reusable layers so flavour never gets hardcoded inside a command (the owner wants to
-reuse/combine these): **data** — general vocabulary in `lexicon.ts` (adjectives, adverbs, nouns,
-terms — reusable by the RPG too) + command-specific pools in `fun/` (`oracle.ts`, …), all
-`as const` tuples; **generators** — `fun/generators.ts` fragment builders (`personalInsult`,
-`accuracyPrefix`, `certaintyTerm`); **composer** — `lib/grammar.ts`. Pick by shape: a fixed
-set of lines → `defineRandomResponseCommand`; a sentence that should *vary/assemble* → `expand`
-+ lexicon + generators (`h!cost` is the worked example); fixed lines that must all agree with
-**one** subject (you / a named person) → `lib/person.ts` (`personGrammar` — pronoun/verb forms,
-the `h!love` example), *not* `expand` (which would pick a different person per token). The
-command file stays a one-liner.
-
-**Dead on arrival in TypeScript** — never reintroduce: the `checkIfString/Array/Int/...`
-validator family, `convertByFunction`/`runFunctionOnAll` (array-or-scalar polymorphism),
-`dcCheckIfMessage/Channel/Member` type guards (use discord.js `.isSendable()`,
-`interaction.isButton()`, etc.), and stringly-typed dispatchers like `dcSendMsg(msg, c,
-'reply')`. The type system replaces all of these. Helpers return real values and throw on
-genuine errors — no silent `return undefined`.
-
-Fun-command flavor data (word lists, response tables) lives in `src/fun/` as typed data
-modules (D10); the command file stays thin (parse args → call `lib`/`fun` → reply).
-
-**Adding a "pick a random line" troll command** = a data array in `src/fun/` + a tiny
-declarative call to `defineRandomResponseCommand` (`commands/prefix/_randomResponse.ts`).
-Options: `responses`, `extraResponses` (per-call dynamic lines), `funny` (append the
-`, yes-yes` tic to non-URL replies). Used by `you`, `hate`, `is`. Commands with real
-logic (`rate`, `who`, `dndalign`, `roll`, `choose`) stay hand-written `satisfies
-PrefixCommand`. Adding a new *response* to an existing command is just one array line.
+Flavour composition has three layers (never hardcode flavour in a command): **data**
+(`lexicon.ts` general vocabulary + `fun/` per-command pools, `as const`), **generators**
+(`fun/generators.ts` fragment builders), **composer** (`lib/grammar.ts` Tracery-style
+`expand`). Pick by shape: fixed line pool → `defineRandomResponseCommand`
+(`commands/prefix/_randomResponse.ts`; `responses`/`extraResponses`/`funny` options); varied
+assembled sentence → `expand` + lexicon (worked example `h!cost`); fixed lines agreeing with
+ONE subject → `lib/person.ts` `personGrammar` (`h!love`). Adding a response = one array line.
 
 ### Testing (Vitest)
 
-- `*.test.ts` colocated next to the unit under test. The loader skips `_`-prefixed and
-  `*.test`/`*.spec` files, so tests can live anywhere under `src/` safely.
-- Pure logic is the priority to test: `lib/` (random, text, the `chunkMessage` splitter,
-  `targetFromArgs`), `core/locks.ts` (mutual exclusion, deadlock-freedom, FIFO drain,
-  release-on-throw), the command factory. Mock `Math.random` via `vi.spyOn` for
-  deterministic randomness.
-- discord.js objects are faked with a minimal `{ ... } as unknown as Message`; don't
-  pull in a real client. ESLint relaxes `require-await` in `*.test.ts` **and
-  `src/testing/**`** (async test doubles that match a callback signature without awaiting).
+Three layers by cost (`przewodnik.md` = owner-facing walkthrough); tests colocated, loader-safe:
 
-**Three test layers, by cost (see `przewodnik.md` for the owner-facing walkthrough):**
+1. **Pure unit tests** (`*.test.ts`, the majority) — Discord- and DB-free. Mock randomness
+   via `vi.spyOn(Math, 'random')`; fake discord.js objects minimally (`as unknown as Message`).
+2. **DB tests** (`*.db.test.ts`) against a real in-memory mongod: call `useTestDb()`
+   (`src/testing/memoryDb.ts`) once per file — boots a throwaway server, wires the default
+   mongoose connection, wipes collections between tests. For what a mock can't prove:
+   pipeline clamps, `$max`/status-guarded transitions, cross-collection transfers, the busy
+   switch guard. Never point tests at a shared cloud DB.
+   **mongod caveat**: in-memory mongod reports `modifiedCount: 1` even for a NO-OP
+   `$set`/`$addToSet` — derive "did it change?" from a **filter guard** (`matchedCount`),
+   never from `modifiedCount` (`locationStateService.discoverFeature` still does the latter —
+   known double-fire risk, fix on touch).
+3. **Interaction-flow tests** (`*.flow.test.ts`) — click → handler → service → in-memory DB →
+   repaint, via `src/testing/fakeInteraction.ts` (`fakeButton`/`fakeSelect`/`fakeModalSubmit`,
+   `fakeClient`, `routeComponent`; `profile.flow.test.ts` is the reference). Real Discord API
+   behaviour (ack window, ephemerals, rendering) stays a manual smoke test via `ENV_FILE` +
+   the test bot.
 
-1. **Pure unit tests** (`*.test.ts`, the majority) — Discord- and DB-free logic. Fast,
-   the default; write these whenever logic can be extracted pure.
-2. **DB tests against a real in-memory Mongo** (`*.db.test.ts`) — for the service layer,
-   whose whole point is Mongo behaviour a mock can't prove: aggregation-pipeline clamps
-   (`applyResourceDeltas`), `$max`/status-guarded transitions (approval, `advance` step
-   guard), cross-collection transfers (`itemService` deposit/withdraw), the busy-switch
-   guard. Call **`useTestDb()`** (from `src/testing/memoryDb.ts`) once at the top of the
-   file: it boots a throwaway `mongod` in memory (via `mongodb-memory-server`, a
-   devDependency — the binary is cached after the first run), wires the mongoose default
-   connection to it exactly like production `connectDb`, and wipes every collection
-   between tests. No Atlas, no network, no secrets, no risk to live data — plain
-   `npm test` runs them. Do **not** put DB tests on a shared cloud database.
-   Covered so far: `characterService`, `accountService`, `activitySessionService`,
-   `itemService`, `smackdownService` (Elo swing + tallies, the `$max`-monotonic
-   `trialRung` D37 guard, the dynamic-`sortField` leaderboard D36), the backup/restore
-   round trip (`backup.db.test.ts` / `restore.db.test.ts` — EJSON dates, legacy-dump
-   revival, snapshot semantics) and
-   `locationStateService` (lazy-upsert defaults, filter-guarded weather re-roll +
-   event sweep on read, the `$ne`/`$addToSet` dedup guards, the pipeline stat clamp
-   with `$ifNull` fallback — D31). **mongod caveat found while writing these:** on the
-   in-memory `mongod` (v8.x), `updateOne` reports `modifiedCount: 1` even for a NO-OP
-   `$set`/`$addToSet` (setting a field to its existing value / re-adding a present
-   element). So a "did this actually change?" boolean derived from `modifiedCount` is
-   **not reliable** — the robust dedup pattern is a **filter guard** (`tryStartEvent`'s
-   `'events.eventId': { $ne: eventId }` → matchedCount 0 on a dupe), NOT reading
-   `modifiedCount` after an unconditional `$addToSet` (`locationStateService.discoverFeature`
-   does the latter, so its "newly-found" return can double-fire under this behaviour —
-   worth converting to a filter guard if a double chronicle/announce ever bites).
-3. **Interaction-flow tests** (`*.flow.test.ts`) — drive a component handler end-to-end
-   (click → handler → service → in-memory DB → repaint) with the fake interactions from
-   `src/testing/fakeInteraction.ts` (`fakeButton` / `fakeSelect` / `fakeModalSubmit`,
-   `fakeClient`, `routeComponent`). Each fake records what the handler did (`captured.replies`
-   / `updates` / `modals` / `deferred*`) to assert against. `profile.flow.test.ts` is the
-   reference. The harness fakes only what handlers touch; **real Discord API behaviour
-   (the ~3 s ack window, ephemeral semantics, permissions, actual rendering) stays a manual
-   smoke test** — that is what a separate `.env.test` + test bot/guild (via `ENV_FILE`,
-   already supported by `config.ts`) is for, not automated tests.
-- The seed's logic (`src/scripts/seed.ts`) is split from its CLI (`seed-characters.ts`) so
-  it imports no `config` and is covered by `seed.db.test.ts` end-to-end (D38).
+The seed's logic (`scripts/seed.ts`) is split from its CLI so `seed.db.test.ts` covers it
+end-to-end.
 
 ## Concurrency model (the important part)
 
-Problem: long interactive actions (turn-based combat, multi-step activities) must not be
-corrupted by concurrent writes (hourly regen cron, other commands targeting the player),
-and a player must not run two activities at once.
+Long actions must not be corrupted by concurrent writes (cron regen, other commands), and a
+player must not run two activities at once.
 
-Solution — `CharacterLockManager` in `core/locks.ts`. Locks are keyed by
-**`Character._id`**, not by Discord user id (D18): resources/AP/ELO live on characters,
-NPCs (`ownerId: null`) must be lockable too (6C movement), and
-`ActivitySession.participantIds` are character ids. "One user, one activity at a time"
-is enforced separately, by the active-character switch guard
-(`accountService.setActiveCharacter` refuses while either character is **busy** — in-memory
-locked OR in an active `ActivitySession`, so it holds across restarts too — D22).
-
-- `runExclusive(characterIds: string[], fn)` — acquires locks for all listed characters
-  (**always sorted by character id** to prevent deadlocks), runs `fn`, drains each
-  character's deferred queue, then releases. Draining happens **before** release, so a
-  deferred op can never interleave with the next holder's critical section.
-- `isLocked(characterId)` / `lockedIds()` — used by cron jobs to split bulk vs deferred work.
-- `deferOrRun(characterId, op: () => Promise<void>)` — if the character is unlocked, run
-  `op` immediately; if locked, push it onto that character's FIFO deferred queue (drained
-  by the current holder just before it releases — see above). Deferred ops must be small,
-  self-contained async functions performing atomic DB writes, and must never call
-  `runExclusive` themselves.
+- **`CharacterLockManager`** (`core/locks.ts`), keyed by **`Character._id`** (D18 — NPCs are
+  lockable; sessions store character ids). "One user, one live activity" is enforced
+  separately: `setActiveCharacter` refuses while either character is **busy** (in-memory
+  locked OR in an active `ActivitySession` — holds across restarts).
+- `runExclusive(characterIds, fn)` — acquires all locks **sorted by id** (deadlock-free),
+  runs `fn`, **drains each deferred queue BEFORE release** (a deferred op can never
+  interleave with the next holder's critical section).
+- `deferOrRun(id, op)` — run now, or push to that character's FIFO queue. Deferred ops are
+  small self-contained atomic writes; never `runExclusive` inside.
+- `isLocked` / `lockedIds` — cron jobs split bulk vs deferred work.
 
 Rules:
 
-1. **Short auto-resolved actions** (sparring, fishing roll, a trade): acquire locks on all
-   participants for the whole action, keep transient state **in memory**, commit the outcome
-   at the end in a single service call. Never leave the DB half-committed mid-action — on
-   crash, an in-progress *short* action is simply lost (accepted; it was sub-second). **Long,
-   interactive, multi-step activities are different — see "Durable long activities" (D17).**
-2. **Commands that do one atomic write** (give currency, single roll rewards): no lock
-   needed if expressed as a clamped delta (D6). Use locks only for read-modify-write
-   sequences or "must not interleave with an activity" semantics.
-3. **Cron jobs**: bulk `updateMany` excluding `lockedIds()`, then `deferOrRun` an
-   equivalent single-character op for each locked character. Nothing is lost; regen
-   lands right after the fight ends — and always before the next lock holder starts.
-   With durable activities the regen job actually writes **three** bulk-first groups
-   (free / session-busy / locked-deferred) — see D23 for which resources tick where.
-4. Locks are **in-memory only** (single process, single guild). They do not survive
-   restarts — that's fine for short actions (rule 1) and intentional for long ones: a crash
-   auto-releases the in-memory lock so a player is never stranded "busy forever"; the durable
-   `ActivitySession` (D17) carries the real cross-restart state.
+1. **Short auto-resolved actions** (sparring, a gather roll, a trade): lock all participants,
+   keep transient state in memory, commit once at the end. On crash the action is simply
+   lost (accepted — it was sub-second).
+2. **Single atomic clamped writes** need no lock (D6). Locks are for read-modify-write or
+   "must not interleave with an activity" semantics.
+3. **Cron**: bulk `updateMany` excluding `lockedIds()`, then `deferOrRun` per locked
+   character (with D23's free / session-busy / locked three-group split for regen).
+4. Locks are **in-memory only** — a crash auto-releases them (nobody is stranded "busy
+   forever"); the durable `ActivitySession` carries the real cross-restart state.
 
-### Durable long activities (D17)
+### Durable long activities (D17/D22)
 
-Anything that holds **accumulated state across player think-time** (turn-based duel,
-multi-room exploration) must NOT keep that state only in memory. Instead:
+- `ActivitySession` `{ type, participantIds, step, status, state, expiresAt }` is both the
+  saved per-step state and the cross-restart busy lock. `state` is an opaque blob owned by
+  the activity's own code.
+- **Commit per step**: `activitySessionService.advance(id, expectedStep, newState)` — a
+  step-guarded atomic update, idempotent against double-clicks and crash-replay (a stale
+  click returns null ⇒ repaint the current step).
+- Components carry `sessionId` in customIds; a **TTL index** on `expiresAt` reaps idle
+  sessions (timeout = forfeit ⇒ no side effect needed; only a clean cancel refunds first).
+- Handlers live in the `_activities/` registry (`type → { render, onAction }`); the generic
+  `activity` router checks liveness + that the clicker owns a participant. **Crash-safe
+  completion** (see the `challenge` handler): win the final `advance` (step guard = completion
+  mutex) → run idempotent side effects → delete session; `render` can derive the terminal
+  outcome and offer a finalize re-entry. Step logic stays pure in `game/activity/`.
+- Hang guard: cap lock-hold time; time out external calls (Discord/OpenAI).
 
-- **`ActivitySession` doc** (`db/models/activitySession.ts`): `{ type, participantIds, step,
-  status, state, expiresAt }`. It is both the saved per-step state *and* the cross-restart
-  "this character is busy" lock (`getActiveForParticipant`). `state` is an opaque blob the
-  activity's own code owns; the durability layer never interprets it.
-- **Commit per step, not at the end.** Each player decision is one atomic
-  `activitySessionService.advance(id, expectedStep, newState)` — a step-guarded update
-  (`{_id, step:N, status:'active'} → $set state, $inc step`). The step guard makes a step
-  **idempotent** against double-clicks *and* crash-replay: a stale/duplicate click finds the
-  step already advanced and is safely ignored (returns null).
-- **Stateless components** carry the `sessionId` in the customId (like the panel/comic), so
-  buttons keep working after a restart — they re-resolve the session from the DB.
-- **Reaping**: a **TTL index** on `expiresAt` (refreshed each step) deletes idle/abandoned
-  sessions automatically. Per the D17 AP policy (charge at start; timeout ⇒ forfeit), a TTL
-  delete needs no side effect; only a *clean cancel* runs a refund before `abandon()`.
-- **Hang guard**: wrap long actions with a max lock-hold deadline and time out external calls
-  (Discord/OpenAI) so a wedged step can't hold a player's lock forever.
-
-**Consumers dispatch through the D22 registry** (`commands/components/_activities/`): a
-handler per session type owns `render(session)` (current step from state — also used for
-re-entry and stale-click repaints) and `onAction(...)`. The **`challenge`** handler (D26,
-successor of the single-button `obstacle`) is the reference implementation, including the
-**crash-safe completion choreography**: win the final `advance` (the step guard doubles as
-a completion mutex) → run the idempotent side effects (setLocation, chronicle) → delete the
-session; if the process dies in between, `render` derives the terminal outcome from state
-and shows a "Press on" finalize button that re-runs the idempotent tail. Activity *step
-logic* stays pure in `game/activity/` (e.g. the `challenge.ts` reducer) so it's testable
-without Discord.
-
-Challenges roll real d100 checks against attributes/skills (D25/D26); balance numbers and
-richer stakes (damage, loot) still wait for the ruleset (D14). Next consumers: the serious
-`/smackdown duel`, richer 6C encounters.
-
-Core primitive (Phase 2, re-homed onto characters in 6A): `characterService.applyResourceDeltas(characterId, deltas)`
-— aggregation-pipeline update that adjusts resources and clamps to `[0, max]` server-side.
-Most of the bot should mutate characters only through the service. Sibling methods follow
-the same atomic-pipeline pattern: `applyCurrencyDeltas` (clamp `>= 0`), `spendActionPoints`
-(atomic check-and-spend), `regenAll` (bulk `updateMany` with a per-document pipeline — one
-round trip for everyone), and `regen` (single-character deferred op).
-
-Key technique: **aggregation-pipeline updates compose D6 and D7**. Because `updateMany`
-accepts a pipeline that references each document's own fields (`$min`/`$max`/`$add` over
-`$resources.<k>.current`), the hourly regen is one bulk write that computes a per-character
-clamped result — no read-modify-write, no per-character round trips, no lost updates against
-concurrent command writes. The same `$set`-map builder backs both single-doc and bulk
-methods (`setStage` in `characterService`).
+Core primitive: **`characterService.applyResourceDeltas`** — aggregation-pipeline update
+clamped `[0, max]` server-side; siblings `applyCurrencyDeltas` (≥ 0), `spendActionPoints`
+(atomic check-and-spend), `regenAll`/`regen`. Pipeline updates compose D6+D7: hourly regen is
+ONE bulk write computing per-character clamped results — no read-modify-write, no lost updates.
 
 ## MongoDB modeling notes
 
-> The authoritative, always-current model lives in `Ruleset/` (one topic file per system).
-> This section keeps the *design rationale* (why the shapes are as they are); look there for
-> concrete fields/values.
+> The authoritative current model lives in `Ruleset/` (fields/values per topic). This section
+> keeps the shape rationale.
 
-- Two collections (6A, D12): **`Account`** (one per Discord user, keyed by user id —
-  settings + `activeCharacterId`) and **`Character`** (the game entity, keyed by its own
-  **uuid**; player-owned or NPC via `ownerId: null`). `models/character.ts` shape is
-  **derived from the content catalogs** (`game/data/{resources,attributes,skills,currencies}.ts`):
-  the schema field maps, the `CharacterDoc` keys, and `defaultCharacterStats()` all read
-  from those catalogs, so adding e.g. a currency happens in exactly one place. Each resource
-  is stored as `{ current, max }`.
-- **Resource `max` is stored, not derived on read — but the value it stores is now
-  attribute-derived (D39).** `game/character/resources.ts`'s `recalculateMaxResources`
-  computes Health (Constitution-led, + a lesser Strength/Willpower nudge) and Stamina
-  (Constitution-led, + a lesser Willpower nudge) from the character's current
-  `attributes`; `defaultCharacterStats` seeds a fresh character full at that computed
-  max, and `characterService.setRace`/`setAttributeAllocation` recompute it on every
-  attribute change, via `applyMaxResources` (a character sitting at full stays full on
-  the new cap; a damaged one keeps its current wounds, just a new ceiling). Frame
-  (weight/height, R12) is still a documented future addend, not built. This keeps the
-  "stored, not derived on read" stance (clamp/regen pipelines stay simple) while making
-  the number real instead of flat — a recompute on attribute change, not a migration.
-- Only the two regenerating vitals (`health`, `stamina`) ship so far. Meters that *rise*
-  over time (hunger, stress, etc. from the old schema) have inverted tick semantics and
-  get their own job later; add them to `resources.ts` when built.
-- **`attributes` are real since D25** (racial base + creation point-buy); **`skills` are
-  real since D34** — the **skill-tree model** (`game/data/skills.ts` trees + the
-  `game/character/skills.ts` engine): a **sparse node map under `progression`**, consumed by
-  the D34 check engine (per-node attribute blend + Σ path points) and the combat placeholder.
-  What is still 🟡 is the tree *content* and *numbers* (weights, growth). **Skills grow in
-  play since D40**: `creditSkillUse(id, nodes, uses)` is credited by the Spire duel/trial
-  (opponent-strength weight) and travel-challenge rolled options (difficulty weight);
-  crafting/professions are the next consumers. The old dense `{level,progress}` field map is
-  **gone** (replaced, not tidied away).
-- Free tier M0: 512 MB storage, shared cluster. Avoid per-message writes, avoid
-  unbounded arrays (the old `gFishing.fish[]` grew without limit — cap or aggregate).
-- **Persistence follows access pattern, not size (D32/D33).** Embed state that is
-  *bounded* (finite by a code catalog) AND *read on the hot path* with the character
-  (every check / combat / `/play`): skills, talents and progression (sparse, under a
-  `progression` subdoc) and the **carried inventory pack + equipment**. Split state that is
-  *unbounded* OR *read rarely and separately* into its own collection — **owned/stored
-  items** are the reference case: a per-instance **`Item`** collection (one doc per
-  instance/stack, `_id = instanceId`, indexed `{ownerId, container}`, paginated + aggregated
-  server-side), so a stash of thousands never taxes a normal character read. The `equipment`
-  map may reference only embedded pack instances (equip-from-stash goes through the pack — D33).
-- The old schema in `OldBot/Tosche/modules/schematicsGuild.js` remains the **reference**
-  for what the game tracked; redesign freely — it's a starting point, not a contract.
+- Core pair: **`Account`** (per Discord user) + **`Character`** (uuid-keyed; NPC =
+  `ownerId: null`). Other collections: `ActivitySession` (D17), `LocationState` (D31),
+  `Item` (D33), `SmackdownRecord`.
+- `models/character.ts` is **derived from the content catalogs** (resources, attributes,
+  skills, currencies) — adding e.g. a currency happens in exactly one place. Resources are
+  `{ current, max }`; **max is stored, not derived on read**, but its value is
+  attribute-derived (D39) and recomputed on attribute changes via `applyMaxResources`.
+- Only the two regenerating vitals (`health`, `stamina`) exist; rising meters (hunger,
+  stress) have inverted tick semantics and get their own job when built.
+- **M0 discipline**: avoid per-message writes and unbounded arrays; bulk-first; sparse maps.
+- **D32/D33**: embed bounded + hot-path state (progression, carried pack + equipment); split
+  unbounded/rarely-read state into its own collection (the stash). The `equipment` map may
+  only reference embedded pack instances — equip-from-stash goes through the pack.
+- The old schema in `OldBot/Tosche/modules/schematicsGuild.js` is a reference for what the
+  old game tracked — a starting point, not a contract.
 
 ### Content vs state (D10)
 
-Static content (fish species, item definitions, activity tables) is code, not DB data —
-data modules under `src/game/data/` (game content) and `src/fun/` (word lists). Pure
-data, no logic. Pattern:
+Static content (items, fish, locations, word lists) is **code**, not DB data — typed data
+modules under `game/data/` and `fun/` (`as const satisfies Record<string, X>`, exported
+`type XId = keyof typeof X`). Rules:
 
-```ts
-export const FISH = {
-   river_trout: { name: 'River Trout', rarity: 'common', minWeight: 0.2, maxWeight: 3.5 },
-} as const satisfies Record<string, FishDefinition>;
-
-export type FishId = keyof typeof FISH;
-```
-
-Rules:
-
-1. Content ids are **stable slugs** (`'river_trout'`), never display names or array
-   indices. Display names are free to change; ids are not.
-2. Ids are **append-only**: once an id exists in any DB document, never rename or delete
-   it without migrating the referencing documents.
-3. Code that resolves an id from a DB doc must handle "unknown id" gracefully
-   (log + fallback, not crash) — it signals a rename that skipped rule 2.
-4. Instance documents store **only per-instance fields** (`fishId`, `weight`,
-   `caughtAt`); static fields are resolved from code at read time. Exception: if a
-   historical value must survive content rebalancing (e.g. sale price at time of sale),
-   snapshot that one field into the document at write time.
+1. Content ids are **stable slugs**, never display names or indices.
+2. Ids are **append-only** once referenced by any DB document (rename/delete ⇒ migrate).
+3. Resolving a stored id must tolerate "unknown id" (log + fallback, not crash).
+4. Instances store only per-instance fields; static fields resolve from code at read time.
+   Exception: snapshot a value that must survive content rebalancing (price at sale time).
 
 ## Theme / lore quick reference
 
-- Races: canid, ermehn, felis, lutren, polcan, tamian, vulpin.
-- The bot is **Tosche** on the server; the character is **Tosch**, "everyone's favorite
-  BtWD general". Flavor text is in-character where it fits; the old bot sprinkled tics
-  like ", yes-yes" / " lol" onto ~25% of fun responses (`additionalWordList1`) — keep
-  that spirit.
-- Old bot has large curated word lists (adjectives, classes, animals, weapons, places,
-  Darkest Dungeon quotes...) in `OldBot/Tosche/bot.js` — port them as data modules into
-  `src/fun/` when porting commands.
+Races: canid, ermehn, felis, lutren, polcan, tamian, vulpin. The bot is **Tosche**; the
+character is **Tosch**, "everyone's favorite BtWD general". Flavor text is in-character where
+it fits; sprinkle tics like ", yes-yes" on ~25% of fun responses (the old bot's spirit).
 
-## OldBot reference (what to port, what to avoid)
+## OldBot reference
 
-`OldBot/Tosche/` is the previous JavaScript bot. Two generations coexist there:
+`OldBot/Tosche/` = the previous JS bot, **reference-only** (port ideas + word lists, never
+code). Useful: `bot.js` (fun commands + curated word lists), `commands/guild/*` (fish,
+smackdown, jail, leaderboards — the game features to rebuild), `modules/schematicsGuild.js`,
+`modules/chatGPT.js`. **Anti-patterns — never reproduce**: busy-wait transaction polling
+(→ `CharacterLockManager`), the global one-fight-at-a-time flag, hardcoded ids/channel names
+(→ config), secrets in source (`bot.js:76` has a **burned** MongoDB credential — never commit
+secrets), commands doing DB access directly.
 
-- `bot.js` (~2600 lines): legacy giant `switch` with dozens of fun commands and inline
-  word lists. **Port the command ideas and lists**, not the structure.
-- `commands/{regular,guild,master,rp}/`, `events/`, `modules/`, `classes/`: the newer
-  per-file architecture. Useful references: `events/messageCreate.js` (prefix routing,
-  cooldowns), `modules/schematicsGuild.js` (schemas), `modules/commonGuild.js`,
-  `commands/guild/*` (fish, smackdown, jail, leaderboards, profile — the game features
-  to rebuild), `modules/chatGPT.js` (Phase 5 reference).
+## Status & roadmap (2026-07-10)
 
-**Anti-patterns in OldBot — do not reproduce:**
+**Where the build queue lives: `PLAN.md`** (session-sized briefs + the owner decision queue).
+Idea backlog and full decision history: `DECISIONS.md`.
 
-- Busy-wait "transaction" loop (`cdWaitForAvailableTransaction` polling every 5 s) and
-  the `MemberData.collector/transactionOpen` task system → replaced by `CharacterLockManager`.
-- Global `fightInProgress` boolean (one fight at a time server-wide).
-- Hardcoded ids and channel names in code (`'553933942193913856'`, `'smackdown-spire'`)
-  → ids go to `.env` / config, channel references to a config map.
-- Secrets in source: `bot.js:76` contains a commented-out MongoDB URI **with credentials**.
-  Treat those as burned; never commit secrets.
-- Mixed responsibilities (commands doing DB access directly, modules importing each
-  other in a web).
+**Built and green** (518 tests, build + lint pass): core runtime; the whole fun/utility/admin
+prefix layer; AI persona; moderation + espionage logs; character creation wizard + owner
+approval; attributes + point-buy (D25); d100 checks + travel challenges (D26); `/play` hub +
+living locations (D30/D31); inventory/equipment + stash (D28/D33); skill trees + LIVE
+learn-by-doing (D34/D40); real combat — duel, bout modes, Spire ladder, styles + combat
+plans, flowing momentum (D35–D37, D41–D42); seed/backup/restore + CI (D38, AUDIT §1/§2.3/§2.9).
 
-## Idea backlog — to CONSIDER, not commitments
+**Missing (current focus — the peaceful core loop, see PLAN.md):** professions/gathering
+(no loot source besides `/item grant`), economy (nothing earns or spends coins), NPCs (6C),
+dialogue; every hub action is still a placeholder; stamina has no consumer.
 
-Proposals from the 2026-07-02 design review. **None of these is decided.** Each needs an
-explicit owner "yes" before any work starts; when accepted, move it into the roadmap (and
-the decision log if it sets a rule); when rejected, delete it here with a one-line why.
-Several overlap topics designed in `Ruleset/` — coordinate there instead of deciding twice.
+**Pending ops (owner):** one `npm run deploy` covers the queued slash changes (`/character
+combat`, `/smackdown` trial browser, `/stash`, `/leaderboard` categories). A live end-to-end
+smoke against Atlas has still not been run.
 
-- **Ambient events** — rare, hard-throttled random encounters hooked into normal chat
-  (a scuffle, a find, a Tosch challenge; reuses the ambient-AI seam + `silentChannels`).
-  Rationale: on a ~10-person server the game must play *where people already are*; "go
-  to the game channel" loops die. The single highest-leverage retention idea here.
-- **Weekly co-op server event ("Defense of Deltrada")** — cron builds a threat during the
-  week, weekend battle, everyone contributes actions (atomic `$inc` into an event doc);
-  co-op vs environment beats PvP at this player count (no simultaneous presence needed).
-  Also the natural **rate-limited AP sink** that keeps uncapped AP (D15) harmless.
-  *(Overlaps `Ruleset/combat.md`'s "Trial/PvE" arena mode — same muscle, design once.)*
-- **Titles/achievements** — an earned `titles[]` list displayed beside the self-chosen
-  epithet ("the Carp-Slayer", "Punching Bag of Deltrada"). Social visibility is the best
-  reward currency on a friends server and costs zero balance work. Pairs with the planned
-  sparring-Elo removal (D16): rework the leaderboard to W/L + streaks + funny stats.
-- **Tosch as a game actor** — feed game events (duel results, arena outcomes) and approved
-  character bios into the AI persona so Tosch comments on and "knows" the cast; later,
-  NPC dialogue with location context. AI stays flavor-only, never outcomes (`Ruleset/README.md` R6).
-- **Tavern gambling** — a dice game vs the house in the Sunken Tankard (canon has
-  *Mearog* — see `Ruleset/flavor-progression.md`); small self-running coin sink, a reason to travel, and a
-  simpler first `canCharacterAct` consumer than the duel.
-- **Locations = activity tables** — treat as a 6C design constraint: travel is only worth
-  building if each location has its own things to do (tavern = gambling/rest, plaza =
-  market/gossip, spire = duels, river = its own fishing table). Otherwise `travel` is a
-  button that renames a string. *(The `/play` hub (D30) is now the SURFACE for this —
-  `game/data/hubActions.ts` lists per-location actions as buttons, all placeholders today;
-  each backlog activity above becomes one catalog flip + one handler case.)*
-- **Seasons / "campaigns"** — optional 2–3-month themed arcs with their own leaderboards;
-  winners keep permanent titles. Fights the "everyone is maxed, nothing to want" endgame
-  of small servers — but resets can also demotivate casuals. Genuinely undecided; revisit
-  once the RPG loop exists.
+**Surfaces:**
 
-## Roadmap & status
+- **Prefix `h!`** — ~45 fun/utility commands (`h!help` auto-lists) + admin: `clear`,
+  `directmessage`/`dm`, `messagechannel`/`mc`, `backup`.
+- **Slash** — `/character` (create wizard/view/list/skills/combat/switch), `/profile`,
+  `/inventory`, `/stash`, `/item grant` (ownerOnly loot source), `/smackdown`
+  (`sparring` | `duel [mode]` | `trial`), `/leaderboard [category]`, `/play`.
+- **Events** — `messageCreate` (moderation → `h!` routing → ambient AI), `interactionCreate`,
+  `clientReady`, `messageDelete`/`messageUpdate` (espionage edit/delete log),
+  `guildMemberAdd`/`guildMemberRemove`.
+- **Jobs** — `resource-regen` (hourly, D23-aware), `db-backup` (daily 04:30 → `#espionage`;
+  `h!backup` on demand; `npm run restore` re-imports).
+- **Component namespaces** — `character`, `comic`, `activity` (+ `_activities`: `challenge`),
+  `profile`, `inventory`, `stash`, `play`, `duel`, `charskills`, `trial`, `combatplan`.
 
-**Current state (2026-07-03):** the core runtime, fun/admin command layer, AI persona and
-moderation are live; the server-RPG is mid-build — the Account/Character *structure* exists
-(6A/6B) and the **first real mechanics landed (D25–D27)**, everything else waits on the
-Phase 7 ruleset (D14, as narrowed). A full architecture review hardened the seams (D18 lock
-keying + drain-before-release, status-guarded approval transitions, side-effect-free
-lookups, word-boundary moderation matching). The **game foundations landed (D20–D24)**:
-the step-driven creation wizard, the location graph + travel (first
-`canCharacterAct`/AP consumer, now the `/play` hub — D30), the travel-encounter seam, the activity-handler registry,
-busy-aware regen, and the public chronicle channel. On top of them, **D25–D27**: the
-8-attribute catalog with racial bases + the wizard's 50-point point-buy step, the d100
-check engine, multi-approach travel challenges with deed traits (the `challenge` activity
-replaced `obstacle`), and account settings (`/profile` = account panel + toggles;
-character sheet = `/character view`). Newest: the **inventory & equipment prototype
-(D28)** — item/slot catalogs, per-character instances, the `/inventory` panel and
-`/item grant`, with armor penalties feeding challenge checks and the sheet. Then the
-**`/play` game hub (D30)** — a single location-centric entry point (travel select +
-placeholder per-location action buttons from `game/data/hubActions.ts`) that **folds the
-standalone `/travel` in**. Newest: **living locations (D31)** — the `LocationState`
-collection (lazy per-location doc: weather spells, running events, server-wide feature
-discoveries, danger/prosperity stats, visits), presence derived from the indexed
-`Character.locationId`, the game clock + one typed condition language gating hub actions
-(market closed at night, secrets hidden until found), conditional travel encounters
-(first trait consumer) and event starts — all rendered on the hub; challenge endings now
-return the player to the hub.
-Newest: the **stash (D33)** — a per-instance `Item` collection for owned-but-not-carried
-items, browsed server-side by the new **`/stash`** command and filled by a 🗄️ **Store**
-button on the `/inventory` item card; transfers run under the character lock,
-favor-duplicate-over-loss. Newest (2026-07-06): a **full-code audit** (findings + long-term
-plan in **`AUDIT.md`**) landed five hardening fixes — a daily **`db-backup`** job +
-`h!backup` (Atlas M0 has no backups; the JSON dump posts to `#espionage`), a
-`{ownerId, instanceId}` **unique index** replacing `itemService.deposit`'s stash-wide
-handle scan, a first-click-wins guard on the duel consent card, a 30 s OpenAI call timeout,
-and Discord-UI-limit guards in the catalog tests. Newest (2026-07-07): the audit's two
-recommended follow-ups landed — **`npm run restore`** (AUDIT §2.3: wipes the target DB and
-re-imports a backup dump under the seed-style typed DB-name confirmation, extracted to the
-shared `scripts/confirmDb.ts`; dumps are now relaxed EJSON so dates survive the file, and
-legacy plain-JSON dumps are revived by shape) and **CI** (AUDIT §2.9:
-`.github/workflows/ci.yml` — build + lint + test on every push, mongod binary cached).
-Newest (2026-07-07): **learn-by-doing is LIVE (D40)** — Spire duels/trials and travel
-challenges credit skill use at an opposition-scaled training weight (a stronger foe teaches
-up to 2×, a foe at ≤ half your power nothing; checks weigh by difficulty), with the growth
-bands retuned to the owner's ~10→~100-uses-per-point curve; rank-ups announce in the
-narration and the full formula sits at the top of `Ruleset/skills.md`. **No slash-command
-changes — no redeploy needed for D40.**
-Newest (2026-07-07): **fighting styles + the combat plan (D41)** — family-specific styles,
-each modifiers and/or effects (hamper, riposte), drawing attack AND defence from its skill
-node (know it better → fight better in it, and fighting in it trains it); the **`/character
-combat`** panel sets a per-family default style + up to 3 conditional switch rules
-(own/foe HP %, round), evaluated per exchange and narrated; several Spire champions now
-fight with plans of their own. **`/character` needs a redeploy** (new `combat` subcommand).
-Newest (2026-07-08): **grip-split styles + flowing momentum (D42)** — the armed style family
-is now the weapon GRIP, not one blanket "melee": 🗡️ Duelist/⛓️ Binder/🛡️ Warden (one-handed,
-over `pressing`/`binding`/`warding`) and ⚔️ Wrath/🪝 Halfsword/🏰 Iron Gate (two-handed, over
-`cleaving`/`halfswording`/`iron_ward`), each branch now sitting under its grip (`/character
-combat` plans three families). And a duel's turn order **flows** instead of alternating: a
-landed blow may press on for a follow-up (chance driven mostly by how decisively it landed +
-the style's tempo, decaying per swing), so even fighters trade single blows while a badly
-outclassed foe can be cut down in a rare 10+ hit flurry (`followUpChance`, `game/combat/duel.ts`).
-No new slash commands beyond D41's still-pending `/character combat` redeploy. **518 tests,
-build + lint green.**
-The owner has smoke-tested
-`/profile` and `/smackdown` live; the bot has not yet been run end-to-end against a live
-Atlas cluster (needs `.env` + `npm run deploy` — **`/stash` is a NEW command so a redeploy
-is required again**; the D33 Store button + `Item` collection add NO other slash changes).
-**`/smackdown` also needs a redeploy**: `trial` dropped its `opponent` string option when it
-became a roster-browser interface (the `trial` component handler adds no other slash changes).
-See `Ruleset/` for the concrete game model (one file per topic) and what is still placeholder.
-
-**What works today:**
-
-- **Prefix (`h!`)** — *fun:* `choose`, `comic`/`btwd` (interactive browser), `cost`/`price`,
-  `createname`, `dndalign`, `hate`, `is` (8-ball + verb aliases), `love`/`compliment`, `name`,
-  `rate`, `resolve`, `syllables`, `who`, `you`, `amount`/`percent`/`chance`/`%` (made-up numbers),
-  made-up measurements (`weight`/`mass`, `height`/`length`, `capacity`/`volume`, `size`, `when`, `where`),
-  made-up reasons (`how`, `why`), roasts (`animal`, `race`, `class`, `whois`), `hug`, `rant`,
-  `celebrate`/`party`, `mood`, `advice`/`therapy`, `weapon`/`weapons`, `ddquote` (Darkest Dungeon), converters
-  (`ctof`, `ftoc`, `cmtoimperial`, `kgtoimperial`, `bmi`, `bmiforheight`); *utility:* `ping`,
-  `roll`, `avatar`, `timestamp`, `help`/`commands` (auto-generated command list); *admin (ownerOnly):* `clear`,
-  `directmessage`/`dm`, `messagechannel`/`mc`, `backup` (on-demand DB dump to `#espionage`).
-- **Slash (`/`)** — `character` (`create` is the single creation/editing entry point — opens
-  the step-driven creation wizard panel for a new or still-editable draft — details, race,
-  gender, **body frame** (R20), **attribute point-buy**, submit, all on the panel — + owner
-  approval; plus **view**/list/**skills**/**combat**/switch; `view` is the public character
-  sheet with attributes, **equipment** + traits, `skills` the D34 read-only skill-tree viewer,
-  `combat` the D41 **combat-plan panel** — default fighting style per family + conditional
-  switch rules),
-  `profile` (the account panel: active character, settings toggles — D27), `inventory`
-  (the D28 pack/equipment panel: hub → category browser with sort/pages → item card with
-  equip/unequip/use/**store**/drop), `stash` (D33 — browse + withdraw the active
-  character's stored items from the per-instance `Item` collection, server-side paged),
-  `item grant` (ownerOnly: conjure catalog items into a player's
-  active character — the prototype's loot source), `smackdown sparring`
-  (round-by-round in `#smackdown-spire`, commits Elo only) and `smackdown duel [mode]` (the real
-  bout — D35: consent-gated, opposed-d100/Health/Soak, persists damage to both fighters,
-  0 HP = Downed with no other cost; **bout modes** Full Gear / Bare-Knuckle — D36; both
-  fighters fight under their **combat plans** — styles, conditional switches, hamper/riposte
-  effects, all narrated — D41 — and **train the paths they fought in**, opposition-weighted —
-  D40/D41) and
-  `smackdown trial` (the PvE **Spire ladder** — D37: opens a **browsable roster panel** — ◀ ▶
-  scroll the 10 escalating champions, each with a stat card + 🖼️ portrait placeholder, then a
-  Fight button live only for a climb/earned rematch; real HP at stake, a coin reward per rung,
-  several champions fight with **styles/plans of their own** — D41 — and the player **trains**
-  against the champion's strength (an outgrown rematch teaches
-  nothing — D40).
-  Replaced the old `opponent:<name>` argument, so a bare `/smackdown trial` always works),
-  `play` (the D30/D31 game hub —
-  the default entry point: the location's weather/time/danger/prosperity, running events,
-  **who is standing there** (players + NPCs), travel across the location graph via a
-  select, encounters as flavor lines or **multi-approach d100 challenges** — D26, rolled
-  against **equipment-modified attributes** — D28, filtered by **live conditions** — D31,
-  with rolled options **training their skill path**, difficulty-weighted — D40;
-  local-action buttons gated by time/weather/events/discoveries (still placeholders);
-  approved characters only for travel), `leaderboard [category]` (Spire boards — Ranking/ELO,
-  Most Victories, and the 🏟️ Spire Ladder (PvE rung), data-driven categories — D36/D37).
-- **Events** — `messageCreate` (banned-word check → `h!` routing → ambient AI),
-  `interactionCreate` (slash + component routing), `clientReady` (starts jobs),
-  `messageDelete`/`messageUpdate` (edit/delete log to `#espionage` — the delete log adds
-  attachments + a best-effort "deleted by" from the audit log; edits are re-moderated),
-  `guildMemberAdd`/`guildMemberRemove` (gate welcomes/farewells). Banned-word removals report
-  the **exact match + its location** (and flag punctuation-collapsed matches as possible false
-  positives), so a deletion is never a mystery.
-- **Jobs** — `resource-regen` (hourly, lock- and session-aware bulk-first per D7/D23),
-  `db-backup` (daily 04:30 — dumps every collection to relaxed EJSON and posts the file to
-  `#espionage`; Atlas M0 has no backups, so this file IS the disaster-recovery path —
-  `npm run restore` re-imports it; `h!backup` runs the same dump on demand).
-- **Component handlers** — `character` (creation wizard incl. attribute point-buy +
-  approval petition), `comic` (browser), `activity` (generic durable-activity router +
-  `_activities/` registry; first activity: `challenge`), `profile` (account-settings
-  toggles), `inventory` (the D28 panel — lock-guarded, busy-gated gear mutations, incl.
-  the D33 Store transfer), `stash` (D33 — the withdraw side: server-side paged browse of
-  the `Item` collection + lock-guarded withdraw),
-  `play` (the D30/D31 game hub — travel select + condition-gated local-action buttons,
-  re-validated at click time), `duel` (D35 — the `/smackdown duel` consent card's
-  Accept/Decline + the auto-resolve fight orchestration: lock, resolve, narrate, persist HP),
-  `charskills` (the `/character skills` viewer — read-only, no lock), `trial` (D37 — the
-  `/smackdown trial` Spire-ladder browser: ◀ ▶ roster nav + a Fight button that runs the PvE
-  bout under the character lock, persisting only the player's HP), `combatplan` (D41 — the
-  `/character combat` plan editor: default-style selects + a two-step rule builder; each
-  edit is one atomic per-family `$set`, no lock — a fight snapshots the plan under its own).
-- **Infra** — `CharacterLockManager` (`client.locks`), component-handler router
-  (`client.componentHandlers`), `AiService` (`client.ai`, optional), `settings.ts` tunables,
-  `game/chronicle.ts` (public game log — D24).
-
-- [x] **Phase 0 — toolchain**: NodeNext, tsx (dev + prod), deps upgraded, `uuid`/`openai`/
-      `dotenv` removed, empty base classes deleted.
-- [x] **Phase 1 — core runtime**: ToscheClient, loader (commands/events/jobs), `h!` routing
-      with cooldowns + `ownerOnly`, interactionCreate dispatch, error handling, graceful
-      shutdown, `deploy-commands.ts`.
-- [x] **Phase 2 — data layer**: DB connect, content catalogs, Character model + characterService
-      (atomic-pipeline delta/regen), `/profile`, hourly `resource-regen` cron.
-- [~] **Phase 3 — concurrency**: CharacterLockManager + deferred queues done & tested
-      (`client.locks`), regen job lock-aware, `/smackdown sparring` is the first `runExclusive`
-      consumer; `/smackdown duel` is the second (auto-resolve real combat — D35). *Remaining:* a
-      genuinely interactive **turn-by-turn** duel on per-round buttons (D17 seam built; D35 shipped
-      the auto-resolve v1 as a short in-memory action, manual mode layers on top).
-- [x] **Phase 4 — port fun & admin commands + events** from OldBot. The command list above + the
-      helper/data layers (`lib/{random,text,number,units,discord,grammar,person}`, `fun/*`, the
-      response-composition trio + `lib/text` `countSyllables`/`pastTense`, the latter wired as the
-      grammar `#verb.past#` modifier) + the edit/delete/member events. (`pasttense` folded into
-      grammar — no command; `therapy` dropped.) Deliberately **not** ported: `guild/*` (the old
-      RPG — superseded by Phase 6+), `rp/*` (Phase 8), and the `master/*` dev-only joke commands.
-- [x] **Phase 5 — AI persona**: Tosch-styled replies (name-trigger / AI channel / ~1% ambient),
-      behind `AiService`, optional via `OPENAI_API_KEY`.
-- [~] **Phase 6 — Account ↔ Character split** (D12–D16): *structure only, no RPG mechanics (D14).*
-      - [x] **6A** — Account + Character models, accountService/characterService, `/profile` +
-            sparring + regen on characters, ELO/currencies per character, AP (no cap — D15) +
-            `spendActionPoints` + `canCharacterAct`, `game/data/{races,locations}.ts`.
-      - [x] **6B** — `/character` lifecycle + interactive creation panel + owner approval via
-            `imperialDecrees` (petition + buttons + reject-reason modal), component-handler infra.
-      - [x] **6B+** — game foundations (D20–D24): step-catalog creation wizard (panel renders
-            from `creationSteps.ts`); locations graph + travel (**first `canCharacterAct` +
-            AP-spend consumer**; later folded into the `/play` hub — D30) + encounter seam (flavor/activity); activity-handler registry +
-            generic `activity` router + `obstacle` (**first D17 consumer**, pure-random per D16);
-            session-aware switch guard; busy-split regen (D23); chronicle channel (D24).
-      - [x] **6D — first real mechanics** (D25–D27, owner-requested 2026-07-03): 8-attribute
-            catalog + racial bases + wizard point-buy step (50 pts, max +20); `game/checks.ts`
-            d100 roll-under engine; multi-approach travel **challenges** (options = checks,
-            race affinities, deed **traits**; replaced `obstacle`); account settings +
-            `/profile`↔`/character view` split. Numbers stay 🟡 until `Ruleset/` locks balance.
-      - [x] **6E — inventory & equipment prototype** (D28, owner-requested 2026-07-03):
-            item + slot catalogs (WHFRP weapon properties, craftsmanship quality tiers,
-            materials, reach), per-character instances + slot map, `/inventory` panel
-            (browse/sort/equip/use/drop under the character lock, busy-gated), `/item grant`,
-            equipment attribute modifiers → challenge checks + `/character view`.
-            **Player storage landed (D33, 2026-07-05):** the two-tier `Item` collection
-            (`itemService`) — `/stash` browses it server-side (paged/sorted), the 🗄️ **Store**
-            button on the `/inventory` card deposits, transfers under the character lock
-            (favor-duplicate-over-loss); equip-from-stash still goes through the pack. Still
-            ⬜: loot sources (fishing/shops/loot tables), a second/location-gated container +
-            withdraw+equip wrapper, durability damage + repair, partial-stack transfers/drops,
-            ground piles/trading, ranged weapons + ammo, a starting-kit wizard step,
-            auto-equip-best (`Ruleset/items-equipment.md`'s simple layer), selling (economy — `Ruleset/economy.md`).
-      - [x] **6F — living locations** (D31, owner-requested 2026-07-04): the `LocationState`
-            collection (lazy docs: weather spells, running location events, server-wide
-            feature discoveries, danger/prosperity stats, visit counter), presence derived
-            from the indexed `Character.locationId` (shown on the hub incl. NPCs), the
-            game clock (`world/time.ts`) + typed condition language (`world/conditions.ts`)
-            gating hub actions / conditional encounters / event starts, encounter- and
-            outcome-driven discoveries, challenge endings returning to the hub. Still ⬜:
-            real consumers for `adjustStat` (event/outcome stat deltas), weather-modified
-            check difficulty, per-character discoveries, NPC presence (needs 6C seeding).
-      - [x] **6G — skill trees** (D34, owner-designed 2026-07-05): skills are arbitrary-depth
-            **trees in code** (`game/data/skills.ts`) with per-node **weighted attribute
-            blends** (Intimidate = 50% STR + 50% CHA, inherited/overridable) and named
-            **growth profiles**; a character stores a **sparse node map** under `progression`
-            (zero-migration to add depth/trees). The `game/character/skills.ts` engine sums
-            the path + blend into an UNCAPPED **`effectiveSkill`** (checks clamp it to a d100
-            %) and grows nodes by **learn-by-doing** (`creditUse` — +1 use to every path node
-            at its own rate). Wired into `checks.ts`; `creditSkillUse` service seam ready.
-            **Learn-by-doing went LIVE with D40 (2026-07-07)**: Spire duel/trial + travel
-            challenges credit skill use at an opposition-scaled training weight (formula in
-            `Ruleset/skills.md`'s Reference). Still ⬜: crafting/professions crediting, item
-            required-sum gates + crafting quality, quality-gated practice caps, Mastery >100,
-            talents + the XP/points economy (`Ruleset/skills.md`) — and all tree
-            content/numbers stay 🟡.
-      - [ ] **6C** — NPC seeding + NPC-movement cron along the graph (NPC = `Character` with
-            `ownerId: null`); more locations + per-location activity tables (see backlog).
-- [ ] **Phase 7 — RPG ruleset** — being **designed in `Ruleset/`** (d100 roll-under, roles +
-      learn-by-doing skills, the Health-pool/hit-location combat model, Stress→insanity; see each
-      topic file's Open questions for the live forks).
-      Code nothing until the relevant fork locks (D14); shipping it replaces the placeholder
-      attributes/combat and unblocks the serious `/smackdown duel`. **The skill-tree half is
-      built ahead (D34/6G)** — its content + growth numbers still tune here.
-- [ ] **Phase 8 — pen-and-paper RP module** (separate `rp/` domain — D9).
-
-When a phase lands, tick it here and note any decisions that changed. Detailed per-change
-history lives in git, not in this file.
+**Phases:** 0–5 ✅ (manual turn-by-turn combat deliberately deferred — AUDIT §5). Phase 6 ✅
+except **6C NPCs** (= PLAN S3). Phase 7 = the `Ruleset/` design work — all tuning numbers 🟡
+until the owner locks them. Phase 8 (`rp/` module) = future.
