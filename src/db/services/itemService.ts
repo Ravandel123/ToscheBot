@@ -109,6 +109,11 @@ export const itemService = {
          quantity: packItem.quantity,
          ...(packItem.durability === undefined ? {} : { durability: packItem.durability }),
          acquiredAt: packItem.acquiredAt instanceof Date ? packItem.acquiredAt : new Date(),
+         // The identification veil (R16) survives the transfer — a stored
+         // mystery is still a mystery when withdrawn.
+         ...(packItem.identified === undefined ? {} : { identified: packItem.identified }),
+         ...(packItem.apparentItemId === undefined ? {} : { apparentItemId: packItem.apparentItemId }),
+         ...(packItem.descriptorId === undefined ? {} : { descriptorId: packItem.descriptorId }),
       };
       await insertWithFreshHandle(doc);
 
@@ -164,6 +169,9 @@ export const itemService = {
          quantity: doc.quantity,
          ...(doc.durability === undefined ? {} : { durability: doc.durability }),
          acquiredAt: doc.acquiredAt instanceof Date ? doc.acquiredAt : new Date(),
+         ...(doc.identified === undefined ? {} : { identified: doc.identified }),
+         ...(doc.apparentItemId === undefined ? {} : { apparentItemId: doc.apparentItemId }),
+         ...(doc.descriptorId === undefined ? {} : { descriptorId: doc.descriptorId }),
       };
 
       await Character.updateOne({ _id: characterId }, { $push: { inventory: instance } });

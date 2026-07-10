@@ -13,6 +13,7 @@
 
 import type { WeatherId } from './weather.js';
 import type { LocationStatKey } from './locationStats.js';
+import type { ResourceNodeId } from './resourceNodes.js';
 
 export interface LocationFeature {
    /** Stable slug, unique within its location; stored in LocationState.discoveredFeatureIds. */
@@ -35,6 +36,9 @@ export interface LocationDefinition {
    features?: readonly LocationFeature[];
    /** Starting values for dynamic location stats (missing keys use catalog defaults). */
    baseStats?: Partial<Record<LocationStatKey, number>>;
+   /** What can be gathered here (R16) — ids into the resource-node catalog,
+    *  test-validated like graph edges. Absent = nothing grows/bites here. */
+   resourceNodes?: readonly ResourceNodeId[];
 }
 
 export const LOCATIONS = {
@@ -59,7 +63,7 @@ export const LOCATIONS = {
    riverbank: {
       name: 'The Riverbank',
       description: 'A quiet bend of the river outside the walls.',
-      connectedTo: ['plaza'],
+      connectedTo: ['plaza', 'tanglewood'],
       climate: { clear: 4, fog: 3, rain: 3 },
       features: [
          {
@@ -69,6 +73,15 @@ export const LOCATIONS = {
          },
       ],
       baseStats: { danger: 20, prosperity: 30 },
+      resourceNodes: ['riverbank_greens'],
+   },
+   tanglewood: {
+      name: 'The Tanglewood',
+      description: 'Old growth crowding the path beyond the river; the canopy swallows the light.',
+      connectedTo: ['riverbank'],
+      climate: { overcast: 4, fog: 3, clear: 2 },
+      baseStats: { danger: 30, prosperity: 15 },
+      resourceNodes: ['woodland_undergrowth'],
    },
 } as const satisfies Record<string, LocationDefinition>;
 

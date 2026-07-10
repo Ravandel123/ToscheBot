@@ -22,7 +22,10 @@ only (damage/AV interplay waits on skills.md crafting).
 
 **Carried pack** — `Character.inventory[]` embedded, cap `INVENTORY_STACK_LIMIT = 50`; carry
 capacity = **Strength in kg** (🟡). Instance = `{instanceId(8ch), itemId, quality, quantity?,
-durability?, acquiredAt}`.
+durability?, acquiredAt}` + the optional **identification veil** (R16, ✅ S1):
+`identified?/apparentItemId?/descriptorId?` — absent = identified (zero migration); mysteries
+never stack; the veil survives pack↔stash transfers; display renders the owner's BELIEF
+(descriptor / apparent item), weight always the truth.
 
 **Stash** (`db/models/item.ts`, D33) — separate `Item` collection for owned-but-uncarried
 (unbounded); `_id`=uuid, `instanceId` short handle, indexed `{ownerId, container}`. Equip is
@@ -54,12 +57,13 @@ cost rather than being simply free to polcan — an edge, not an auto-pick.
 loadout, weapon tags, encumbrance, quality/condition. (Neither the auto-equip button nor Roles
 exist yet — see skills.md.)
 
-### Quality is per instance ✅ built, tie to skills.md is ⬜
+### Quality is per instance ✅ built, tie to skills.md is 🟨 half-wired
 Two different items forged from the same catalog blueprint can differ in **craftsmanship
 quality** — poor through masterwork. Skills.md's Smithing example describes where this is
-*meant* to come from: a check's surplus over an item's required sum. Today quality is instead
-a flat tag chosen at acquisition (Implementation, below) — the quality-from-a-check pipeline
-isn't wired up.
+*meant* to come from: a check's surplus. **Gathering does this since S1**: foraged instances
+get their tier from `qualityFromCheck` (professions.md — the shared surplus→quality helper,
+SL-driven, sim-tuned so the top tier stays rare). Crafting's required-sum variant is still ⬜;
+`/item grant` still hands out flat tags.
 
 ### Two-tier storage: what's carried vs what's owned ✅ built D33
 A character's **carried pack** (what's on them, what can be equipped) is a different thing
@@ -224,8 +228,8 @@ your pack" note, never a double-spend. `/item grant` (owner-only) is the **only*
 today — no fishing/shop/loot-table has been built.
 
 ### What isn't built
-- Loot sources beyond `/item grant` (fishing/foraging — professions.md, shops — npcs.md/
-  economy.md, loot tables, a starting-kit wizard step).
+- ~~Loot sources beyond `/item grant`~~ — **foraging is the first real source (S1)**; still
+  missing: fishing (S2), shops (npcs.md/economy.md), loot tables, a starting-kit wizard step.
 - A second/location-gated storage container (a bank; today only `home_chest`) and a
   withdraw+equip convenience wrapper.
 - Durability damage + repair; partial-stack transfers/drops; ground piles; player-to-player
@@ -234,9 +238,10 @@ today — no fishing/shop/loot-table has been built.
 - **Dynamic material composition** — `material` is flavor + weight today; the
   blueprint × material → computed weight/durability/AV/damage/properties **snapshot** is designed
   (above) but not wired.
-- **The 5-tier quality expansion + per-family name tables** (R23 — today's 4-tier `ITEM_QUALITIES`
-  is gear-only naming with no numeric/name split) and quality-from-a-check (skills.md's crafting
-  model) + quality×damage interplay.
+- **The 5-tier quality expansion + full per-family name tables** (R23) — still on the 4-tier
+  scale, but the FIRST per-family name row exists (S1): foragables read
+  Wilted/—/Choice/Pristine (`FORAGE_QUALITY_PREFIXES`), gear keeps `ITEM_QUALITIES` prefixes.
+  Crafting quality-from-a-check + quality×damage interplay still ⬜.
 - **Equipped item shown in the equip dropdown** (the small owner-requested renderer fix).
 - **Per-location AV** and the **armour ✕ weapon-type multiplier** (combat.md R12) — armour is one
   global AV today.

@@ -156,6 +156,7 @@ detail in `Ruleset/`. Numbers are append-only; new entries stay 1–3 lines here
 | D40 | Learn-by-doing is LIVE: `creditUse` takes fractional uses; combat weight = foePower/yourPower (cap 2.0; 0 at ≤ 0.5 — anti-farm), non-combat = 2·(1 − target/100); sparring credits nothing; only rolled-and-could-fail uses count (locked in `Ruleset/skills.md`); rank-ups narrated. |
 | D41 | Fighting styles are family-specific catalog entries (modifiers + typed effects: hamper, riposte), each drawing attack AND defence from a skill node (self-gating, trainable via `trainingNodes`); the combat plan (`/character combat`) = per-family default style + ≤3 conditional switch rules (own/foe HP %, round ≥ N), first-match-wins, re-evaluated every exchange and narrated. |
 | D42 | Style family = weapon GRIP (`unarmed \| one_handed \| two_handed \| ranged` seam), style branches under their grip branch; initiative FLOWS: a landed blow may press a follow-up (`followUpChance`: net-SL-dominant + style tempo − per-press decay, sim-verified ~67/25/6% streaks for even fights, rare 10+ flurries only across big gaps). |
+| D43 | Gathering engine LIVE (R16, foraging first): a gather = SHORT action under the lock (AP → d100 vs a location `resourceNode` → SL-scaled yield + shared `qualityFromCheck` → one-roll identify sweep). Identification veil = optional instance fields (`identified/apparentItemId/descriptorId`, zero migration); failed IDs can plausibly mislabel (same family/shared look); Examine = uniform 1 AP, every outcome equally confident (no roll shown, truth sticky) so nothing leaks which labels are wrong. |
 
 ## Target architecture
 
@@ -183,6 +184,8 @@ src/
     combat/             sparring d20 (throwaway) + real duel (duel/profile/styles/plan/
                         training/bouts/spireLadder/leaderboards)
     activity/           durable-activity pure step reducers (challenge…)
+    professions/        gather engine (short-action resolver, quality-from-check) +
+                        identification (D43)
     world/              travel rules, time (game clock), conditions, events
     chronicle.ts        Discord adapter (marked): public game log
     data/               static content catalogs (locations, items, skills, races, encounters,
@@ -370,16 +373,18 @@ secrets), commands doing DB access directly.
 **Where the build queue lives: `PLAN.md`** (session-sized briefs + the owner decision queue).
 Idea backlog and full decision history: `DECISIONS.md`.
 
-**Built and green** (518 tests, build + lint pass): core runtime; the whole fun/utility/admin
+**Built and green** (572 tests, build + lint pass): core runtime; the whole fun/utility/admin
 prefix layer; AI persona; moderation + espionage logs; character creation wizard + owner
 approval; attributes + point-buy (D25); d100 checks + travel challenges (D26); `/play` hub +
 living locations (D30/D31); inventory/equipment + stash (D28/D33); skill trees + LIVE
 learn-by-doing (D34/D40); real combat — duel, bout modes, Spire ladder, styles + combat
-plans, flowing momentum (D35–D37, D41–D42); seed/backup/restore + CI (D38, AUDIT §1/§2.3/§2.9).
+plans, flowing momentum (D35–D37, D41–D42); seed/backup/restore + CI (D38, AUDIT §1/§2.3/§2.9);
+gathering engine + Foraging v1 with identification/mislabels (D43, PLAN S1 — the first real
+loot source and the first live hub action).
 
-**Missing (current focus — the peaceful core loop, see PLAN.md):** professions/gathering
-(no loot source besides `/item grant`), economy (nothing earns or spends coins), NPCs (6C),
-dialogue; every hub action is still a placeholder; stamina has no consumer.
+**Missing (current focus — the peaceful core loop, see PLAN.md):** fishing (S2), economy
+(nothing earns or spends coins), NPCs (6C), dialogue; hub actions besides `forage` are still
+placeholders; stamina has no consumer.
 
 **Pending ops (owner):** one `npm run deploy` covers the queued slash changes (`/character
 combat`, `/smackdown` trial browser, `/stash`, `/leaderboard` categories). A live end-to-end
@@ -390,8 +395,9 @@ smoke against Atlas has still not been run.
 - **Prefix `h!`** — ~45 fun/utility commands (`h!help` auto-lists) + admin: `clear`,
   `directmessage`/`dm`, `messagechannel`/`mc`, `backup`.
 - **Slash** — `/character` (create wizard/view/list/skills/combat/switch), `/profile`,
-  `/inventory`, `/stash`, `/item grant` (ownerOnly loot source), `/smackdown`
-  (`sparring` | `duel [mode]` | `trial`), `/leaderboard [category]`, `/play`.
+  `/inventory` (+ Examine on foraged finds), `/stash`, `/item grant` (ownerOnly), `/smackdown`
+  (`sparring` | `duel [mode]` | `trial`), `/leaderboard [category]`, `/play` (travel + the
+  live `forage` action, D43).
 - **Events** — `messageCreate` (moderation → `h!` routing → ambient AI), `interactionCreate`,
   `clientReady`, `messageDelete`/`messageUpdate` (espionage edit/delete log),
   `guildMemberAdd`/`guildMemberRemove`.

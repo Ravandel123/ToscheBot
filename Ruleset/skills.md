@@ -46,7 +46,9 @@ actions never do.* Sparring credits nothing (fantasy stakes, no cost — D16). R
 announce themselves (`📈 …rises to N`); silent banking stays silent.
 
 **Live consumers** — `/smackdown duel` (both fighters), `/smackdown trial` (the player; a
-rematch vs an outgrown champion decays to 0), travel-challenge options with a rolled check.
+rematch vs an outgrown champion decays to 0), travel-challenge options with a rolled check,
+and since S1 **foraging** (the first profession): the gather check credits its node's path
+(difficulty weight, win or lose) and the identify sweep/Examine credits the Identify leaf.
 Since D41 a bout credits the paths the fighter **actually fought in** (`trainingNodes`): each
 fighting style used trains its own branch (a whole bout in Grappler banks nothing into
 Striking), plus the weapon branch when armed.
@@ -60,8 +62,9 @@ XP also buys **talents**. (Cost curve 🟡; must be steep — attribute double-d
 (factions.md), or an **in-game achievement/flag**.
 
 **Prototype trees shipped** — Smithing, Metallurgy, Speechcraft, Athletics, Awareness (real,
-used); Melee/Brawling live in the serious combat engine since D35/D40 (attack draws on + trains
-them; Ranged still a stub). Content + numbers all 🟡.
+used); **Foraging → Identify** (S1 — blend `0.3 INT + 0.3 PER` 🟡, both trained by the live
+gather loop); Melee/Brawling live in the serious combat engine since D35/D40 (attack draws on
++ trains them; Ranged still a stub). Content + numbers all 🟡.
 
 **Target breadth** — ~30 top-level trees, Basic vs Advanced (Advanced needs ≥1 point to attempt).
 
@@ -304,6 +307,10 @@ Mastery above that via special sources is future, per the Ruleset section above.
 - **Awareness** (root, blend `1.0 PER`) → {Searching} — added with D40 so the travel
   challenges' spot/search options train something real; the design list's Perception root,
   deliberately minimal (Track/Navigate join it when built).
+- **Foraging** (root, blend `0.3 INT + 0.3 PER`) → {Identify} — S1's profession tree
+  (professions.md R16): the gather check rolls (and trains) the root, the identify sweep and
+  the Examine action the leaf. The R16 table's per-family leaves (Mushrooms, Herbs, Fruit &
+  Forage) join as content when per-family gathering matters — a catalog edit, zero migration.
 - **Combat trees** (live in the serious engine since D35/D40/D41 — the duel/trial attack draws
   on and TRAINS the wielded weapon's branch, or the unarmed style's branch; sparring still uses
   the old flat throwaway formula, combat.md): Melee (`0.5 AGI`) → One-Handed → {Blades, Axes &
@@ -329,8 +336,10 @@ case (unbounded state) is why owned-but-uncarried items got their own collection
   player (champion-strength weight — an outgrown rematch credits 0), and travel-challenge
   checked options credit their node (difficulty weight, `checkTrainingWeight`). Rank-ups
   announce in the narration; the skill panel shows fractional banked progress.
-- ⬜ Crafting/professions crediting (foraging etc.) — next consumers; the same
-  `creditSkillUse(id, nodes, weight)` call.
+- ✅ **Foraging credits (S1)** — the gather check trains the Foraging path (difficulty
+  weight, win or lose); the one-roll identify sweep and the Examine action train Identify.
+  An Examine of an already-known find rolls nothing and credits nothing (the house rule).
+  Crafting crediting still ⬜.
 - ⬜ Roles, the XP/points economy, and talents are pure design (above) — nothing in `game/` or
   `db/` yet.
 - ⬜ **XP + skill-gated attribute raises (R13)** — no `xp` field, no per-attribute unlock

@@ -5,6 +5,7 @@ import { locationStateService } from '../../db/services/locationStateService.js'
 import { actionsAt, hubAction } from '../../game/data/hubActions.js';
 import { resolveLocationId } from '../../game/data/locations.js';
 import { evaluateCondition, worldContext } from '../../game/world/conditions.js';
+import { performForage } from './_forageAction.js';
 import { performTravel } from './_playPanel.js';
 
 // Handles the `/play` game hub (namespace `play`). The hub is ephemeral and
@@ -61,8 +62,23 @@ export default {
             return;
          }
 
+         // LIVE actions (no comingSoon line) route to their executors — a
+         // mutation, so the D28 choreography: fast-fail if locked, ack before
+         // the lock (the wait can pass the ~3 s window), execute, repaint.
+         // Hub actions are buttons; the guard narrows the interaction type.
+         if (local.id === 'forage' && interaction.isButton()) {
+            if (client.locks.isLocked(character._id)) {
+               await interaction.reply({ content: 'Your character is mid-activity — finish it first.', ...ephemeral });
+               return;
+            }
+
+            await interaction.deferUpdate();
+            await performForage(client, interaction, character);
+            return;
+         }
+
          await interaction.reply({
-            content: `${local.emoji} ${local.comingSoon} _(coming soon)_`,
+            content: `${local.emoji} ${local.comingSoon ?? 'Nothing comes of it — yet.'} _(coming soon)_`,
             ...ephemeral,
          });
          return;

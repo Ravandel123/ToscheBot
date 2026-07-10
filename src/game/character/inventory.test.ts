@@ -13,12 +13,14 @@ import {
    equippedItems,
    findItem,
    findStack,
+   identificationOf,
    itemDisplayName,
    itemValue,
    kindCounts,
    maxDurability,
    packBrowseState,
    parseBrowseState,
+   perceivedDefinition,
    planEquip,
    planUnequip,
    qualityOf,
@@ -86,6 +88,72 @@ describe('display & quality scaling', () => {
 
       const character = subject([instance('a', 'iron_sword', { quality: 'masterwork' })]);
       expect(itemValue(findItem(character, 'a')!)).toBe(360);
+   });
+});
+
+describe('identification (R16)', () => {
+   const veiled = (overrides: Partial<ItemInstance> = {}) =>
+      instance('m', 'ashgill_fungus', { identified: false, descriptorId: 'amber_capped', ...overrides });
+
+   it('reads the three states off the optional fields (absent = identified)', () => {
+      expect(identificationOf(instance('a', 'iron_sword'))).toBe('identified');
+      expect(identificationOf(veiled())).toBe('unidentified');
+      expect(identificationOf(veiled({ apparentItemId: 'honeycap_mushroom' }))).toBe('mislabeled');
+   });
+
+   it('shows an unknown by its capitalized look, never its true name', () => {
+      const character = subject([veiled()]);
+      const item = findItem(character, 'm')!;
+
+      expect(itemDisplayName(item)).toBe('An amber-capped mushroom');
+      expect(itemValue(item)).toBe(0); // worth nothing to anyone yet
+   });
+
+   it('a mislabel renders the WRONG item wholesale — name, value, description', () => {
+      const character = subject([veiled({ apparentItemId: 'honeycap_mushroom', quality: 'masterwork' })]);
+      const item = findItem(character, 'm')!;
+
+      expect(perceivedDefinition(item).name).toBe('Honeycap Mushroom');
+      expect(itemDisplayName(item)).toBe('Pristine Honeycap Mushroom');
+      expect(itemValue(item)).toBe(Math.round(ITEMS.honeycap_mushroom.value * 6)); // apparent value × masterwork
+   });
+
+   it('a stale apparent id degrades to the truth (D10 rule 3)', () => {
+      const character = subject([veiled({ apparentItemId: 'retired_plant' })]);
+      expect(perceivedDefinition(findItem(character, 'm')!).name).toBe('Ashgill Fungus');
+   });
+
+   it('a stale descriptor id still shows at least the coarse family', () => {
+      const character = subject([veiled({ descriptorId: 'retired_look' })]);
+      expect(itemDisplayName(findItem(character, 'm')!)).toBe('An unfamiliar mushroom');
+   });
+
+   it('foraged finds use their own family quality names, gear keeps its own (R23)', () => {
+      const character = subject([
+         instance('herb', 'silverleaf', { quality: 'masterwork' }),
+         instance('sword', 'iron_sword', { quality: 'masterwork' }),
+      ]);
+
+      expect(itemDisplayName(findItem(character, 'herb')!)).toBe('Pristine Silverleaf');
+      expect(itemDisplayName(findItem(character, 'sword')!)).toBe('Masterwork Iron Sword');
+   });
+
+   it('mysteries never merge: not a stack target, and mystery grants never stack', () => {
+      const character = subject([veiled({ itemId: 'stingweed' })], {}, { strength: 100 });
+
+      // An identified grant must not launder into the veiled instance…
+      expect(findStack(character, 'stingweed', 'common')).toBeNull();
+      // …and a mystery grant must not merge into an identified stack.
+      const withStack = subject([instance('s', 'stingweed', { quantity: 3 })], {}, { strength: 100 });
+      expect(canAddItems(withStack, 'stingweed', ITEMS.stingweed, 'common', 1, true)).toMatchObject({ ok: true, stackWith: null });
+   });
+
+   it('mints a veiled instance from mystery fields', () => {
+      const minted = createItemInstance('ashgill_fungus', ITEMS.ashgill_fungus, 'common', 1, new Set(), { descriptorId: 'amber_capped', apparentItemId: 'honeycap_mushroom' });
+
+      expect(minted.identified).toBe(false);
+      expect(minted.descriptorId).toBe('amber_capped');
+      expect(minted.apparentItemId).toBe('honeycap_mushroom');
    });
 });
 

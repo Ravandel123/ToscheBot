@@ -143,7 +143,7 @@ export const ENCOUNTERS = {
       name: 'A fallen tree',
       kind: 'activity',
       activityType: 'challenge',
-      locations: ['riverbank', 'tavern'],
+      locations: ['riverbank', 'tavern', 'tanglewood'],
       weight: 3,
       intro: 'A storm-felled tree blocks the road, branches tangled like a barricade.',
       maxSetbacks: 3,

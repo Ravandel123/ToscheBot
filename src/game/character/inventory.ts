@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { capitalize } from '../../lib/text.js';
 import { type AttributeKey, ATTRIBUTE_KEYS } from '../data/attributes.js';
 import { EQUIPMENT_SLOT_IDS, isEquipmentSlotId, type EquipmentSlotId } from '../data/equipmentSlots.js';
+import { FORAGE_FAMILIES, FORAGE_QUALITY_PREFIXES, forageDescriptor, foragableInfo, isForagableId } from '../data/foragables.js';
 import {
    DEFAULT_ITEM_QUALITY,
    ITEM_KINDS,
@@ -26,6 +28,9 @@ import type { CharacterDoc } from '../../db/models/character.js';
 // An owned item. `quality` is per instance (one catalog entry drops at any
 // craftsmanship tier); `durability` exists only for equippable kinds;
 // `quantity` > 1 only for stackable kinds (stack key = itemId + quality).
+// The three identification fields (R16, professions.md) are OPTIONAL — absent
+// on everything but foraged mysteries, so pre-S1 docs need no migration and
+// read as identified.
 export interface ItemInstance {
    /** Short unique id within the owning character — rides in customIds. */
    instanceId: string;
@@ -36,6 +41,13 @@ export interface ItemInstance {
    /** Current durability (max = catalog durabilityMax × quality multiplier). */
    durability?: number;
    acquiredAt: Date;
+   /** False while the find's true identity is unknown to its owner (absent = known). */
+   identified?: boolean;
+   /** What the owner confidently BELIEVES it is after a failed identify — a
+    *  plausible same-family wrong id. Display renders this item entirely. */
+   apparentItemId?: string;
+   /** The generic look shown while unidentified (→ foragables.ts descriptors). */
+   descriptorId?: string;
 }
 
 /** The slice of a character the inventory rules read. Fields are optional so
@@ -97,17 +109,72 @@ export function qualityOf(instance: ItemInstance): ItemQualityId {
    return isItemQualityId(instance.quality) ? instance.quality : DEFAULT_ITEM_QUALITY;
 }
 
-// --- Display helpers ------------------------------------------------------------
+// --- Identification (R16) ---------------------------------------------------------
 
-/** 'Battered Iron Sword' / 'Iron Sword' / 'Masterwork Iron Sword'. */
-export function itemDisplayName(item: ResolvedItem): string {
-   const prefix = ITEM_QUALITIES[qualityOf(item.instance)].prefix;
-   return prefix ? `${prefix} ${item.definition.name}` : item.definition.name;
+export type IdentificationState = 'identified' | 'unidentified' | 'mislabeled';
+
+/** How well the OWNER knows this instance. Absent flag = identified, so every
+ *  pre-S1 item (and everything but foraged mysteries) reads as known. */
+export function identificationOf(instance: ItemInstance): IdentificationState {
+   if (instance.identified !== false)
+      return 'identified';
+   return instance.apparentItemId ? 'mislabeled' : 'unidentified';
 }
 
-/** 🪙 per unit, quality-scaled. Display-only until the economy layer (D19). */
+/**
+ * The definition the owner BELIEVES this item to be: the apparent one while
+ * mislabeled (falling back to the truth if that id went stale — D10 rule 3),
+ * the real one otherwise. Name/description/value display MUST go through this
+ * so a confident mislabel is indistinguishable from the truth; physical facts
+ * (weight, encumbrance) always read the REAL definition.
+ */
+export function perceivedDefinition(item: ResolvedItem): ItemDefinition {
+   if (identificationOf(item.instance) !== 'mislabeled')
+      return item.definition;
+
+   return itemDefinition(item.instance.apparentItemId ?? '') ?? item.definition;
+}
+
+/** The generic look of an unidentified find: 'an amber-capped mushroom' —
+ *  always at least the coarse family, never 'an object' (professions.md). */
+export function unidentifiedName(item: ResolvedItem): string {
+   const descriptor = forageDescriptor(item.instance.descriptorId ?? '');
+   if (descriptor)
+      return descriptor.text;
+
+   const family = foragableInfo(item.instance.itemId);
+   return family ? `an unfamiliar ${FORAGE_FAMILIES[family.family].singular}` : 'an unidentified find';
+}
+
+/** The quality display prefix for a definition — per item family (R23): gear
+ *  reads 'Battered/Fine/Masterwork', a foraged find 'Wilted/Choice/Pristine'. */
+function qualityPrefix(itemId: string, quality: ItemQualityId): string {
+   return isForagableId(itemId) ? FORAGE_QUALITY_PREFIXES[quality] : ITEM_QUALITIES[quality].prefix;
+}
+
+// --- Display helpers ------------------------------------------------------------
+
+/** 'Battered Iron Sword' / 'Pristine Silverleaf' / 'A cluster of dark berries'
+ *  (unidentified). Renders the owner's BELIEF: a mislabeled find shows its
+ *  apparent item, quality prefix and all — the gamble depends on it. */
+export function itemDisplayName(item: ResolvedItem): string {
+   if (identificationOf(item.instance) === 'unidentified')
+      return capitalize(unidentifiedName(item));
+
+   const definition = perceivedDefinition(item);
+   const perceivedId = identificationOf(item.instance) === 'mislabeled' ? item.instance.apparentItemId ?? item.instance.itemId : item.instance.itemId;
+   const prefix = qualityPrefix(perceivedId, qualityOf(item.instance));
+   return prefix ? `${prefix} ${definition.name}` : definition.name;
+}
+
+/** 🪙 per unit, quality-scaled, as the owner PERCEIVES it (an unidentified
+ *  find is worth nothing to anyone yet; a mislabel is believed at its false
+ *  price). Display-only until the economy layer (D19). */
 export function itemValue(item: ResolvedItem): number {
-   return Math.max(0, Math.round(item.definition.value * ITEM_QUALITIES[qualityOf(item.instance)].valueMultiplier));
+   if (identificationOf(item.instance) === 'unidentified')
+      return 0;
+
+   return Math.max(0, Math.round(perceivedDefinition(item).value * ITEM_QUALITIES[qualityOf(item.instance)].valueMultiplier));
 }
 
 /** Durability ceiling for the instance, or null for kinds without durability. */
@@ -142,22 +209,27 @@ export function carryCapacityKg(character: Pick<CharacterDoc, 'attributes'>): nu
 
 // --- Adding items (stacking + caps) ------------------------------------------------
 
-/** The existing stack a grant of (itemId, quality) merges into, if any. */
+/** The existing stack a grant of (itemId, quality) merges into, if any. Only
+ *  fully IDENTIFIED instances are merge targets — every mystery (unidentified
+ *  or mislabeled) keeps its own entry, or a wrong label would silently launder
+ *  into a true stack (R16). */
 export function findStack(character: InventoryState, itemId: string, quality: ItemQualityId): ItemInstance | null {
    const definition = itemDefinition(itemId);
    if (!definition || !ITEM_KINDS[definition.kind].stackable)
       return null;
 
-   return inventoryOf(character).find((item) => item.itemId === itemId && qualityOf(item) === quality) ?? null;
+   return inventoryOf(character).find((item) =>
+      item.itemId === itemId && qualityOf(item) === quality && identificationOf(item) === 'identified') ?? null;
 }
 
 export type AddItemsCheck =
    | { ok: true; stackWith: ItemInstance | null }
    | { ok: false; reason: 'inventory-full' | 'too-heavy' };
 
-/** Whether `quantity` of an item fits (stack limit + carry capacity). */
-export function canAddItems(character: EquipSubject, itemId: string, definition: ItemDefinition, quality: ItemQualityId, quantity: number): AddItemsCheck {
-   const stackWith = findStack(character, itemId, quality);
+/** Whether `quantity` of an item fits (stack limit + carry capacity).
+ *  `mystery` items (granted unidentified/mislabeled) never merge into a stack. */
+export function canAddItems(character: EquipSubject, itemId: string, definition: ItemDefinition, quality: ItemQualityId, quantity: number, mystery = false): AddItemsCheck {
+   const stackWith = mystery ? null : findStack(character, itemId, quality);
    const stackable = ITEM_KINDS[definition.kind].stackable;
    const newEntries = stackWith ? 0 : (stackable ? 1 : quantity);
 
@@ -170,8 +242,16 @@ export function canAddItems(character: EquipSubject, itemId: string, definition:
    return { ok: true, stackWith };
 }
 
-/** Mints a fresh instance with a short id unique within the owning pack. */
-export function createItemInstance(itemId: string, definition: ItemDefinition, quality: ItemQualityId, quantity: number, existingIds: ReadonlySet<string>): ItemInstance {
+/** An unidentified/mislabeled grant's identity-veil (R16): the look it shows,
+ *  and optionally the wrong item the owner confidently believes it is. */
+export interface MysteryFields {
+   descriptorId: string;
+   apparentItemId?: string;
+}
+
+/** Mints a fresh instance with a short id unique within the owning pack.
+ *  Passing `mystery` mints it unidentified (with its veil fields). */
+export function createItemInstance(itemId: string, definition: ItemDefinition, quality: ItemQualityId, quantity: number, existingIds: ReadonlySet<string>, mystery?: MysteryFields): ItemInstance {
    const durabilityMax = maxDurability(definition, quality);
 
    return {
@@ -181,6 +261,7 @@ export function createItemInstance(itemId: string, definition: ItemDefinition, q
       quantity,
       ...(durabilityMax === null ? {} : { durability: durabilityMax }),
       acquiredAt: new Date(),
+      ...(mystery ? { identified: false, descriptorId: mystery.descriptorId, ...(mystery.apparentItemId ? { apparentItemId: mystery.apparentItemId } : {}) } : {}),
    };
 }
 

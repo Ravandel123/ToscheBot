@@ -9,8 +9,12 @@ import { ATTRIBUTES } from '../../game/data/attributes.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { isEquipmentSlotId, type EquipmentSlotId } from '../../game/data/equipmentSlots.js';
 import { isEquippable, type ConsumableDefinition } from '../../game/data/items.js';
+import { skillNode } from '../../game/data/skills.js';
+import { checkTrainingWeight } from '../../game/checks.js';
+import { EXAMINE_AP_COST, examineInstance } from '../../game/professions/identify.js';
 import {
    INVENTORY_SORTS,
+   attributesWithEquipment,
    browseState,
    findItem,
    itemDisplayName,
@@ -53,6 +57,7 @@ export default {
          if (action === 'equipto') return handleEquipTo(client, interaction, rest[0], rest[1], rest[2], parseBrowseState(rest[3]));
          if (action === 'unequip') return handleUnequip(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          if (action === 'use') return handleUse(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
+         if (action === 'examine') return handleExamine(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          if (action === 'store') return handleStore(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          if (action === 'dropc') return handleDropConfirmed(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          return;
@@ -186,6 +191,65 @@ async function handleUse(client: ToscheClient, interaction: ButtonInteraction, c
          ? buildInventoryList(updated, state, note)
          : detailOrList(updated, instanceId, state, note);
    });
+}
+
+/**
+ * Examine a foraged find (R16): a uniform 1-AP identify re-check. Every
+ * outcome — truth revealed, wrong label kept, NEW wrong label — replies with
+ * the same confident voice and no roll, so the player can never tell a
+ * correct identification from a convincing mistake (that ambiguity is the
+ * mechanic; see game/professions/identify.ts). A rolled attempt trains the
+ * Identify path (D40); the already-known shortcut rolls nothing and trains
+ * nothing, but still costs the AP (a free confirm would leak settledness).
+ */
+async function handleExamine(client: ToscheClient, interaction: ButtonInteraction, characterId: string, instanceId: string, state: BrowseState): Promise<void> {
+   await mutate(client, interaction, characterId, instanceId, state, async (fresh) => {
+      const item = findItem(fresh, instanceId);
+      if (!item)
+         return detailOrList(fresh, instanceId, state, STALE_ITEM_NOTE);
+
+      if (!await characterService.spendActionPoints(fresh._id, EXAMINE_AP_COST))
+         return detailOrList(fresh, instanceId, state, `⚡ You lack the Action Points to study it (it costs ${EXAMINE_AP_COST}).`);
+
+      const subject = { ...fresh, attributes: attributesWithEquipment(fresh) };
+      const result = examineInstance(subject, item.instance);
+
+      let shownInstanceId = instanceId;
+      if (result.kind === 'revealed')
+         shownInstanceId = await inventoryService.applyIdentification(fresh._id, instanceId, { apply: 'reveal' }) ?? instanceId;
+      else if (result.kind === 'fooled')
+         await inventoryService.applyIdentification(fresh._id, instanceId, { apply: 'mislabel', apparentItemId: result.apparentItemId });
+
+      // A rolled attempt trains, right or wrong (the house rule, D40).
+      const levelUps = 'target' in result
+         ? await characterService.creditSkillUse(fresh._id, ['identify_forage'], checkTrainingWeight(result.target))
+         : [];
+
+      const updated = await characterService.get(fresh._id) ?? fresh;
+      const shown = findItem(updated, shownInstanceId);
+      const note = [
+         examineNote(result, shown ? itemDisplayName(shown) : 'it'),
+         levelUps.length > 0 ? `📈 ${levelUps.map((up) => `**${skillNode(up.node).name}** rises to **${up.to}**`).join(', ')}.` : '',
+      ].filter(Boolean).join('\n');
+
+      return detailOrList(updated, shownInstanceId, state, note);
+   });
+}
+
+/** Every line reads equally certain — naming whatever the item NOW displays
+ *  as — except the honest shrug of a stumped attempt. */
+function examineNote(result: ReturnType<typeof examineInstance>, shownName: string): string {
+   if (result.kind === 'not-examinable')
+      return 'There is nothing more to learn from it.';
+   if (result.kind === 'stumped')
+      return '🔍 You turn it over, sniff it, squint at it. It keeps its secret.';
+   if (result.kind === 'confirmed')
+      return `🔍 **${shownName}** — no mistaking it. You know this one.`;
+   if (result.kind === 'unshaken')
+      return `🔍 **${shownName}**, as you thought.`;
+
+   // 'revealed' and 'fooled' share one voice on purpose (the R16 gamble).
+   return `🔍 Ah — of course. **${shownName}**.`;
 }
 
 /** Stows a whole pack entry into the character's stash (D33). The item leaves

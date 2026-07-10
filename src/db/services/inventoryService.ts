@@ -4,10 +4,13 @@ import {
    canAddItems,
    createItemInstance,
    findItem,
+   findStack,
    inventoryOf,
+   qualityOf,
    slotOfInstance,
    type EquipPlan,
    type ItemInstance,
+   type MysteryFields,
 } from '../../game/character/inventory.js';
 import { ITEM_KINDS, itemDefinition, type ConsumableDefinition, type ItemQualityId } from '../../game/data/items.js';
 import type { EquipmentSlotId } from '../../game/data/equipmentSlots.js';
@@ -34,9 +37,11 @@ export type ConsumeResult =
 export const inventoryService = {
    /** Adds items to a character's pack, merging into an existing stack where
     *  the kind allows it (stack key = itemId + quality). Non-stackables arrive
-    *  as `quantity` separate instances. Enforces the stack cap and carry
-    *  capacity — the only entry point for items coming into the world. */
-   async grantItems(characterId: string, itemId: string, quality: ItemQualityId, quantity: number): Promise<GrantResult> {
+    *  as `quantity` separate instances. A `mystery` grant (an unidentified/
+    *  mislabeled find, R16) never merges — its veil is per-instance state.
+    *  Enforces the stack cap and carry capacity — the only entry point for
+    *  items coming into the world. */
+   async grantItems(characterId: string, itemId: string, quality: ItemQualityId, quantity: number, mystery?: MysteryFields): Promise<GrantResult> {
       const amount = Math.max(1, Math.floor(quantity));
       const definition = itemDefinition(itemId);
       if (!definition)
@@ -46,7 +51,7 @@ export const inventoryService = {
       if (!character)
          return { ok: false, reason: 'not-found' };
 
-      const check = canAddItems(character, itemId, definition, quality, amount);
+      const check = canAddItems(character, itemId, definition, quality, amount, mystery !== undefined);
       if (!check.ok)
          return check;
 
@@ -65,13 +70,62 @@ export const inventoryService = {
       const perInstanceQuantities = ITEM_KINDS[definition.kind].stackable ? [amount] : Array<number>(amount).fill(1);
 
       for (const perInstance of perInstanceQuantities) {
-         const instance = createItemInstance(itemId, definition, quality, perInstance, existingIds);
+         const instance = createItemInstance(itemId, definition, quality, perInstance, existingIds, mystery);
          existingIds.add(instance.instanceId);
          instances.push(instance);
       }
 
       await Character.updateOne({ _id: characterId }, { $push: { inventory: { $each: instances } } });
       return { ok: true, instanceId: instances[0].instanceId };
+   },
+
+   /**
+    * Applies an Examine outcome (R16, game/professions/identify.ts) to one
+    * pack instance. CONTRACT: the caller holds the character lock. 'reveal'
+    * lifts the veil and — for stackable kinds — merges the now-known find into
+    * an existing identified stack (inc-before-pull: a crash duplicates, never
+    * loses, D33's transfer principle). 'mislabel' stamps the confident wrong
+    * id. Returns the instanceId the item now lives under (the merge target's
+    * on a merge), or null when the instance vanished (stale click).
+    */
+   async applyIdentification(characterId: string, instanceId: string, outcome: { apply: 'reveal' } | { apply: 'mislabel'; apparentItemId: string }): Promise<string | null> {
+      const character = await characterService.get(characterId);
+      const item = character ? findItem(character, instanceId) : null;
+      if (!character || !item)
+         return null;
+
+      if (outcome.apply === 'mislabel') {
+         // matchedCount, not modifiedCount: re-stamping the same label is a
+         // no-op $set the in-memory mongod misreports (CLAUDE.md caveat).
+         const result = await Character.updateOne(
+            { _id: characterId, 'inventory.instanceId': instanceId },
+            { $set: { 'inventory.$.identified': false, 'inventory.$.apparentItemId': outcome.apparentItemId } },
+         );
+         return result.matchedCount > 0 ? instanceId : null;
+      }
+
+      const revealed = await Character.updateOne(
+         { _id: characterId, 'inventory.instanceId': instanceId },
+         { $set: { 'inventory.$.identified': true }, $unset: { 'inventory.$.apparentItemId': '', 'inventory.$.descriptorId': '' } },
+      );
+      if (revealed.matchedCount === 0)
+         return null;
+
+      // Merge into an existing identified stack of the same (item, quality),
+      // now that nothing distinguishes them. Same-doc writes under the lock.
+      const target = ITEM_KINDS[item.definition.kind].stackable ? findStack(character, item.instance.itemId, qualityOf(item.instance)) : null;
+      if (!target || target.instanceId === instanceId)
+         return instanceId;
+
+      const merged = await Character.updateOne(
+         { _id: characterId, 'inventory.instanceId': target.instanceId },
+         { $inc: { 'inventory.$.quantity': item.instance.quantity } },
+      );
+      if (merged.matchedCount === 0)
+         return instanceId;
+
+      await Character.updateOne({ _id: characterId }, { $pull: { inventory: { instanceId } } });
+      return target.instanceId;
    },
 
    /** Drops a whole inventory entry (stack or single item), vacating any

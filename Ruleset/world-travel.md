@@ -8,11 +8,14 @@ See [README.md](README.md) for the legend.
 
 **Action Points** — `{current, totalEarned}`, **no cap**, `+AP_REGEN_PER_HOUR = 1`/hr (🟡),
 accrue **even while busy**. Atomic `spendActionPoints` (filter-guarded `≥ cost`).
-`TRAVEL_AP_COST = 0` 🟡; other per-action costs undecided.
+`TRAVEL_AP_COST = 0` 🟡; the first real spenders landed in S1: `FORAGE_AP_COST = 1` and
+`EXAMINE_AP_COST = 1` (both 🟡, professions.md); other per-action costs undecided.
 
 **Locations** (`game/data/locations.ts`) — undirected, test-validated graph; today
-`spire ↔ plaza ↔ tavern`, `plaza ↔ riverbank`. Optional `climate`, `features` (discoverable),
-`baseStats`. **`resourceNodes`** (⬜, professions.md) name a place's fishing/forage/plot tables.
+`spire ↔ plaza ↔ tavern`, `plaza ↔ riverbank ↔ tanglewood` (the Tanglewood joined in S1 as
+the foraging woodland). Optional `climate`, `features` (discoverable), `baseStats`.
+**`resourceNodes`** (✅ S1, professions.md) name a place's gather tables
+(`game/data/resourceNodes.ts` — foraging live, fishing joins in S2).
 
 **LocationState** (`db/models/locationState.ts`, D31) — one lazy doc/location:
 `weather{kind,since,until}`, `events[]`, server-wide `discoveredFeatureIds[]`,
@@ -215,11 +218,12 @@ by the shared `conditions` language). Two kinds:
 (best-effort — a missing channel logs a warning and never fails the action). Used today by
 travel arrivals and encounter/challenge outcomes.
 
-### Hub local actions — `game/data/hubActions.ts` ✅ scaffold / ⬜ content
-Every button is a placeholder today (clicking shows an in-character "coming soon" line; the hub
-stays up) — the catalog (`id, label, emoji, locations filter, comingSoon line`) exists and is
-test-validated against `LOCATIONS`, but no location's activity table (tavern gambling, plaza
-market, spire duels, riverbank fishing…) is actually built yet.
+### Hub local actions — `game/data/hubActions.ts` ✅ scaffold / 🟨 first real action
+**`forage` is LIVE (S1)** at the riverbank and the Tanglewood — the first placeholder flipped
+to a real handler (`play` router → `_forageAction.ts`; professions.md R16). The catalog marks
+liveness by OMITTING `comingSoon` (a live action's locations are test-locked to its resource
+nodes). Every other button still shows its in-character "coming soon" line (tavern gambling,
+plaza market, fishing…), each one a catalog flip + one router case away.
 
 ---
 
@@ -230,9 +234,8 @@ market, spire duels, riverbank fishing…) is actually built yet.
   here" is currently always players. **Now designed → npcs.md (R18)** (seeding script + hourly
   behavior CRON); this file just provides the graph they move on.
 - **Location activity tables** — turning each `hubActions.ts` placeholder into a real activity
-  (a catalog flip + one handler case each) is the concrete next step per the design constraint
-  above. **The first real ones are designed → professions.md (R16)** (forage/fish/tend via
-  `resourceNodes`) and conversations.md (R14) (talk to an NPC).
+  (a catalog flip + one handler case each). **`forage` shipped as the first (S1)** and proved
+  the pattern; fishing (S2, `resourceNodes`) and talk (conversations.md R14) are next.
 - **World-state drivers** — what actually nudges `danger`/`prosperity` (`adjustStat` has no
   caller yet), weather-modified check difficulty, per-character (not just server-wide)
   discoveries, more weathers/events/features, event-driven encounter pools.

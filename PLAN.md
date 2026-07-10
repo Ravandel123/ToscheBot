@@ -44,13 +44,14 @@ the next brief.
 
 - [ ] `npm run deploy` — pending slash changes: `/character combat`, `/smackdown` (trial
       browser), `/stash` (new command), `/leaderboard` (categories).
-- [ ] A live end-to-end smoke against Atlas (`.env` + real guild) still hasn't been run.
+- [ ] A live end-to-end smoke against Atlas (`.env` + real guild) still hasn't been run —
+      after S1 it should include one `forage` click and one Examine on the find.
 
 ---
 
 ## The queue
 
-### S1 — Gathering engine + Foraging v1 · [M] · SAFE
+### S1 — Gathering engine + Foraging v1 · [M] · SAFE · ✅ 2026-07-10
 **Design**: `Ruleset/professions.md` (R16 — the shared gather loop + identification),
 `Ruleset/skills.md` (D40 crediting), AUDIT §3.1.
 **Why first**: converts three built-but-idle engines (skills, checks, items) into the first
@@ -148,6 +149,9 @@ rep deltas from dialogue/challenge outcomes.
 - More flow tests around whichever panel the session touched.
 - AUDIT §2.6 index/eviction chores ONLY if actually measured as a problem (audit says don't
   preempt).
+- (S1 follow-ups) An Examine action on `/stash` item cards (today: withdraw first); foraging's
+  per-family leaves (Mushrooms/Herbs/Fruit & Forage) once per-family gathering matters;
+  seasonal/weather-gated table entries via the D31 condition language (one field, no engine).
 
 ---
 
@@ -200,6 +204,14 @@ section), then it can become a session brief.
 
 ## Log
 
+- **2026-07-10 — S1 (Gathering engine + Foraging v1)** ✅ → **D43**: everything in the brief
+  shipped (gather resolver + `qualityFromCheck`, resourceNodes + the new `tanglewood`
+  woodland, foraging tree, 8 foragables + descriptor pools, identification veil + Examine,
+  live `forage` hub action, sim-tuned 🟡 numbers — distributions in DECISIONS.md D43).
+  Divergences: quality bands retuned after the first sim (masterwork was becoming the mode at
+  high skill); Examine charges a **uniform** 1 AP even on known items (anti-leak — accepted
+  trade-off logged in professions.md); no redeploy needed (component-only), but the owner's
+  live smoke should include one forage + one Examine.
 - **2026-07-10 — S0 (docs)** ✅: CLAUDE.md slimmed (~50% shorter; full D1–D42 texts + old
   backlog archived verbatim in `DECISIONS.md`), PLAN.md created with the S1–S6 queue and the
   owner Decision queue. No code changes.

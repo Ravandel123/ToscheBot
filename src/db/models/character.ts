@@ -92,6 +92,10 @@ const itemInstanceSchema = new Schema({
    quantity: { type: Number, required: true, default: 1 },
    durability: { type: Number },
    acquiredAt: { type: Date, required: true },
+   // Identification veil (R16) — optional, absent = identified (no migration).
+   identified: { type: Boolean },
+   apparentItemId: { type: String },
+   descriptorId: { type: String },
 }, { _id: false });
 
 const characterSchema = new Schema({

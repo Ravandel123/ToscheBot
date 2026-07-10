@@ -31,8 +31,9 @@ export interface HubAction {
    /** When the action can be used (D31); omitted = always. Evaluated live —
     *  when the hub renders AND again when the button is clicked (stale panels). */
    availability?: HubActionAvailability;
-   /** In-character line shown when the (not-yet-built) action is used. */
-   comingSoon: string;
+   /** In-character line shown when the (not-yet-built) action is used.
+    *  ABSENT = the action is LIVE: the `play` router owns a real handler case. */
+   comingSoon?: string;
 }
 
 export const HUB_ACTIONS = {
@@ -114,6 +115,16 @@ export const HUB_ACTIONS = {
       description: 'Try the river for a catch.',
       locations: ['riverbank'],
       comingSoon: 'The fish are here, but the rods have not been strung yet.',
+   },
+   // LIVE (S1): the first real gather action — no comingSoon; the play router
+   // hands it to performForage. Locations must match where a foraging resource
+   // node exists (test-validated against the catalogs).
+   forage: {
+      id: 'forage',
+      label: 'Forage',
+      emoji: '🌿',
+      description: 'Search the greenery for anything edible, useful — or sellable.',
+      locations: ['riverbank', 'tanglewood'],
    },
    jetty: {
       id: 'jetty',

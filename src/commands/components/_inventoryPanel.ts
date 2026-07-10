@@ -26,6 +26,8 @@ import {
    isEquippable,
    type ItemDefinition,
 } from '../../game/data/items.js';
+import { FORAGE_FAMILIES, foragableInfo, isForagableId } from '../../game/data/foragables.js';
+import { EXAMINE_AP_COST } from '../../game/professions/identify.js';
 import {
    INVENTORY_SORTS,
    browseItems,
@@ -36,11 +38,13 @@ import {
    equipmentOf,
    equippedItems,
    findItem,
+   identificationOf,
    itemDisplayName,
    itemValue,
    kindCounts,
    maxDurability,
    packBrowseState,
+   perceivedDefinition,
    qualityOf,
    slotOfInstance,
    totalEquippedArmor,
@@ -260,9 +264,14 @@ export function buildSlotChooser(character: CharacterDoc, instanceId: string, st
 
 /** The item stat card. Exported so the stash panel (D33) reuses the exact same
  *  renderer — a stashed item shows an identical card (it is never equipped, so
- *  no 'Equipped' line appears). */
+ *  no 'Equipped' line appears). Renders the owner's BELIEF (R16): a mislabeled
+ *  find shows its apparent item's card wholesale; an unidentified one hides
+ *  everything but its look and its (real, physical) weight. */
 export function detailEmbed(character: CharacterDoc, item: ResolvedItem, note?: string): EmbedBuilder {
-   const def = item.definition;
+   if (identificationOf(item.instance) === 'unidentified')
+      return mysteryEmbed(item, note);
+
+   const def = perceivedDefinition(item);
    const quality = ITEM_QUALITIES[qualityOf(item.instance)];
    const slot = slotOfInstance(character, item.instance.instanceId);
 
@@ -283,7 +292,8 @@ export function detailEmbed(character: CharacterDoc, item: ResolvedItem, note?: 
             value: [
                `Quality: **${quality.name}**`,
                def.material ? `Material: **${MATERIALS[def.material].name}**` : '',
-               `Weight: **${formatKg(def.weightKg)}**${item.instance.quantity > 1 ? ` (stack ${formatKg(def.weightKg * item.instance.quantity)})` : ''}`,
+               // Weight is a physical fact — always the REAL definition's.
+               `Weight: **${formatKg(item.definition.weightKg)}**${item.instance.quantity > 1 ? ` (stack ${formatKg(item.definition.weightKg * item.instance.quantity)})` : ''}`,
                `Value: **${itemValue(item)}** 🪙`,
             ].filter(Boolean).join('\n'),
             inline: true,
@@ -293,9 +303,33 @@ export function detailEmbed(character: CharacterDoc, item: ResolvedItem, note?: 
    return embed;
 }
 
-/** The kind-specific stat block. Extend with a case when a new kind lands. */
+/** The card of an honest unknown: its look, its family, its weight — and
+ *  nothing else. The mystery is the pitch (professions.md R16). */
+function mysteryEmbed(item: ResolvedItem, note?: string): EmbedBuilder {
+   const family = foragableInfo(item.instance.itemId);
+   const singular = family ? FORAGE_FAMILIES[family.family].singular : 'find';
+
+   return new EmbedBuilder()
+      .setColor(PANEL_COLOR)
+      .setTitle(`${ITEM_KINDS[item.definition.kind].emoji} ${itemDisplayName(item)}${item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : ''}`)
+      .setDescription([
+         note ?? '',
+         `*You cannot yet say which ${singular} this is. A keener eye might.*`,
+      ].filter(Boolean).join('\n\n'))
+      .addFields({
+         name: 'In the hand',
+         value: [
+            `Weight: **${formatKg(item.definition.weightKg)}**`,
+            'Value: **?** 🪙',
+         ].join('\n'),
+         inline: true,
+      });
+}
+
+/** The kind-specific stat block (of the PERCEIVED definition — a mislabel
+ *  shows its false stats, R16). Extend with a case when a new kind lands. */
 function statFields(character: CharacterDoc, item: ResolvedItem): { name: string; value: string; inline?: boolean }[] {
-   const def = item.definition;
+   const def = perceivedDefinition(item);
 
    if (def.kind === 'weapon') {
       const properties = (def.properties ?? [])
@@ -358,6 +392,11 @@ function detailButtons(character: CharacterDoc, item: ResolvedItem, state: Brows
    if (def.kind === 'consumable')
       buttons.push(new ButtonBuilder().setCustomId(`inventory:use:${suffix}`).setLabel('Use').setEmoji('🍽️').setStyle(ButtonStyle.Primary));
 
+   // Examine (R16): offered on EVERY foraged find, identified or not — a
+   // settled-only button would leak which confident labels are actually wrong.
+   if (isForagableId(item.instance.itemId))
+      buttons.push(new ButtonBuilder().setCustomId(`inventory:examine:${suffix}`).setLabel(`Examine (${EXAMINE_AP_COST} AP)`).setEmoji('🔍').setStyle(ButtonStyle.Primary));
+
    // Stow into the stash (D33) — only when not worn (unequip first); a fresh
    // read on the click side re-checks. Whole entry moves; open it in `/stash`.
    if (!equippedSlot)
@@ -383,9 +422,13 @@ function actionSuffix(characterId: string, instanceId: string, state: BrowseStat
 }
 
 /** One-line stat summary for list rows and select descriptions. Exported for
- *  the stash panel to render identical rows (D33). */
+ *  the stash panel to render identical rows (D33). Reads the PERCEIVED
+ *  definition (R16) — an unknown admits it, a mislabel keeps lying. */
 export function lineSummary(item: ResolvedItem): string {
-   const def = item.definition;
+   if (identificationOf(item.instance) === 'unidentified')
+      return `unidentified · ${formatKg(item.definition.weightKg)}`;
+
+   const def = perceivedDefinition(item);
 
    if (def.kind === 'weapon')
       return `${def.damage.min}–${def.damage.max} dmg · ${WEAPON_REACH[def.reach].name.toLowerCase()} · ${formatKg(def.weightKg)}`;
@@ -396,7 +439,9 @@ export function lineSummary(item: ResolvedItem): string {
       return `${effects || 'no effect'} · ${formatKg(def.weightKg)}`;
    }
 
-   return `${itemValue(item)} 🪙 · ${formatKg(def.weightKg)}`;
+   // Weight is physical — the REAL definition's, so a list row can never
+   // contradict the card and betray a mislabel.
+   return `${itemValue(item)} 🪙 · ${formatKg(item.definition.weightKg)}`;
 }
 
 function durabilityLine(item: ResolvedItem): string {

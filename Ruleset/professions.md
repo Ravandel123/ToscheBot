@@ -10,9 +10,9 @@ ingredients into meals; smithing turns ore into gear — skills.md). Each is a *
 shared machinery (gather → identify → quality → produce) designed once; if `cooking` outgrows
 this file it can split later.
 
-> These are the owner's flagged "very extensive" systems. Below is the design; **almost none of
-> it is built** — the shared substrate (skills, items, locations, checks, the game clock) exists,
-> the profession content does not.
+> These are the owner's flagged "very extensive" systems. Below is the design; **foraging is
+> LIVE since S1 (2026-07-10)** — the shared gather engine + identification shipped with it —
+> fishing/cooking/gardening remain design-only.
 
 ---
 
@@ -25,7 +25,7 @@ resource, spend AP → `rollCheck` (profession skill vs a node difficulty, race 
 shows "Prize Catch" not "Masterwork") **scales with skill/SL** (skills.md's surplus→quality
 model, shared with smithing).
 
-**Profession skill trees** (skills.md; ⬜ content):
+**Profession skill trees** (skills.md; Foraging root + Identify ✅ built S1, rest ⬜):
 
 | tree | root attribute (blend) | leaves sketch |
 |---|---|---|
@@ -154,22 +154,51 @@ alternative to fighting, which a friends-server with non-combatant players wants
 
 ## Implementation
 
-⬜ **Nothing profession-specific is built.** What exists to build on: the skill-tree engine +
-`creditUse` seam (skills.md), the item-instance + quality model (items-equipment.md), the
-location graph + living-location weather/time + the `/play` hub action seam + AP spend
-(world-travel.md), the d100 check engine (combat.md). Likely build order:
-1. **Foraging** first — smallest, and it exercises the two reusable novelties (identification/
-   misidentification + quality-from-a-check) that fishing/cooking then reuse. Needs:
-   `game/data/foragables.ts` (families + descriptor pools + variants), an `Identify` skill leaf,
-   the `identified/apparentItemId/descriptorId` instance fields (items-equipment.md), a forage
-   hub action + resolver crediting skill use.
-2. **Fishing** — port the old tables onto `resourceNodes` + rod/lure gear modifiers.
-3. **Cooking** — the flavor engine + dynamic meal composition + likes/dislikes hook.
+✅ **Foraging v1 is LIVE (S1, 2026-07-10)** — the shared gather engine + identification, built
+exactly as the R16 skeleton; fishing (next: S2) reuses everything but the identify sweep.
+
+- **The gather engine** (`game/professions/gather.ts`, pure): a gather is a **short action**
+  (D5 rule 1) under the character lock, never an ActivitySession. Flow: spend
+  `FORAGE_AP_COST = 1` 🟡 → d100 check (node's `skillNode` vs its `difficulty`, race
+  affinities apply, trains the path win or lose) → on success **quantity = 1 + SL/2, cap 4** 🟡
+  → per unit: weighted table pick + **`qualityFromCheck`** (the shared surplus→quality helper
+  smithing will reuse: SL − 2..+1 jitter into today's 4 tiers) → grant to pack
+  (encumbrance-checked; overflow is narrated and lost) → `creditSkillUse` (D40 difficulty
+  weight) → chronicle **only recognized** noteworthy/pristine finds.
+- **Resource nodes** (`game/data/resourceNodes.ts` + `LocationDefinition.resourceNodes`):
+  riverbank (`riverbank_greens`, lutren ×1.25) and the new **Tanglewood** location
+  (`woodland_undergrowth`, tamian ×1.25), both difficulty +20 🟡; ids test-validated like graph
+  edges, and the `forage` hub action's locations are test-locked to where a foraging node exists.
+- **Identification** (`game/professions/identify.ts` + instance fields
+  `identified/apparentItemId/descriptorId` — optional ⇒ zero migration, and they survive
+  pack↔stash transfers): ONE identify roll sweeps the whole haul vs each find's own target
+  (`identify_forage` leaf + per-item `identifyModifier`); a miss shows a per-family descriptor
+  (`game/data/foragables.ts` pools — always at least the coarse family), and 40% 🟡 of misses
+  **plausibly mislabel** (same family, shared look preferred). **Examine** on the `/inventory`
+  item card re-checks at a uniform `EXAMINE_AP_COST = 1` 🟡 — uniform so neither the button,
+  the AP charge nor the reply can leak which labels are wrong: every outcome reads equally
+  confident, rolls are never shown, truth is sticky (an identified find can't be talked back
+  into doubt), and a successful identify merges the find into its identified stack.
+- **Display is belief**: name/value/description render the *perceived* item (descriptor when
+  unknown — worth **?**/0 until known; the apparent item when mislabeled, quality prefix and
+  all); weight always reads the REAL item so panels can't contradict and betray a mislabel.
+  Forage quality names use their own row (Wilted/—/Choice/Pristine, the first R23 name row).
+- **Sim-verified (D42), all numbers 🟡**: fresh forager (attr 27) ≈ 36% success, 0.55
+  items/AP, 81% common / 8% fine, ~31% of finds recognized (woodland ~20%); skilled (20 pts)
+  ≈ 56%, 1.1 items/AP, 62% recognized; masterwork 0% below ~50 effective → ~5% at 76 → ~21%
+  at the 95 cap. Growth (real `creditUse`): foraging hits 5 pts in ~29 gathers, 10 in ~180,
+  20 in ~880 (the sweep also banks the root, so the profession paces ~a third faster than a
+  bare root). Certain-ID cost via Examine: stingweed ~2.8 AP at 0 skill; ashgill ~17 AP.
+
+Still ⬜ per the original order:
+2. **Fishing** (S2) — port the old tables onto `resourceNodes` + rod/lure gear modifiers.
+3. **Cooking** — the flavor engine + dynamic meal composition + likes/dislikes hook;
+   **reveal-on-consumption** for misidentified edibles lands here.
 4. **Gardening** — needs a property/plot model + a growth CRON; heaviest new infra, do last.
 
-Shared prerequisites these force into existence (all flagged elsewhere as "not built"):
-skills' first `creditUse` consumer, items' quality-from-a-check, and a **loot/output source
-beyond `/item grant`** (items-equipment.md's open question — professions *are* the answer).
+Also still ⬜: NPC identify-for-a-fee (an apothecary — npcs.md; the Examine action is the seam),
+foraging's other leaves (Mushrooms/Herbs/Fruit & Forage) as per-family content, ingredient
+variants (the apple example).
 
 ---
 
@@ -178,9 +207,14 @@ beyond `/item grant`** (items-equipment.md's open question — professions *are*
 - **Grouping** — keep foraging/fishing/gardening/cooking in one file, or split cooking (the
   "very extensive" one) into its own once authored? Recommendation: build foraging+fishing
   together, spin cooking out only if it dwarfs the rest.
-- **Identification storage & descriptor pools** — confirm the three-field instance shape
-  (`identified/apparentItemId/descriptorId`) and how descriptors map to item "look" so mis-IDs
-  stay plausible; whether NPCs (an apothecary — npcs.md) can identify for a fee.
+- ~~Identification storage & descriptor pools~~ — **built as designed (S1)**: the three-field
+  instance shape + per-family descriptor pools with `looks` overlap driving plausibility.
+  Still open: NPC identify-for-a-fee (an apothecary — npcs.md; Examine is the seam), and
+  whether a mislabel should ALSO be resolvable by a *more skilled other player* examining it.
+- **S1 accepted trade-offs (owner may revisit)**: Examine costs a uniform 1 AP even on an
+  already-known find (anti-leak — see Implementation); until edibles exist, a mislabel only
+  resolves through more Examines (consumption/sale reveals come with cooking/economy); the
+  identify sweep credits the Foraging root too (one gather ≈ 1.3 root uses — see the sim).
 - **Cooking composition math** — the exact ingredient-stat → dish-stat formula and method
   modifiers; how many flavor axes to actually ship (the 6 flavor / 3 texture / hidden set is a
   proposal); how big and how mechanical likes/dislikes effects should be (mild, per pillar 5/6).

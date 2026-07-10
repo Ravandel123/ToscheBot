@@ -1,3 +1,4 @@
+import { FORAGABLE_ITEMS } from './foragables.js';
 import type { AttributeKey } from './attributes.js';
 import type { ResourceKey } from './resources.js';
 import type { EquipmentSlotId } from './equipmentSlots.js';
@@ -499,6 +500,10 @@ export const ITEMS = {
    },
 
    // Crafting materials ---------------------------------------------------------
+   // Foraged materials live in their own catalog (foragables.ts — descriptor
+   // pools, families, identify difficulties) and are spread in here so they are
+   // ordinary items everywhere else.
+   ...FORAGABLE_ITEMS,
    iron_ingot: {
       kind: 'material',
       name: 'Iron Ingot',

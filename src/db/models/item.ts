@@ -28,6 +28,10 @@ export interface ItemDoc {
    quantity: number; // > 1 only for stackable kinds; a whole stack is one doc
    durability?: number; // equippable kinds only
    acquiredAt: Date; // preserved across pack ↔ stash transfers
+   // Identification veil (R16) — mirrors the pack instance; absent = identified.
+   identified?: boolean;
+   apparentItemId?: string;
+   descriptorId?: string;
    createdAt: Date;
    updatedAt: Date;
 }
@@ -42,6 +46,9 @@ const itemSchema = new Schema({
    quantity: { type: Number, required: true, default: 1 },
    durability: { type: Number },
    acquiredAt: { type: Date, required: true },
+   identified: { type: Boolean },
+   apparentItemId: { type: String },
+   descriptorId: { type: String },
 }, { timestamps: true, minimize: false });
 
 // Every stash read is scoped to one owner's one container; this compound index

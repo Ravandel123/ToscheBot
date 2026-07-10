@@ -123,6 +123,13 @@ export const SKILL_NODES = {
    awareness: { name: 'Awareness', parent: null, attributes: { perception: 1 }, description: 'Noticing what others walk past — movement, gaps, glints.' },
    searching: { name: 'Searching', parent: 'awareness', description: 'Deliberate scouring — a way through, a thing lost, a thing hidden.' },
 
+   // === Professions — Foraging (R16; the first gather tree). The root is what
+   // the gather check rolls; Identify is what tells a honeycap from an ashgill
+   // (game/professions/). The R16 table's other leaves (Mushrooms, Herbs,
+   // Fruit & Forage) join as content when per-family gathering matters. 🟡 blend.
+   foraging: { name: 'Foraging', parent: null, attributes: { intelligence: 0.3, perception: 0.3 }, description: 'Knowing where the woods and banks hide what is worth taking.' },
+   identify_forage: { name: 'Identify', parent: 'foraging', description: 'Telling herb from weed and supper from poison — before it tells you.' },
+
    // === Combat — placeholder weapon/brawl roots (combat weight ~0.5 per the
    // opposed-roll model; no live solo consumer yet — sparring uses the old
    // engine — so the magnitude is free to tune) =============================
