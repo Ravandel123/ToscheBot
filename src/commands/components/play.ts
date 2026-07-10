@@ -6,6 +6,8 @@ import { actionsAt, hubAction } from '../../game/data/hubActions.js';
 import { resolveLocationId } from '../../game/data/locations.js';
 import { evaluateCondition, worldContext } from '../../game/world/conditions.js';
 import { performForage } from './_forageAction.js';
+import { performTalk, showTalkPicker } from './_talkAction.js';
+import { freshHubView } from './_hubView.js';
 import { performTravel } from './_playPanel.js';
 
 // Handles the `/play` game hub (namespace `play`). The hub is ephemeral and
@@ -77,10 +79,36 @@ export default {
             return;
          }
 
+         // Read-only: repaints the hub into the NPC picker (no lock — the real
+         // validation reruns when a picked NPC is clicked).
+         if (local.id === 'talk' && interaction.isButton()) {
+            await showTalkPicker(interaction, character, locationId);
+            return;
+         }
+
          await interaction.reply({
             content: `${local.emoji} ${local.comingSoon ?? 'Nothing comes of it — yet.'} _(coming soon)_`,
             ...ephemeral,
          });
+         return;
+      }
+
+      // The picker's pick: opens the dialogue session (S4/D45). The mutation
+      // choreography (D28): fast-fail if locked, ack, execute under the lock.
+      if (action === 'talkto' && interaction.isButton()) {
+         if (client.locks.isLocked(character._id)) {
+            await interaction.reply({ content: 'Your character is mid-activity — finish it first.', ...ephemeral });
+            return;
+         }
+
+         await interaction.deferUpdate();
+         await performTalk(client, interaction, character, args[0] ?? '');
+         return;
+      }
+
+      // The picker's "Never mind": back to the hub (read-only repaint).
+      if (action === 'hub' && interaction.isButton()) {
+         await interaction.update(await freshHubView(character));
          return;
       }
 

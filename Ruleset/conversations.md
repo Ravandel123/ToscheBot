@@ -16,7 +16,8 @@ mid-dialogue and it's saved" for free.
 **options**. Held as a `dialogue` `ActivitySession`: `state = { dialogueId, nodeId, flags,
 visited[] }`, one atomic `advance` per option chosen.
 
-**Option shape** (`game/data/dialogues.ts`, ⬜ not built):
+**Option shape** (`game/data/dialogues.ts`, ✅ built — the `requires`/`effects` families ship
+incrementally as their systems land; see Implementation for what is live):
 
 | Field | Meaning |
 |---|---|
@@ -25,7 +26,7 @@ visited[] }`, one atomic `advance` per option chosen.
 | `check?` | a `CheckDefinition` (combat.md) — `success`/`failure` route to different `next` nodes |
 | `effects?` | on-pick deltas: `traitDeltas`, `repDeltas`, `flags` set, currency/item grants, Stress deltas |
 | `next` | next `nodeId`, or `end` |
-| `oneShot?` | option retires after use (like an encounter option) |
+| `oneShot?` | option retires after being picked ONCE, success or failure (asked and answered — stricter than an encounter option, which only burns on failure) |
 | `hidden?` | not shown until `requires` is met (a secret line), vs shown-but-disabled with a reason |
 
 **Availability of the whole conversation** is itself a condition set (location, time, faction
@@ -92,19 +93,51 @@ choices**. The bot supplies the engine + generic small-talk; the Imperator suppl
 
 ## Implementation
 
-⬜ **Nothing is built.** The reusable substrate exists (`ActivitySession` + the D22 registry +
-`world/conditions.ts` + `game/checks.ts` + `applyTraitDeltas`), so the first build is:
-1. `game/data/dialogues.ts` — the node/option catalog (content-in-code, D10; test-validated
-   like encounters: every `next` resolves, no dangling nodes).
-2. `game/activity/dialogue.ts` — the pure step-reducer (pick option → apply effects → resolve
-   check → compute next node), mirroring `challenge.ts`.
-3. `commands/components/_activities/dialogue.ts` — the handler (`render(session)` shows the
-   node + eligible options; `onAction` picks one), registered by type `dialogue`.
-4. A way to **start** one: an NPC on the `/play` hub's presence list becomes clickable, or a
-   "Talk" hub action; also the encounter seam can launch a dialogue as an `activity` encounter.
+✅ **Dialogue v1 is LIVE (PLAN S4, D45, 2026-07-10)** — exactly the four-piece build this
+section named, template-first per AUDIT §3.4:
 
-Reuses (no new infra): the generic `activity` router, the condition evaluator, the check engine,
-trait/rep/flag write seams.
+1. ✅ `game/data/dialogues.ts` — the node/option catalog (D10), **graph-test-validated**
+   (`dialogues.test.ts`: every `next` resolves, every node reachable from `start`, rolled
+   options declare a `failure` route, hidden options have a gate, `{placeholders}` known).
+   Content: **`small_talk`** — ONE reusable template serving every archetype (greeting,
+   per-archetype `{work}` function pointer via `WORK_LINES`, a repeatable rumor pool, a
+   one-shot `[Persuade]` press for secrets) — plus **`marrek_tales`**, the single authored
+   named-NPC tree (Marrek: lore node, persuade check, a `+cruelty` awarding line, a
+   `[Courage ≥ 1]` visible-locked gate, a `heard_truth`-unlocked hidden toast `+honor`).
+   Assignment: `NpcDefinition.dialogueId` (authored) else `ARCHETYPE_DIALOGUES[archetype]`.
+2. ✅ `game/activity/dialogue.ts` — the pure reducer, mirroring `challenge.ts`
+   (state-from-blob tolerance, per-option targets precomputed at session start for honest %,
+   outcome lines stored in state so repaints are stable, terminal `resolution` derived-then-
+   stored for crash-safe completion).
+3. ✅ `commands/components/_activities/dialogue.ts` — the handler, registered by type
+   `dialogue`; step-guarded `advance` per pick, side writes (traits via `applyTraitDeltas`,
+   speechcraft via `creditSkillUse`, AP) ride the guard win; farewell finalize re-entry.
+4. ✅ Start = the **`talk` hub action** (first live 'anywhere' action): read-only NPC picker
+   (`play:talkto:<npc-id>` + a `play:hub` back button) → `performTalk` under the character
+   lock (busy re-entry per D22, presence re-checked at click time). The encounter-launched
+   dialogue seam remains open (an `activity` encounter with `activityType: 'dialogue'`).
+
+**Gates live in v1**: prior `flags` + `minTraits` (evaluated purely against session state —
+the trait snapshot is kept current by in-session awards; the DB write stays authoritative).
+`minRep` (S5), item-held, skill/attribute floors and role gates are additive catalog fields —
+add the field + one evaluator branch when their systems exist, no migration.
+**Effects live in v1**: `traits` deltas + session `flags`. Rep/currency/item/Stress effects
+wait on their systems (same additive path). **AP**: talking is free; a **rolled** option
+costs `DIALOGUE_CHECK_AP_COST = 1` 🟡 (the "a check is a meaningful action" rule above —
+also the anti-farm: training speechcraft is priced like training foraging).
+
+**Two v1 shape decisions** (documented in `game/activity/dialogue.ts`):
+- **Session flags are the ONLY memory** — they die with the conversation (the "Where flags
+  live long-term" open question below stands; durable quest flags/disposition need an owner
+  call).
+- **The NPC is NOT a session participant**: talking never makes the NPC busy, so one player
+  chatting up the merchant cannot lock the shop for everyone (and the regen job never sees a
+  "busy" NPC over a chat). Revisit if a dialogue ever mutates NPC state mid-session (trade,
+  disposition) — then the NPC must join `participantIds` and its lock.
+- No chronicle: a mundane chat is nobody's news (D24 reserves the feed for the noteworthy).
+
+Reused with no new infra: the generic `activity` router, the check engine, `applyTraitDeltas`,
+`creditSkillUse` (D40), the D22 busy/re-entry rules, TTL reaping ("walk away = it lapses").
 
 ---
 

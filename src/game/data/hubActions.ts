@@ -46,13 +46,15 @@ export const HUB_ACTIONS = {
       locations: 'anywhere',
       comingSoon: 'You case the ground and the shadows, but Tosch has not yet mapped what is worth finding here.',
    },
+   // LIVE (S4): opens the NPC picker → a durable dialogue session (D45). The
+   // play router owns the handler case; no comingSoon = live. Offered anywhere —
+   // a location with no talkable NPC present degrades to a gentle banner.
    talk: {
       id: 'talk',
       label: 'Talk to someone',
       emoji: '💬',
       description: 'Find a local to trade words — or rumors.',
       locations: 'anywhere',
-      comingSoon: 'The folk here have plenty to say, but none of them have learned their lines yet.',
    },
    enter: {
       id: 'enter',

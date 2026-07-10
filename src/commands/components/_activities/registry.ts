@@ -1,11 +1,12 @@
 import challenge from './challenge.js';
+import dialogue from './dialogue.js';
 import type { ActivityHandler } from '../../../types/activities.js';
 
 // The activity-handler registry (D22): ActivitySession.type → handler. Add a
 // new interactive activity by dropping a handler file in this (loader-invisible)
 // folder and listing it here — the `activity` component router and every
 // re-entry point (e.g. `/travel` telling you you're busy) pick it up.
-const HANDLER_LIST: readonly ActivityHandler[] = [challenge];
+const HANDLER_LIST: readonly ActivityHandler[] = [challenge, dialogue];
 
 function buildRegistry(): ReadonlyMap<string, ActivityHandler> {
    const registry = new Map<string, ActivityHandler>();

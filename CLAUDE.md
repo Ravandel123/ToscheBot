@@ -160,6 +160,7 @@ detail in `Ruleset/`. Numbers are append-only; new entries stay 1–3 lines here
 | D42 | Style family = weapon GRIP (`unarmed \| one_handed \| two_handed \| ranged` seam), style branches under their grip branch; initiative FLOWS: a landed blow may press a follow-up (`followUpChance`: net-SL-dominant + style tempo − per-press decay, sim-verified ~67/25/6% streaks for even fights, rare 10+ flurries only across big gaps). |
 | D43 | Gathering engine LIVE (R16, foraging first): a gather = SHORT action under the lock (AP → d100 vs a location `resourceNode` → SL-scaled yield + shared `qualityFromCheck` → one-roll identify sweep). Identification veil = optional instance fields (`identified/apparentItemId/descriptorId`, zero migration); failed IDs can plausibly mislabel (same family/shared look); Examine = uniform 1 AP, every outcome equally confident (no roll shown, truth sticky) so nothing leaks which labels are wrong. |
 | D44 | NPC roster v1 (static 6C half, PLAN S2): `game/data/npcs.ts` = 7 named NPCs; an NPC's `Character._id` = `npc-<npcId>` (customId-safe) and its static half (archetype, home) resolves from the catalog, never stored (D10); `characterService.createNpc` mints approved ownerless docs outside the wizard/approval flow; `npm run seed-npcs` = confirmDb-guarded idempotent update-by-npcId refreshing ONLY the static half — mutable NPC state (pack, coins 🟡, progression) is never reset. |
+| D45 | Dialogue v1 (PLAN S4): a conversation = a `dialogue` ActivitySession walking a code node/option graph (`game/data/dialogues.ts`, graph-test-validated); template-first — ONE `small_talk` archetype dialogue serves every NPC, authored trees per NPC via `NpcDefinition.dialogueId` (`marrek_tales` is the proof). Options gate on session flags + `minTraits`, may roll d100 checks (precomputed honest %, `DIALOGUE_CHECK_AP_COST = 1` 🟡, train speechcraft per D40) and award traits/SESSION-scoped flags (durable flags = Decision queue); start = the live `talk` hub action's NPC picker; the NPC is never a session participant (a chat can't lock the merchant busy); no chronicle. |
 
 ## Target architecture
 
@@ -186,7 +187,7 @@ src/
                         resources (attribute-derived maxes), identity/limits
     combat/             sparring d20 (throwaway) + real duel (duel/profile/styles/plan/
                         training/bouts/spireLadder/leaderboards)
-    activity/           durable-activity pure step reducers (challenge…)
+    activity/           durable-activity pure step reducers (challenge, dialogue…)
     professions/        gather engine (short-action resolver, quality-from-check) +
                         identification (D43)
     world/              travel rules, time (game clock), conditions, events
@@ -377,7 +378,7 @@ secrets), commands doing DB access directly.
 **Where the build queue lives: `PLAN.md`** (session-sized briefs + the owner decision queue).
 Idea backlog and full decision history: `DECISIONS.md`.
 
-**Built and green** (588 tests, build + lint pass): core runtime; the whole fun/utility/admin
+**Built and green** (624 tests, build + lint pass): core runtime; the whole fun/utility/admin
 prefix layer; AI persona; moderation + espionage logs; character creation wizard + owner
 approval; attributes + point-buy (D25); d100 checks + travel challenges (D26); `/play` hub +
 living locations (D30/D31); inventory/equipment + stash (D28/D33); skill trees + LIVE
@@ -385,12 +386,13 @@ learn-by-doing (D34/D40); real combat — duel, bout modes, Spire ladder, styles
 plans, flowing momentum (D35–D37, D41–D42); seed/backup/restore + CI (D38, AUDIT §1/§2.3/§2.9);
 gathering engine + Foraging v1 with identification/mislabels (D43, PLAN S1 — the first real
 loot source and the first live hub action); NPC roster v1 (D44, PLAN S2 — 7 named NPCs via
-`npm run seed-npcs`, presence lists come alive).
+`npm run seed-npcs`, presence lists come alive); Dialogue v1 (D45, PLAN S4 — the `talk` hub
+action opens durable conversations: an archetype small-talk template + Marrek's authored tree).
 
 **Missing (current focus — the peaceful core loop, see PLAN.md):** economy/shop (S3 —
-nothing earns or spends coins yet), dialogue (S4), fishing (S6), the NPC behavior cron (6C's
-second half — Decision queue #7); hub actions besides `forage` are still placeholders;
-stamina has no consumer.
+nothing earns or spends coins yet), fishing (S6), the NPC behavior cron (6C's second half —
+Decision queue #7); hub actions besides `forage` and `talk` are still placeholders; stamina
+has no consumer.
 
 **Pending ops (owner):** one `npm run deploy` covers the queued slash changes (`/character
 combat`, `/smackdown` trial browser, `/stash`, `/leaderboard` categories); one
@@ -404,14 +406,15 @@ Atlas has still not been run.
 - **Slash** — `/character` (create wizard/view/list/skills/combat/switch), `/profile`,
   `/inventory` (+ Examine on foraged finds), `/stash`, `/item grant` (ownerOnly), `/smackdown`
   (`sparring` | `duel [mode]` | `trial`), `/leaderboard [category]`, `/play` (travel + the
-  live `forage` action, D43).
+  live `forage` (D43) and `talk` (D45) actions).
 - **Events** — `messageCreate` (moderation → `h!` routing → ambient AI), `interactionCreate`,
   `clientReady`, `messageDelete`/`messageUpdate` (espionage edit/delete log),
   `guildMemberAdd`/`guildMemberRemove`.
 - **Jobs** — `resource-regen` (hourly, D23-aware), `db-backup` (daily 04:30 → `#espionage`;
   `h!backup` on demand; `npm run restore` re-imports).
-- **Component namespaces** — `character`, `comic`, `activity` (+ `_activities`: `challenge`),
-  `profile`, `inventory`, `stash`, `play`, `duel`, `charskills`, `trial`, `combatplan`.
+- **Component namespaces** — `character`, `comic`, `activity` (+ `_activities`: `challenge`,
+  `dialogue`), `profile`, `inventory`, `stash`, `play`, `duel`, `charskills`, `trial`,
+  `combatplan`.
 
 **Phases:** 0–5 ✅ (manual turn-by-turn combat deliberately deferred — AUDIT §5). Phase 6 ✅
 except **6C's second half** (the static NPC roster shipped in D44; the behavior cron waits on

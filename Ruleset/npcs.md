@@ -127,9 +127,12 @@ Build order, remaining:
    **movement**, the highest-impact/lowest-risk action), bulk-first & lock-aware per D23.
    **Blocked on the lifecycle decision** (PLAN Decision queue #7); when it lands, also flip
    `npcSeed.ts`'s reseed-repositions-home block (location becomes mutable state).
-3. ⬜ Player-facing verbs, in demand order: **trade** (PLAN S3, needs economy.md's shop) →
-   **conversation** (PLAN S4, conversations.md) → **teaming** (needs the Side-A/B combat
-   engine, combat.md) → autonomous professions (needs professions.md).
+3. 🟨 Player-facing verbs, in demand order: **trade** ⬜ (PLAN S3, needs economy.md's shop) →
+   **conversation** ✅ (S4/D45, 2026-07-10: every NPC talks via its archetype's `small_talk`
+   template or an authored tree — `NpcDefinition.dialogueId`, Marrek's `marrek_tales` is the
+   proof piece; conversations.md Implementation. A mid-chat NPC is deliberately NOT session-
+   busy) → **teaming** ⬜ (needs the Side-A/B combat engine, combat.md) → autonomous
+   professions ⬜ (needs professions.md).
 4. ⬜ `disposition` (per-NPC-per-character) — add when teaming/gift content needs it; keep
    bounded (sparse-only from day one, AUDIT §3.3).
 

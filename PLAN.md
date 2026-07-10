@@ -48,7 +48,9 @@ the next brief.
       asks for the DB name, or `SEED_NPCS_CONFIRM_DB=<name>`).
 - [ ] A live end-to-end smoke against Atlas (`.env` + real guild) still hasn't been run —
       after S1 it should include one `forage` click and one Examine on the find; after S2
-      also a `/play` presence check at the plaza/tavern (NPCs should be standing there).
+      also a `/play` presence check at the plaza/tavern (NPCs should be standing there);
+      after S4 also one `talk` → a small-talk exchange, plus one rolled option (Marrek's
+      `[Persuade]` at the tavern) to see the AP charge and the dice line.
 
 ---
 
@@ -118,7 +120,7 @@ trade, buyback, NPC↔NPC autonomous trading behavior (that's a lifecycle/cron c
 queue #7; v1 only needs the pool + transfer primitive to exist, not NPCs trading on their own).
 **Redeploy**: none.
 
-### S4 — Dialogue v1 — talk to an NPC · [M–L] · MOSTLY SAFE
+### S4 — Dialogue v1 — talk to an NPC · [M–L] · MOSTLY SAFE · ✅ 2026-07-10
 **Design**: `Ruleset/conversations.md` (R14), AUDIT §3.4 ("it's an ActivitySession — resist a
 new engine").
 **Why**: `talk` is the most-tempting dead button and NPCs exist after S3. Author cost is the
@@ -223,6 +225,17 @@ section), then it can become a session brief.
 
 ## Log
 
+- **2026-07-10 — S4 (Dialogue v1)** ✅ → **D45**: run ahead of S3 on the owner's call (dialogue
+  needs only the S2 roster, not the shop). Everything in the brief shipped: `dialogue`
+  ActivitySession + `_activities/` handler; the node catalog in code (graph-test-validated);
+  options gated/rolled through flags + `minTraits` + the check engine; rolled options credit
+  speechcraft (D40); session-scoped flags only; the `small_talk` archetype template (all 7 NPCs
+  talk) + `marrek_tales` as the one authored tree; the `talk` hub action live with an NPC
+  picker. Divergences: rolled options cost **1 AP 🟡** (anti-farm — re-rolling persuade is
+  priced like a forage roll; checkless talk stays free); gates ship flags+traits only
+  (minRep/item/skill floors are additive fields for S5+); the NPC is **not** a session
+  participant (a chat must not lock the merchant — revisit when dialogue mutates NPC state,
+  noted in conversations.md). No redeploy (hub action + component only).
 - **2026-07-10 — S2 (NPC roster v1)** ✅ → **D44**: everything in the brief shipped
   (`game/data/npcs.ts` with 7 named NPCs across all 5 locations, `characterService.createNpc`,
   idempotent `npm run seed-npcs` — update-by-npcId refreshing only the static half, db-tested

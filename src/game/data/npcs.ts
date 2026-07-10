@@ -51,6 +51,10 @@ export interface NpcDefinition {
    startingInventory?: readonly NpcStartingItem[];
    /** 🟡 Starting deltradaCoins, granted on CREATE only (see startingInventory). */
    startingCoins?: number;
+   /** Hand-authored conversation tree (→ DialogueId, test-validated; kept a
+    *  plain string to avoid a data-module cycle). Absent = the archetype's
+    *  small-talk template (dialogues.ts, D45). */
+   dialogueId?: string;
 }
 
 export const NPCS = {
@@ -142,6 +146,7 @@ export const NPCS = {
          { itemId: 'iron_dagger' },
          { itemId: 'bent_spoon' },
       ],
+      dialogueId: 'marrek_tales',
    },
    wandering_scholar: {
       name: 'Vellin',
