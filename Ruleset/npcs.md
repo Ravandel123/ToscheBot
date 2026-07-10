@@ -12,9 +12,12 @@ This is root `CLAUDE.md`'s **Phase 6C**, designed here.
 
 ## Reference (decided data & math)
 
-**An NPC is** — `Character { ownerId: null, approvalStatus: 'approved', role, homeLocationId,
-behavior: NpcBehaviorId, disposition }`. Reuses every character system for free (locks keyed by
-`Character._id` already handle NPCs, D18; presence `atLocation` already includes them, D31).
+**An NPC is** — a `Character { ownerId: null, approvalStatus: 'approved' }` whose **`_id` is
+`npc-<npcId>`** (D44): the static half (role/epithet, home, archetype→future behavior) is NOT
+stored on the doc — it resolves from `game/data/npcs.ts` via that id at read time (D10).
+Dynamic per-NPC state (disposition, later) gets stored fields when built. Reuses every
+character system for free (locks keyed by `Character._id` already handle NPCs, D18; presence
+`atLocation` already includes them, D31).
 
 **Simulation** — an hourly `npc-tick` CRON: each NPC performs **≤1 action** (🟡, "or less" — a
 probability/energy gate keeps them from all acting every hour). Actions are chosen by the NPC's
@@ -46,12 +49,17 @@ location, currencies, health — and already lock, already show up in presence l
 be a combatant. The *only* new thing an NPC needs is a **brain** (the behavior CRON) and a
 **spawn** (the seeding script). Everything else is inherited. This is why the design is cheap.
 
-### Seeding — a script, run by the Imperator ✅ direction
-The owner's ask: "a script that easily adds them to a new database." A `scripts/seed-npcs.ts`
-(sibling of `deploy-commands.ts`) **idempotently upserts** a hand-authored roster
-(`game/data/npcs.ts` — names, race, role, home, behavior, starting gear/skills) so a fresh Atlas
-cluster (or a wipe) is repopulated in one command. Idempotent by a stable NPC id, so re-running
-never duplicates (and can be used to *update* the roster). NPC ids are append-only (D10).
+### Seeding — a script, run by the Imperator ✅ BUILT (S2/D44)
+The owner's ask: "a script that easily adds them to a new database." `scripts/seed-npcs.ts`
+(`npm run seed-npcs`, confirmDb-guarded via `SEED_NPCS_CONFIRM_DB`; logic in `npcSeed.ts`,
+db-tested) **idempotently upserts** the hand-authored roster (`game/data/npcs.ts` — name, race,
+gender, epithet, home, archetype, starting gear/coins) so a fresh Atlas cluster (or a wipe) is
+repopulated in one command. Idempotent by the stable NPC id (= the character id, D44):
+re-running never duplicates — it **updates the static half only** (identity, race, home) and
+never resets what the world has mutated (pack, coins, resources, progression — AUDIT §3.3).
+Starting gear/coins are granted on CREATE only. NPC ids are append-only (D10). One v1 caveat:
+a reseed repositions a re-homed NPC (nothing else can move one yet) — the day the npc-tick
+cron lands, drift must win and that block in `npcSeed.ts` must be deleted.
 
 ### The behavior CRON — one action an hour ✅ direction (numbers 🟡)
 An hourly `npc-tick` job (sibling of `resource-regen`, and **bulk-first / lock-aware** exactly
@@ -100,18 +108,30 @@ procedurally). Ship a few named ones + a handful of generics per key location.
 
 ## Implementation
 
-⬜ **Nothing is built** (Phase 6C is untouched). Groundwork that already exists: the `Character`
-model supports `ownerId: null`; locks, presence (`atLocation`), and the hourly-CRON pattern
-(`resource-regen`) are all NPC-ready. Build order:
-1. `game/data/npcs.ts` (roster) + `scripts/seed-npcs.ts` (idempotent upsert) — get *static*
-   NPCs standing in the world (they already appear in presence, already talk once dialogue
-   exists). Immediate life, no CRON yet.
-2. `game/data/npcBehaviors.ts` + `jobs/npcTick.ts` — the hourly brain (start with just
+✅ **Step 1 is LIVE (S2/D44, 2026-07-10)** — the static roster:
+- `game/data/npcs.ts` — 7 named NPCs (plaza merchant, tavernkeeper, spire guard, ferryman,
+  herb-gatherer, old campaigner, wandering scholar) with archetype (data-only seam: nothing
+  reads it until the S3 shop / the behavior cron), home, starting gear, and 🟡 starting coins
+  (the plaza merchant's pool = the S3 shop's finite trading gold, per the owner's 2026-07-10
+  call). Content integrity (lengths, carry weight vs racial strength, a merchant anchored at
+  the plaza) is test-locked in `npcs.test.ts`.
+- `characterService.createNpc` mints an approved `ownerId: null` character under the stable
+  `npc-<npcId>` id — never through the wizard/approval flow (D13 vets players, not content);
+  `npcDefinition(characterId)` resolves the static half back from the catalog (D10).
+- `scripts/seed-npcs.ts` — the idempotent upsert (see Seeding above).
+- NPCs already show in `/play` presence with an *(NPC)* tag — zero new runtime code, as
+  designed.
+
+Build order, remaining:
+2. ⬜ `game/data/npcBehaviors.ts` + `jobs/npcTick.ts` — the hourly brain (start with just
    **movement**, the highest-impact/lowest-risk action), bulk-first & lock-aware per D23.
-3. Player-facing verbs, in demand order: **trade** (needs economy.md's shop) → **conversation**
-   (needs conversations.md) → **teaming** (needs the Side-A/B combat engine, combat.md) →
-   autonomous professions (needs professions.md).
-4. `disposition` (per-NPC-per-character) — add when teaming/gift content needs it; keep bounded.
+   **Blocked on the lifecycle decision** (PLAN Decision queue #7); when it lands, also flip
+   `npcSeed.ts`'s reseed-repositions-home block (location becomes mutable state).
+3. ⬜ Player-facing verbs, in demand order: **trade** (PLAN S3, needs economy.md's shop) →
+   **conversation** (PLAN S4, conversations.md) → **teaming** (needs the Side-A/B combat
+   engine, combat.md) → autonomous professions (needs professions.md).
+4. ⬜ `disposition` (per-NPC-per-character) — add when teaming/gift content needs it; keep
+   bounded (sparse-only from day one, AUDIT §3.3).
 
 ---
 

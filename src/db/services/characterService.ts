@@ -24,6 +24,10 @@ export type TraitDeltas = Partial<Record<TraitKey, number>>;
 export type EditableIdentity = Partial<Pick<CharacterIdentity, 'name' | 'epithet' | 'gender' | 'bio' | 'avatarUrl'>>;
 export type NewCharacterIdentity = EditableIdentity & { name: string; race?: RaceId | null };
 
+// The authored identity an NPC spawns with — every field comes from the roster
+// catalog (game/data/npcs.ts), none from a player.
+export type NpcIdentity = Pick<CharacterIdentity, 'name' | 'epithet' | 'gender' | 'bio'> & { race: RaceId };
+
 // Same atomic aggregation-pipeline pattern as before (D6): every write clamps
 // server-side in one round trip. Mongoose 9 only accepts a pipeline array when
 // the call opts in — every consumer must pass PIPELINE in its options.
@@ -66,6 +70,25 @@ export const characterService = {
       };
 
       const created = await Character.create(character);
+      return created.toObject();
+   },
+
+   /** Mints an APPROVED, ownerless Character for an NPC (D12/D44) under a
+    *  caller-supplied stable id (`npc-<npcId>` — the NPC seed's idempotency
+    *  key; never a uuid, and ':'-free since character ids ride in customIds).
+    *  NPCs are content, not petitions: they skip the wizard and the whole D13
+    *  approval lifecycle. Static roster data (archetype, home) is NOT stored —
+    *  it resolves from game/data/npcs.ts at read time (D10). */
+   async createNpc(characterId: string, identity: NpcIdentity, locationId: string): Promise<CharacterDoc> {
+      const created = await Character.create({
+         _id: characterId,
+         ownerId: null,
+         approvalStatus: 'approved' as const,
+         identity: { ...identity, avatarUrl: '' },
+         locationId,
+         ...defaultCharacterStats(identity.race),
+      });
+
       return created.toObject();
    },
 

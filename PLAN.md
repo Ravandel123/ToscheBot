@@ -9,7 +9,7 @@ still has no peaceful core loop — no way to gather anything (the only loot sou
 owner-run `/item grant`), no way to earn or spend a single coin, nobody to meet, and every
 `/play` hub action is a placeholder. The queue below builds that loop **engine-first**:
 each session ships a small reusable engine plus minimal content, so widening later is a
-catalog edit, not a refactor (D10 discipline). Sessions S1–S4 need **no new owner
+catalog edit, not a refactor (D10 discipline). Sessions S1–S3 and S6 need **no new owner
 decisions** — everything they build is already designed in `Ruleset/` (professions R16,
 npcs R18, economy's flat-price shop). Things that DO need the owner's call are parked in
 the **Decision queue** at the bottom, deliberately out of the session path.
@@ -44,8 +44,11 @@ the next brief.
 
 - [ ] `npm run deploy` — pending slash changes: `/character combat`, `/smackdown` (trial
       browser), `/stash` (new command), `/leaderboard` (categories).
+- [ ] `npm run seed-npcs` — populates the S2 NPC roster on the live DB (idempotent; guard
+      asks for the DB name, or `SEED_NPCS_CONFIRM_DB=<name>`).
 - [ ] A live end-to-end smoke against Atlas (`.env` + real guild) still hasn't been run —
-      after S1 it should include one `forage` click and one Examine on the find.
+      after S1 it should include one `forage` click and one Examine on the find; after S2
+      also a `/play` presence check at the plaza/tavern (NPCs should be standing there).
 
 ---
 
@@ -77,25 +80,10 @@ fishing/cooking then reuse.
 **Not in scope**: fishing, cooking, gardening, selling, NPC identify-for-fee (leave a seam).
 **Redeploy**: none (hub action + component only).
 
-### S2 — Fishing v1 · [M] · SAFE
-**Design**: `Ruleset/professions.md` (R16 fishing — "ported & bounded"); reuses the S1 engine.
-**Why**: the old bot's flagship feature and the biggest player-visible win per hour; a second
-consumer proves the gather engine is genuinely generic.
-**Build**: per-water fish tables via `resourceNodes`; weather/time bias through the D31
-condition language; rod/lure as items (a new `tool` item kind + bait — one union member + one
-`ITEM_KINDS` meta entry per D28) modifying the check and/or table; fish = item instances with
-a per-instance `weightKg` (the bragging stat — bounded per D32: the catch lands in pack/stash,
-NEVER an unbounded catch log like OldBot's `gFishing.fish[]`); fishing skill tree (root +
-Angling leaf; Netting/Deep-water = later content); flip the `fish` hub action; chronicle rare
-catches. **Stretch** (only if trivially cheap): a per-character `heaviestCatch` snapshot for a
-future leaderboard category.
-**Not in scope**: selling, cooking, a tackle shop, netting/deep-water content.
-**Redeploy**: none.
-
-### S3 — NPC roster v1 (static half of 6C) · [S–M] · SAFE
+### S2 — NPC roster v1 (static half of 6C) · [S–M] · SAFE · ✅ 2026-07-10
 **Design**: `Ruleset/npcs.md` (R18 build order), AUDIT §3.3.
 **Why**: presence rendering already shows NPCs — the world just has none; prerequisite for
-the shop (S4) and dialogue (S5); zero new runtime engine.
+the shop (S3) and dialogue (S4); zero new runtime engine.
 **Build**: `game/data/npcs.ts` (stable `npcId`, name/race/epithet, home location, archetype,
 optional starting inventory); a dedicated `characterService.createNpc`-style path minting an
 approved `Character` with `ownerId: null` (never through the wizard/approval flow); an
@@ -106,7 +94,7 @@ Content: ~5–8 named NPCs across locations (tavernkeeper, plaza merchant, guard
 dialogue, dueling NPCs (owner ruled it out — D37).
 **Redeploy**: none.
 
-### S4 — Merchant shop / economy v1 · [M] · SAFE
+### S3 — Merchant shop / economy v1 · [M] · SAFE
 **Design**: `Ruleset/economy.md` + `npcs.md` (merchant stock = NPC inventory), AUDIT §3.6.
 **Why**: closes the loop S1/S2 open (goods → coins → gear). Economy.md's own risk note: every
 later system must assume THIS flat-price shop exists instead of improvising a stand-in.
@@ -117,12 +105,20 @@ transfer NPC→player pack under both characters' locks (insert-before-remove, D
 **sell** = reverse at `value × sellRate` (🟡 ~50%) × quality multiplier; prices flat from the
 catalog `value` — **no haggle, no reputation modifiers** (both are read-time multipliers
 added later without touching stored data); flip the `market` hub action (plaza, daylight
-hours already in the catalog). Merchant coins are infinite in v1 (not tracked).
+hours already in the catalog). **NPC gold is a real, finite per-character pool** (owner
+call, 2026-07-10) — not infinite: buying from a player debits the merchant's own
+`deltradaCoins` via the same `applyCurrencyDeltas`, and items sold to the merchant land in
+its real inventory (not vanish) so they can resurface as stock or move on to another NPC.
+Gold needs a regen source (🟡 — cron top-up like vitals, or a slow drip tied to trade volume;
+decide the mechanism during the build) so a merchant can't be drained to zero and softlock
+the shop. NPC→NPC item/gold transfer is the same `applyCurrencyDeltas` + insert-before-remove
+pattern as player↔NPC — no new primitive, just a second consumer.
 **Not in scope**: haggle checks, reputation pricing, regional currencies (D19), player↔player
-trade, buyback.
+trade, buyback, NPC↔NPC autonomous trading behavior (that's a lifecycle/cron concern — Decision
+queue #7; v1 only needs the pool + transfer primitive to exist, not NPCs trading on their own).
 **Redeploy**: none.
 
-### S5 — Dialogue v1 — talk to an NPC · [M–L] · MOSTLY SAFE
+### S4 — Dialogue v1 — talk to an NPC · [M–L] · MOSTLY SAFE
 **Design**: `Ruleset/conversations.md` (R14), AUDIT §3.4 ("it's an ActivitySession — resist a
 new engine").
 **Why**: `talk` is the most-tempting dead button and NPCs exist after S3. Author cost is the
@@ -135,12 +131,32 @@ speechcraft (D40); session-scoped flags only.
 talk, quests/rewards.
 **Redeploy**: none.
 
-### S6 — Faction reputation v1 · [S] · SAFE (build only after S4/S5 give it consumers)
+### S5 — Faction reputation v1 · [S] · SAFE (build only after S3/S4 give it consumers)
 **Design**: `Ruleset/factions.md`, AUDIT §3.5.
 **Build**: faction catalog + sparse per-character `reputation` map (racial baselines applied
 at read time — never stored, or a retune becomes a migration); a `minReputation` condition
 field (every gate surface inherits it for free); a price-modifier seam in the shop; small ±
 rep deltas from dialogue/challenge outcomes.
+
+### S6 — Fishing v1 · [M] · SAFE · deprioritized 2026-07-10
+**Design**: `Ruleset/professions.md` (R16 fishing — "ported & bounded"); reuses the S1 engine.
+**Why moved later**: originally S2; the owner deferred it behind the NPC/economy/dialogue arc
+(now S2–S5) since foraging already proves the gather engine is generic — a second consumer
+isn't urgent.
+**Scope call (owner, 2026-07-10): NOT an interactive minigame.** Fishing stays a plain
+roll-based short action on the same `game/professions/gather.ts` resolver as foraging (AP →
+d100 check → SL-scaled yield) — no timing/reaction minigame, no separate interaction loop.
+**Build**: per-water fish tables via `resourceNodes`; weather/time bias through the D31
+condition language; rod/lure as items (a new `tool` item kind + bait — one union member + one
+`ITEM_KINDS` meta entry per D28) modifying the check and/or table; fish = item instances with
+a per-instance `weightKg` (the bragging stat — bounded per D32: the catch lands in pack/stash,
+NEVER an unbounded catch log like OldBot's `gFishing.fish[]`); fishing skill tree (root +
+Angling leaf; Netting/Deep-water = later content); flip the `fish` hub action; chronicle rare
+catches. **Stretch** (only if trivially cheap): a per-character `heaviestCatch` snapshot for a
+future leaderboard category.
+**Not in scope**: selling, cooking, a tackle shop, netting/deep-water content, any interactive
+minigame.
+**Redeploy**: none.
 
 ### Fillers (safe leftovers for a session that runs short)
 - `locationStateService.discoverFeature`: convert the `modifiedCount` check to a filter guard
@@ -157,7 +173,7 @@ rep deltas from dialogue/challenge outcomes.
 
 ## Decision queue — do przemyślenia przez właściciela (offline, bez sesji)
 
-Brainstorm topics. None of these blocks S1–S6; each blocks the thing named in **Blocks**.
+Brainstorm topics. None of these blocks S1–S5 or S6; each blocks the thing named in **Blocks**.
 When one is decided: write the outcome into the named `Ruleset/` file (Reference/Ruleset
 section), then it can become a session brief.
 
@@ -180,8 +196,11 @@ section), then it can become a session brief.
    points, armour × weapon-type table. Manual turn-by-turn combat only AFTER auto-resolve has
    actually been played (AUDIT §5). → `combat.md`. **Blocks**: all combat layering.
 7. **NPC lifecycle**: mortality/reseed-vs-persist policy + hourly tick budget/behavior depth —
-   must land BEFORE the NPC movement cron (NOT needed for S3's static roster). → `npcs.md`.
-   **Blocks**: the second half of 6C.
+   must land BEFORE the NPC movement cron (NOT needed for S2's static roster) AND before any
+   NPC↔NPC autonomous trading behavior (S3 only needs the gold-pool + transfer primitive).
+   → `npcs.md`. **Blocks**: the second half of 6C, autonomous NPC trading. *(When the cron
+   lands, also flip `npcSeed.ts`'s reseed-repositions-home block — location becomes mutable
+   NPC state; flagged in the code.)*
 8. **Hunger/thirst** *(owner's `Ruleset/TODO.md`)*: rising meters with inverted tick
    semantics — design the model (and whether it's fun at all on a casual server) before any
    build. → `character.md`.
@@ -199,11 +218,19 @@ section), then it can become a session brief.
 - Cooking & gardening — after foraging/fishing prove the loop; gardening needs property +
   growth-cron infra (professions.md's own order).
 - Mongo transactions / service split / ORM / DI — never at this scale (AUDIT §5).
-- Regional currencies & exchange (D19), haggle/reputation pricing (until S4+S6 exist).
+- Regional currencies & exchange (D19), haggle/reputation pricing (until S3+S5 exist).
 - Per-location armour coverage & the armour × weapon-type table (needs Decision #6).
 
 ## Log
 
+- **2026-07-10 — S2 (NPC roster v1)** ✅ → **D44**: everything in the brief shipped
+  (`game/data/npcs.ts` with 7 named NPCs across all 5 locations, `characterService.createNpc`,
+  idempotent `npm run seed-npcs` — update-by-npcId refreshing only the static half, db-tested
+  against the real roster). Divergences: an NPC's `Character._id` IS `npc-<npcId>` (no stored
+  npcId field — zero schema change, and the static half resolves from the catalog per D10);
+  `startingCoins` 🟡 added ahead of S3 (the owner's finite-merchant-gold call needs the plaza
+  merchant seeded with a pool); a reseed repositions a re-homed NPC until the npc-tick cron
+  exists (flip flagged in code + Decision queue #7). No redeploy; owner op: `npm run seed-npcs`.
 - **2026-07-10 — S1 (Gathering engine + Foraging v1)** ✅ → **D43**: everything in the brief
   shipped (gather resolver + `qualityFromCheck`, resourceNodes + the new `tanglewood`
   woodland, foraging tree, 8 foragables + descriptor pools, identification veil + Examine,

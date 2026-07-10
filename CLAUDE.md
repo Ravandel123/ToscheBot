@@ -105,6 +105,8 @@ relative with `.js`), inline `import type`, guard-clause `curly: multi`, `no-els
 - `seed` — rebuilds the alpha roster from owner-edited `src/scripts/seed-data.ts` by replaying
   **wizard inputs** through the real services (D38); idempotent. Requires a **typed DB-name
   confirmation** (interactive, or `SEED_CONFIRM_DB=<name>`); guard in `scripts/confirmDb.ts`.
+- `seed-npcs` — populates/refreshes the NPC roster from `game/data/npcs.ts` (D44); idempotent
+  update-by-npcId, never resets mutated NPC state. Same guard style (`SEED_NPCS_CONFIRM_DB`).
 - `restore` — disaster recovery from a `db-backup`/`h!backup` dump: wipes and re-inserts the
   snapshot (collections absent from the dump are dropped). Same confirmation
   (`RESTORE_CONFIRM_DB`). Dumps are relaxed EJSON; legacy plain-JSON dumps revived by shape.
@@ -157,6 +159,7 @@ detail in `Ruleset/`. Numbers are append-only; new entries stay 1–3 lines here
 | D41 | Fighting styles are family-specific catalog entries (modifiers + typed effects: hamper, riposte), each drawing attack AND defence from a skill node (self-gating, trainable via `trainingNodes`); the combat plan (`/character combat`) = per-family default style + ≤3 conditional switch rules (own/foe HP %, round ≥ N), first-match-wins, re-evaluated every exchange and narrated. |
 | D42 | Style family = weapon GRIP (`unarmed \| one_handed \| two_handed \| ranged` seam), style branches under their grip branch; initiative FLOWS: a landed blow may press a follow-up (`followUpChance`: net-SL-dominant + style tempo − per-press decay, sim-verified ~67/25/6% streaks for even fights, rare 10+ flurries only across big gaps). |
 | D43 | Gathering engine LIVE (R16, foraging first): a gather = SHORT action under the lock (AP → d100 vs a location `resourceNode` → SL-scaled yield + shared `qualityFromCheck` → one-roll identify sweep). Identification veil = optional instance fields (`identified/apparentItemId/descriptorId`, zero migration); failed IDs can plausibly mislabel (same family/shared look); Examine = uniform 1 AP, every outcome equally confident (no roll shown, truth sticky) so nothing leaks which labels are wrong. |
+| D44 | NPC roster v1 (static 6C half, PLAN S2): `game/data/npcs.ts` = 7 named NPCs; an NPC's `Character._id` = `npc-<npcId>` (customId-safe) and its static half (archetype, home) resolves from the catalog, never stored (D10); `characterService.createNpc` mints approved ownerless docs outside the wizard/approval flow; `npm run seed-npcs` = confirmDb-guarded idempotent update-by-npcId refreshing ONLY the static half — mutable NPC state (pack, coins 🟡, progression) is never reset. |
 
 ## Target architecture
 
@@ -200,7 +203,8 @@ src/
   types/*.ts            contracts: BotConfig, PrefixCommand/SlashCommand, ComponentHandler,
                         BotEvent (+ defineEvent), CronJob
   testing/              memoryDb (useTestDb), fakeInteraction harness
-  scripts/              deploy-commands, clear-commands, seed(+data), restore, confirmDb
+  scripts/              deploy-commands, clear-commands, seed(+data), seed-npcs(+npcSeed),
+                        restore, confirmDb
 ```
 
 **Layering rule: commands are thin** — parse/validate, call `game/`/services, format the
@@ -373,22 +377,25 @@ secrets), commands doing DB access directly.
 **Where the build queue lives: `PLAN.md`** (session-sized briefs + the owner decision queue).
 Idea backlog and full decision history: `DECISIONS.md`.
 
-**Built and green** (572 tests, build + lint pass): core runtime; the whole fun/utility/admin
+**Built and green** (588 tests, build + lint pass): core runtime; the whole fun/utility/admin
 prefix layer; AI persona; moderation + espionage logs; character creation wizard + owner
 approval; attributes + point-buy (D25); d100 checks + travel challenges (D26); `/play` hub +
 living locations (D30/D31); inventory/equipment + stash (D28/D33); skill trees + LIVE
 learn-by-doing (D34/D40); real combat — duel, bout modes, Spire ladder, styles + combat
 plans, flowing momentum (D35–D37, D41–D42); seed/backup/restore + CI (D38, AUDIT §1/§2.3/§2.9);
 gathering engine + Foraging v1 with identification/mislabels (D43, PLAN S1 — the first real
-loot source and the first live hub action).
+loot source and the first live hub action); NPC roster v1 (D44, PLAN S2 — 7 named NPCs via
+`npm run seed-npcs`, presence lists come alive).
 
-**Missing (current focus — the peaceful core loop, see PLAN.md):** fishing (S2), economy
-(nothing earns or spends coins), NPCs (6C), dialogue; hub actions besides `forage` are still
-placeholders; stamina has no consumer.
+**Missing (current focus — the peaceful core loop, see PLAN.md):** economy/shop (S3 —
+nothing earns or spends coins yet), dialogue (S4), fishing (S6), the NPC behavior cron (6C's
+second half — Decision queue #7); hub actions besides `forage` are still placeholders;
+stamina has no consumer.
 
 **Pending ops (owner):** one `npm run deploy` covers the queued slash changes (`/character
-combat`, `/smackdown` trial browser, `/stash`, `/leaderboard` categories). A live end-to-end
-smoke against Atlas has still not been run.
+combat`, `/smackdown` trial browser, `/stash`, `/leaderboard` categories); one
+`npm run seed-npcs` populates the NPC roster on the live DB. A live end-to-end smoke against
+Atlas has still not been run.
 
 **Surfaces:**
 
@@ -407,5 +414,6 @@ smoke against Atlas has still not been run.
   `profile`, `inventory`, `stash`, `play`, `duel`, `charskills`, `trial`, `combatplan`.
 
 **Phases:** 0–5 ✅ (manual turn-by-turn combat deliberately deferred — AUDIT §5). Phase 6 ✅
-except **6C NPCs** (= PLAN S3). Phase 7 = the `Ruleset/` design work — all tuning numbers 🟡
-until the owner locks them. Phase 8 (`rp/` module) = future.
+except **6C's second half** (the static NPC roster shipped in D44; the behavior cron waits on
+PLAN Decision queue #7). Phase 7 = the `Ruleset/` design work — all tuning numbers 🟡 until
+the owner locks them. Phase 8 (`rp/` module) = future.
