@@ -31,10 +31,12 @@ art is **absent**.
   **X / marker** placed at a character's current coordinates; the owner plans much wider use (party
   tokens on a map, weather/status overlays on a portrait, damage pips on a body diagram, an equipped
   item layered on a paper-doll). Same optional-with-fallback rule: if compositing isn't available or
-  a layer is missing, degrade to the base image (or text). ⬜ Not built — see Ruleset §Compositing.
+  a layer is missing, degrade to the base image (or text). 🟡 The rendering seam is built and
+  verified on Sparkedhost (D46) — see Ruleset §Compositing; no art catalog or consumer yet.
 - **Already present today:** a player character carries an optional `identity.avatarUrl` (shown
   as an embed thumbnail, blank = none) — the first, working instance of "optional image + text
-  fallback". The rest (place/event/NPC/champion art + variation selection) is ⬜ not built.
+  fallback". The compositing *seam* also exists (D46); place/event/NPC/champion art, variation
+  selection, and every actual compositing consumer are still ⬜ not built.
 
 ---
 
@@ -58,7 +60,7 @@ new tracking, just art keyed on the weather/time it already knows. The axis set 
 (season, active event, danger tier could all key variants later) but weather + time-of-day is the
 starting pair the owner named.
 
-### Compositing — layered images & coordinate markers ✅ direction (owner) / ⬜ built
+### Compositing — layered images & coordinate markers ✅ direction (owner) / 🟡 seam built (D46)
 Selection (above) picks *one* finished picture. **Compositing** builds a new picture at render
 time by stacking layers, so the image can show **live game state a static asset never could**.
 The owner's driving example: a **map** with an **X marking where a character is**, computed from
@@ -75,15 +77,22 @@ The framework (design):
   that anchor. Raw pixel (x, y) is the fallback for free placement (a token dropped anywhere). This
   keeps content authoring in *game* terms ("at the plaza") and survives an art re-draw (re-map the
   anchors once, every marker follows) — the D10 discipline applied to positions, not just files.
-- **A pure `composite(spec) → image` seam.** One function takes a declarative spec
-  (`{ base, layers: [{ image|marker, at, size?, … }] }`) and returns a buffer; the game code builds
-  the spec from state (where everyone is, what's equipped) and never touches pixels directly. The
-  spec is testable without rendering (assert the right layers at the right anchors); the actual
-  raster step is the only impure part.
-- **Optional & cached.** Compositing needs a rendering lib (Open questions) that may be absent on the
-  host — so it degrades to the base image (or text) if unavailable, per the always-optional rule.
-  Because a composite is deterministic from its spec, identical specs (same map + same positions)
-  can be **cached** (keyed on a spec hash) to avoid re-rendering every `/play`.
+- **A pure `composite(spec) → image` seam. 🟡 Built (D46/D47):** `game/images/composite.ts` on
+  `@napi-rs/canvas`. `composite({ base, layers })` takes a base (image path/URL/bytes, or a blank
+  canvas `{width, height, color?}`) and a `CompositeLayer[]` (`image` with
+  width/height/opacity/rotate/center-anchor, `marker`, `text`, `rect`) and returns a flattened
+  PNG buffer; the game code builds the spec from state and never touches pixels directly.
+  Discord-agnostic — a caller wraps the buffer in an `AttachmentBuilder`. The named anchor table
+  lives in the asset catalog (`assets.ts`, D47) — still empty of entries, but the mechanism is
+  in place; raw pixel `{x,y}` remains the free-placement fallback, exactly as designed.
+- **Optional & cached.** A thrown error from `composite()` (rendering lib unavailable, bad
+  source) must be caught by the caller and degrade to the base image (or text), per the
+  always-optional rule — `composite()` itself does not swallow errors. **Verified working on
+  Sparkedhost**, not just locally/CI, via the owner-only `h!imagetest` smoke-test command (renders
+  a self-contained fixture, no art needed — re-run after any host change). Caching is NOT built:
+  because a composite is deterministic from its spec, identical specs (same map + same positions)
+  *could* be cached (keyed on a spec hash) to avoid re-rendering every `/play` — worth adding once
+  a real consumer's render cost is measured, not before.
 
 This is the one image topic that is a *capability*, not just art delivery: it turns images into a
 **readout of state** (a live map, a marked body, a paper-doll), which is why the owner flags it as
@@ -100,35 +109,70 @@ before the art existed renders identically (just text) until the catalog gains a
 
 ## Implementation
 
-⬜ **Mostly not built.** What exists:
+🟡 **Partially built.** What exists:
 - `Character.identity.avatarUrl` — an optional per-character image URL, rendered as an embed
   thumbnail on `/character view` with a clean blank fallback (character.md). This is the pattern
   every other image should copy: optional field → include only if present → text stands alone.
+- **The compositing seam (D46, extended by D47)** — `game/images/composite.ts`:
+  `composite(spec) → Buffer` on `@napi-rs/canvas`. The spec is `{ base, layers }` where base is
+  an image (path/URL/bytes) **or a blank canvas** `{width, height, color?}` (a scene needs zero
+  art), and layers are `image` (with optional width/height/opacity/**rotate**/**center anchor**),
+  `marker` (filled circle + optional outline), `text` (bundled font, size/color/bold/align) and
+  `rect` (rounded panels/overlays). Discord-agnostic (returns a raw PNG buffer; a caller wraps it
+  in an `AttachmentBuilder`). **Verified working on Sparkedhost** via the owner-only
+  **`h!imagetest`** — re-run it after any host change to re-confirm the native dependency loads.
+- **Bundled fonts (D47)** — `assets/fonts/` commits DejaVu Sans (+Bold, free license) and
+  `game/images/fonts.ts` auto-registers it on first use: text renders identically on every host,
+  and a font-less container (which would otherwise draw text as *nothing*) is covered.
+  `h!imagetest` reports the font-family count — 0 means drop a `.ttf` into `assets/fonts/`.
+- **Card & chip renderers (D47, the gambling-salon toolkit)** — `game/images/cards.ts` /
+  `chips.ts` DRAW playing cards (52 faces + a lattice back, vector suit shapes, cached per size)
+  and poker chips (labelled, uncached) programmatically: the future salon is fully playable with
+  zero art, and real card art can replace the drawings via the asset catalog later.
+  `renderHand()` spreads a mixed face-up/face-down hand into one transparent PNG. Game rules
+  (decks, shuffling, stakes) deliberately do NOT live here — rendering only.
+- **The asset catalog (D47)** — `game/images/assets.ts`: `IMAGE_ASSETS` maps stable ids to
+  `assets/images/` paths **plus named anchor points** (the coordinate model above — a map's
+  `locations: {plaza: {x,y}}`); `imageAsset(id)` degrades to null on unknown/missing (never
+  throws), and a test validates every entry's file exists. The catalog ships empty — the first
+  real entry is the location map.
+- **Looping animation (D48)** — `game/images/animate.ts`: `renderGif(frames, opts)` encodes a
+  sequence of composite specs into one animated GIF via `@napi-rs/canvas`'s built-in
+  `GifEncoder` — a real animation is ONE encoded file, uploaded once, never a rerender+`editReply`
+  timer loop (which would fight Discord's edit rate limit). `renderCardSpinGif` is the concrete
+  demo (`h!imagetest gif`): a card shrinks to edge-on and swaps face/back at the geometric
+  crossing point, not a canned sprite sequence — the same primitive works for any two-sided
+  image later (a chip, a marker, a paper-doll layer).
 
 What's missing (⬜): an **image catalog** (id → image / id + world-state → variant), a
 **resolver** (`imageFor(place, worldContext)` picking the most specific existing variant), the
 render wiring in the location hub (`_hubView`), event lines, NPC/champion cards, and the actual
-art assets + a decision on **how images are hosted** (see Open questions). The world state the
-place-variant selector needs — current weather + time of day — is already available
-(`locationStateService` + `world/time.ts`, D31), so the selector is a pure function over a
-`WorldContext` the hub already builds.
+art assets. The world state the place-variant selector needs — current weather + time of day — is
+already available (`locationStateService` + `world/time.ts`, D31), so the selector is a pure
+function over a `WorldContext` the hub already builds. Hosting/delivery is now decided (see Open
+questions) — repo-committed `assets/images/` for anything a composite draws on.
 
-Also ⬜: the **compositing framework** (§Compositing) — a rendering dependency (Open questions), a
-pure `composite(spec)` seam + a declarative `CompositeSpec` type, a per-base **anchor catalog**
-(named coordinates, e.g. a map's location points), and the first consumer (a location map with a
-"you are here" marker off `Character.locationId`). None of the current image surface needs a
-rendering lib; compositing is the first piece that does, so it can be added independently later
-without touching the selection/variant work above.
+Also ⬜: the first real consumer — a location map with a "you are here" marker off
+`Character.locationId` is the reference target (the anchor mechanism is ready in `assets.ts`;
+what's missing is the map art + its catalog entry + the hub wiring). A bordered avatar (border
+asset + a player's `avatarUrl`) and a gambling-table render (felt + `renderHand` + chips) are
+the same `composite()` call with different specs.
 
 ---
 
 ## Open questions
 
-- **Hosting / delivery** — how does an image actually reach Discord? Options: (a) **remote URLs**
-  in the catalog (like `avatarUrl` today — simplest, but depends on an external host staying up);
-  (b) **repo-committed asset files** uploaded as message **attachments** (self-contained, versioned
-  with the code, but grows the repo and re-uploads bytes each send); (c) a hybrid (URLs for large
-  art, small attachments for icons). Undecided — affects the catalog shape (`url` vs file path).
+- ~~**Hosting / delivery**~~ **Decided (D46, 2026-07-11):** split by *purpose*, not one global
+  choice. Anything the bot's own renderer draws layers **ON** (map bases, avatar-frame overlays,
+  board/piece art) is **repo-committed** under `assets/images/`, resolved by a code-side catalog
+  (id → relative path, D10) and loaded by local path — the render happens inside a request, so it
+  must not gain a network dependency for art that ships with the code anyway. Purely-linked,
+  non-composited art (a plain `setImage`, no layers) may stay external since Discord fetches it
+  directly — prefer **GitHub raw links** (already owned, versioned, free) over a generic host like
+  imgur (hotlink throttling / anonymous-upload purges make it unreliable for art a live feature
+  depends on). A character's `avatarUrl` (Discord CDN, user-supplied) is the one deliberate
+  remote `ImageSource` *inside* a composite (e.g. a border over a player's avatar) — a failed load
+  there must be caught by the caller and degrade to the base/no-overlay, never crash the command.
 - **Embed image vs thumbnail** — a place probably wants a large `setImage`, a character a small
   `setThumbnail`; is that per content-type fixed, or a catalog field?
 - **Variant key shape** — is the place-variant lookup a structured key (`{weather, timeOfDay}`) or
@@ -140,15 +184,14 @@ without touching the selection/variant work above.
 - **How many axes are worth it** — weather + day/night is the owner's ask; season/event/danger are
   tempting but each multiplies the art an artist must produce. Cap the axes to what art actually
   exists for, so the matrix never demands pictures nobody will draw.
-- **Compositing rendering library** (§Compositing) — which dependency draws the layered image?
-  Candidates: **`@napi-rs/canvas`** (fast, prebuilt native binaries — no system Cairo, the usual
-  win on managed hosts), **`sharp`** (libvips, great for compositing/resize, also prebuilt), or
-  **`jimp`** (pure-JS, zero native deps — slowest but *guaranteed* to run anywhere, the safest
-  first pick given Sparkedhost's constraints and the no-build-step tsx setup). **Verify the host
-  runs the chosen native module before committing** (the same "smoke-test before relying on it"
-  discipline as the `bot.js` tsx shim). Pure-JS `jimp` is the low-risk default; swap up if it's
-  too slow. This also decides whether the `composite()` seam is sync or async and how heavy caching
-  needs to be.
+- ~~**Compositing rendering library**~~ **Decided (D46): `@napi-rs/canvas`.** Chosen over `sharp`
+  (great at image-on-image blending, but no real drawing API for the marker/shape case) and `jimp`
+  (pure-JS safety net, but slow and weak at drawing) because it has an actual 2D canvas API
+  (arcs/text/shapes, not just compositing) and ships prebuilt native binaries — no system Cairo,
+  the historical pain with the older `canvas` package. **Verified on the actual host, not just
+  locally/CI**, via `h!imagetest` — confirmed working on Sparkedhost (2026-07-11); re-run it after
+  any host change. If a future host can't load it, `jimp` is the documented fallback — the whole
+  dependency is isolated behind `composite()`, so swapping libraries touches one file.
 - **Coordinate authoring** (§Compositing) — named anchors baked into each base's catalog entry
   (authoring in game terms, survives art re-draws) vs raw pixel coordinates (free placement). Likely
   both (anchors for known points like locations, raw for dropped tokens); confirm the `CompositeSpec`

@@ -160,6 +160,18 @@ future leaderboard category.
 minigame.
 **Redeploy**: none.
 
+### S7 — Gambling salon · [L] · NEEDS DESIGN FIRST — announced by the owner 2026-07-11
+**Prereqs**: S3 (the salon is a coin sink — coins must be earnable/spendable first). The
+rendering toolkit is ready (D46/D47: `composite()`, programmatic cards/chips/hands — a table
+renders as one PNG per step with zero art assets).
+**Design first**: no `Ruleset/` topic exists. Owner decisions before building: which games
+(cards? dice? BtWD-flavored originals?), stakes (coins only? AP?), house edge / anti-farm
+balance (sim per D42), where it lives (the tavern? its own location?) and any NPC dealer
+tie-in. Write `Ruleset/gambling.md` first, then a session brief.
+**Engine note**: turn-based table games are durable `ActivitySession`s on the proven
+challenge/dialogue stack (D17/D22) — per-step commit, crash-safe resume, double-click
+idempotency all come free; the D47 toolkit is the *view* layer on top.
+
 ### Fillers (safe leftovers for a session that runs short)
 - `locationStateService.discoverFeature`: convert the `modifiedCount` check to a filter guard
   (known double-fire risk — CLAUDE.md testing caveat).
@@ -225,6 +237,15 @@ section), then it can become a session brief.
 
 ## Log
 
+- **2026-07-11 — Image rendering (ad-hoc, owner-driven)** ✅ → **D46 + D47 + D48**:
+  `@napi-rs/canvas` compositing seam (`game/images/`), verified live on Sparkedhost via the new
+  owner-only `h!imagetest`; asset-hosting split decided (repo `assets/images/` for anything the
+  renderer draws on); the gambling-salon toolkit — text/rect layers + rotation, bundled DejaVu
+  fonts (`assets/fonts/`), programmatic card/chip/hand renderers, the `IMAGE_ASSETS` catalog
+  with named anchors; then looping GIF animation (`game/images/animate.ts`, `@napi-rs/canvas`'s
+  own `GifEncoder` — one encoded file, never a rerender+edit timer loop) with a spinning-card
+  demo at `h!imagetest gif`. No consumer wired yet; S7 stub added above. No redeploy (prefix
+  command only).
 - **2026-07-10 — S4 (Dialogue v1)** ✅ → **D45**: run ahead of S3 on the owner's call (dialogue
   needs only the S2 roster, not the shop). Everything in the brief shipped: `dialogue`
   ActivitySession + `_activities/` handler; the node catalog in code (graph-test-validated);
