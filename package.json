@@ -18,6 +18,7 @@
       "clear-commands": "tsx src/scripts/clear-commands.ts"
    },
    "dependencies": {
+      "@napi-rs/canvas": "^1.0.2",
       "discord.js": "^14.26.4",
       "mongoose": "^9.7.0",
       "node-cron": "^4.2.1",
