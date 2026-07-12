@@ -91,6 +91,9 @@ scales, the file won't. When a catalog passes ~1k lines, split it into a folder
 (`game/data/items/{weapons,armor,consumables,materials}.ts` re-exported from `items.ts` so
 every import keeps working). Same future split for `encounters.ts` per region. Zero migration
 either way (ids are the contract, not file paths). Don't do it preemptively.
+**Done 2026-07-12 (D50)** — owner called the trigger early (a large item-authoring push is
+planned): `items.ts` is now a facade over `game/data/items/` (types.ts + one file per kind).
+The `encounters.ts` per-region split stays future.
 
 ### 2.6 Unbounded-ish reads that are fine now, worth an index/limit later
 - `smackdownService.getLeaderboard` sorts the whole collection per call, unindexed — fine

@@ -135,7 +135,14 @@ already in `equipment`); no model change.
 
 ## Implementation
 
-### Items — `game/data/items.ts` ✅ shape / 🟡 every number
+### Items — `game/data/items.ts` (facade over `game/data/items/`, D50) ✅ shape / 🟡 every number
+
+Since 2026-07-12 the catalog is a folder: `items/types.ts` holds the type system (kinds,
+qualities, materials, weapon properties/reach, the definition union); one file per kind
+(`weapons.ts`, `shields.ts`, `armor.ts`, `consumables.ts`, `craftingMaterials.ts`,
+`clutter.ts`) holds the entries; `items.ts` re-exports everything and assembles `ITEMS`
+(foraged materials still spread in from `foragables.ts`, D43). **Adding an item = one entry
+in its kind's file**; consumers keep importing `./items.js`.
 A discriminated union by `kind` (adding a kind = one union member + one `ITEM_KINDS` meta
 entry — the `/inventory` panel renders categories from the meta):
 

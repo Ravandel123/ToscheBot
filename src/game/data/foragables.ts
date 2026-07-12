@@ -1,4 +1,4 @@
-import type { CraftingMaterialDefinition, ItemQualityId } from './items.js';
+import type { CraftingMaterialDefinition, ItemQualityId } from './items/types.js';
 
 // The foraging content catalog (R16, professions.md): what grows wild, what it
 // looks like before you know what it is, and how hard it is to tell. The item
