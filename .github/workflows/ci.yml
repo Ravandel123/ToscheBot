@@ -15,6 +15,15 @@ jobs:
       # step below always matches (the *.db.test.ts files boot an in-memory
       # mongod; without the cache every push re-downloads ~90 MB).
       MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongodb-binaries
+      # config.ts fails fast on missing env vars (by design). Tests never talk
+      # to real Discord/Atlas (in-memory mongod + fake interaction objects),
+      # but some flow tests import game/chronicle.ts, which imports config.ts
+      # at module load — so these need SOME value present, not real secrets.
+      BOT_TOKEN: ci-placeholder
+      CLIENT_ID: ci-placeholder
+      GUILD_ID: ci-placeholder
+      OWNER_ID: ci-placeholder
+      MONGODB_URI: mongodb://ci-placeholder
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
