@@ -146,7 +146,8 @@ export function buildInventoryList(character: CharacterDoc, state: BrowseState, 
    const kind = ITEM_KINDS[state.kind];
 
    const lines = page.items.map((item) => {
-      const equipped = slotOfInstance(character, item.instance.instanceId) ? ' · *equipped*' : '';
+      const slot = slotOfInstance(character, item.instance.instanceId);
+      const equipped = slot ? ` · *equipped — ${EQUIPMENT_SLOTS[slot].name.toLowerCase()}*` : '';
       const quantity = item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : '';
       return `${kind.emoji} **${itemDisplayName(item)}**${quantity} — ${lineSummary(item)}${equipped}`;
    });
@@ -173,11 +174,14 @@ function itemPickRow(character: CharacterDoc, state: BrowseState, items: Resolve
    const menu = new StringSelectMenuBuilder()
       .setCustomId(`inventory:pick:${character._id}:${packBrowseState(state)}`)
       .setPlaceholder('Inspect an item…')
-      .addOptions(items.map((item) => ({
-         label: truncate(`${itemDisplayName(item)}${item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : ''}`, 100),
-         value: item.instance.instanceId,
-         description: truncate(lineSummary(item), 100),
-      })));
+      .addOptions(items.map((item) => {
+         const slot = slotOfInstance(character, item.instance.instanceId);
+         return {
+            label: truncate(`${itemDisplayName(item)}${item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : ''}`, 100),
+            value: item.instance.instanceId,
+            description: truncate(`${slot ? `📌 ${EQUIPMENT_SLOTS[slot].name} · ` : ''}${lineSummary(item)}`, 100),
+         };
+      }));
 
    return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
 }
@@ -239,27 +243,39 @@ export function buildDropConfirm(character: CharacterDoc, instanceId: string, st
    return { embeds: [embed], components: [row] };
 }
 
-/** Slot picker for items that fit more than one slot (dagger → main/off hand). */
+/** Slot picker for items that fit more than one slot (dagger → main/off hand).
+ *  Each option surfaces the slot's current occupant (Ruleset "equipped items
+ *  surfaced in the equip dropdowns") so the player sees what they'd displace
+ *  before committing — the actual swap-and-stow already happens in `planEquip`. */
 export function buildSlotChooser(character: CharacterDoc, instanceId: string, state: BrowseState): InventoryView | null {
    const item = findItem(character, instanceId);
    if (!item || !isEquippable(item.definition))
       return null;
 
+   const equipment = equipmentOf(character);
    const embed = detailEmbed(character, item, `Where do you want to wear **${itemDisplayName(item)}**?`);
    const suffix = actionSuffix(character._id, instanceId, state);
 
-   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-      ...item.definition.slots.map((slot) =>
-         new ButtonBuilder()
-            .setCustomId(`inventory:equipto:${character._id}:${instanceId}:${slot}:${packBrowseState(state)}`)
-            .setLabel(EQUIPMENT_SLOTS[slot].name)
-            .setEmoji(EQUIPMENT_SLOTS[slot].emoji)
-            .setStyle(ButtonStyle.Primary),
-      ),
+   const menu = new StringSelectMenuBuilder()
+      .setCustomId(`inventory:equipsel:${suffix}`)
+      .setPlaceholder('Choose a slot…')
+      .addOptions(item.definition.slots.map((slot) => {
+         const occupantId = equipment[slot];
+         const occupant = occupantId ? findItem(character, occupantId) : null;
+         return {
+            label: EQUIPMENT_SLOTS[slot].name,
+            value: slot,
+            emoji: EQUIPMENT_SLOTS[slot].emoji,
+            description: truncate(occupant ? `📌 Equipped: ${itemDisplayName(occupant)}` : 'Empty', 100),
+         };
+      }));
+
+   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   const cancelRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder().setCustomId(`inventory:detail:${suffix}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary),
    );
 
-   return { embeds: [embed], components: [row] };
+   return { embeds: [embed], components: [row, cancelRow] };
 }
 
 /** The item stat card. Exported so the stash panel (D33) reuses the exact same

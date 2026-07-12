@@ -33,7 +33,7 @@ import type { ToscheClient } from '../../client.js';
 //   NAVIGATION (home/cat/equipped/list/pick/sort/detail/drop) — read-only:
 //     fetch a fresh doc, repaint. No lock needed; staleness self-heals because
 //     nothing renders from the message, only from the DB.
-//   MUTATIONS (equip/equipto/unequip/use/dropc) — read-decide-write: taken
+//   MUTATIONS (equip/equipsel/unequip/use/dropc) — read-decide-write: taken
 //     under the character's lock (defer first — the ack window is ~3 s), with
 //     a busy re-check inside. This is what makes two open panels safe: whoever
 //     commits second finds the item gone/moved and gets a friendly note, never
@@ -54,7 +54,6 @@ export default {
          if (action === 'detail') return repaint(interaction, rest[0], (character) => detailOrList(character, rest[1], parseBrowseState(rest[2])));
          if (action === 'drop') return repaint(interaction, rest[0], (character) => buildDropConfirm(character, rest[1], parseBrowseState(rest[2])) ?? listFallback(character, parseBrowseState(rest[2])));
          if (action === 'equip') return handleEquip(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
-         if (action === 'equipto') return handleEquipTo(client, interaction, rest[0], rest[1], rest[2], parseBrowseState(rest[3]));
          if (action === 'unequip') return handleUnequip(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          if (action === 'use') return handleUse(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
          if (action === 'examine') return handleExamine(client, interaction, rest[0], rest[1], parseBrowseState(rest[2]));
@@ -73,6 +72,7 @@ export default {
             return buildInventoryList(character, { ...state, sort, page: 0 });
          });
          if (action === 'pick') return repaint(interaction, rest[0], (character) => detailOrList(character, interaction.values[0], parseBrowseState(rest[1])));
+         if (action === 'equipsel') return handleEquipTo(client, interaction, rest[0], rest[1], interaction.values[0], parseBrowseState(rest[2]));
          if (action === 'equipped') return repaint(interaction, rest[0], (character) => {
             const item = findItem(character, interaction.values[0]);
             const state = item ? stateForItem(item.definition) : browseState('weapon');
@@ -124,7 +124,7 @@ async function handleEquip(client: ToscheClient, interaction: ButtonInteraction,
       equipResult(fresh, instanceId, slot, state));
 }
 
-async function handleEquipTo(client: ToscheClient, interaction: ButtonInteraction, characterId: string, instanceId: string, rawSlot: string, state: BrowseState): Promise<void> {
+async function handleEquipTo(client: ToscheClient, interaction: PanelInteraction, characterId: string, instanceId: string, rawSlot: string, state: BrowseState): Promise<void> {
    const slot = isEquipmentSlotId(rawSlot) ? rawSlot : null;
    await mutate(client, interaction, characterId, instanceId, state, async (fresh) =>
       equipResult(fresh, instanceId, slot, state));

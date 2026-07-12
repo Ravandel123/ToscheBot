@@ -283,6 +283,18 @@ describe('equipping', () => {
       }
    });
 
+   it('dual-wields two one-handed weapons across main and off hand', () => {
+      const character = subject(
+         [instance('axe1', 'bronze_boarding_axe'), instance('axe2', 'bronze_boarding_axe')],
+         { mainHand: 'axe1' },
+      );
+
+      const check = planEquip(character, 'axe2', 'offHand');
+      expect(check.ok).toBe(true);
+      if (check.ok)
+         expect(check.plan).toMatchObject({ set: { offHand: 'axe2' }, clear: [], displaced: [] });
+   });
+
    it('plans unequips only for worn gear', () => {
       const character = subject([instance('a', 'iron_sword')], { mainHand: 'a' });
 

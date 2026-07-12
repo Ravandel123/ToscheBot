@@ -124,12 +124,21 @@ created more dynamically." Decision, and it's the same shape as cooking's dynami
   chooses the material to tune weight vs durability vs damage-type for the armour they expect to
   face (the armour ✕ weapon-type read, combat.md).
 
-### Equipped items surfaced in the equip dropdowns ✅ direction (⬜ built) *(owner-requested, small)*
-A UX fix the owner asked for: when the `/inventory` panel offers a **dropdown to equip** into a
-slot (or pick which hand), the currently-equipped item for that slot should be **shown in the
-list** (marked "equipped", e.g. a ✅/📌), not hidden — so the player sees what they'd be replacing
-and can select it to unequip in place. Purely a renderer change to the equip select (the data is
-already in `equipment`); no model change.
+### Equipped items surfaced in the equip dropdowns ✅ built *(owner-requested, small)*
+A UX fix the owner asked for: equipped status is surfaced **with its slot name** everywhere the
+panel lists items — the category list lines (`· *equipped — main hand*`), the "Inspect an item…"
+pick dropdown (option description prefixed `📌 Main hand · …`), and the slot chooser: when the
+panel offers a **dropdown to equip** into a slot (or pick which hand), each slot option shows its
+current occupant ("📌 Equipped: <item>", not "Empty"), so the player sees what they'd be
+replacing before committing. `buildSlotChooser` (`_inventoryPanel.ts`) converted from a button
+row to a `StringSelectMenuBuilder` (customId `inventory:equipsel:…`) whose option descriptions
+read the live `equipment` map; the actual swap-and-stow logic was already correct in `planEquip`
+(no model change). Alongside this, several one-handed weapons (iron_sword, steel_longsword,
+woodsmans_axe, ash_spear, bronze_boarding_axe) gained `offHand` to their `slots` so dual-wielding
+two of the same weapon is actually choosable in the picker — previously only the dagger and the
+weighted net listed both hands. 🟡 whether *every* one-handed weapon should be off-hand-legal
+(the spear is the debatable one) is a flavor call, not a balance number — revisit if it reads
+wrong in play.
 
 ---
 
@@ -249,7 +258,6 @@ today — no fishing/shop/loot-table has been built.
   scale, but the FIRST per-family name row exists (S1): foragables read
   Wilted/—/Choice/Pristine (`FORAGE_QUALITY_PREFIXES`), gear keeps `ITEM_QUALITIES` prefixes.
   Crafting quality-from-a-check + quality×damage interplay still ⬜.
-- **Equipped item shown in the equip dropdown** (the small owner-requested renderer fix).
 - **Per-location AV** and the **armour ✕ weapon-type multiplier** (combat.md R12) — armour is one
   global AV today.
 - Selling / pricing beyond a flat display-only `value` (economy.md).

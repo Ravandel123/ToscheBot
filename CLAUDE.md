@@ -399,7 +399,7 @@ secrets), commands doing DB access directly.
 **Where the build queue lives: `PLAN.md`** (session-sized briefs + the owner decision queue).
 Idea backlog and full decision history: `DECISIONS.md`.
 
-**Built and green** (661 tests, build + lint pass): core runtime; the whole fun/utility/admin
+**Built and green** (662 tests, build + lint pass): core runtime; the whole fun/utility/admin
 prefix layer; AI persona; moderation + espionage logs; character creation wizard + owner
 approval; attributes + point-buy (D25); d100 checks + travel challenges (D26); `/play` hub +
 living locations (D30/D31); inventory/equipment + stash (D28/D33); skill trees + LIVE
