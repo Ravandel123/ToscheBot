@@ -1,6 +1,8 @@
 import { chance, randomItem } from '../lib/random.js';
-import { bold, indefiniteArticle } from '../lib/text.js';
-import { ANIMALS, CLASSES, FUNNY_CLASSES, INSULT_ADJECTIVES, PLACES } from '../lexicon.js';
+import { bold } from '../lib/text.js';
+import { indefiniteArticle } from '../grammar/inflect.js';
+import { ADJECTIVES } from '../grammar/vocabulary/adjectives.js';
+import { NOUNS } from '../grammar/vocabulary/nouns.js';
 import { RACES } from '../game/data/races.js';
 import { randomPerson } from './people.js';
 
@@ -9,7 +11,7 @@ import { randomPerson } from './people.js';
 // "looks like a(n) X" frame; each just feeds a different noun pool.
 
 const RACE_NAMES = Object.values(RACES).map((r) => r.name);
-const ALL_CLASSES = [...CLASSES, ...FUNNY_CLASSES];
+const ALL_CLASSES = [...NOUNS.profession, ...NOUNS.funnyProfession];
 const CLASS_PREFIXES = ['Battle', 'Blood', 'Bone', 'Death', 'Feral', 'Frost', 'Ghost', 'Hedge', 'Iron', 'Plague', 'Savage', 'Shield', 'Soul', 'Storm', 'War', 'Wild'] as const;
 
 /** A bolded noun with its article: "an **Otter**", "a **Knight**". */
@@ -33,12 +35,12 @@ function roastFrame(who: string, pick: () => string): string {
       `I think ${who} would do great as ${thing}.`,
       `${who} looks like ${thing}.`,
       `${who} would do well as ${thing}.`,
-      `${who} looks like ${thing} from ${bold(randomItem(PLACES))}.`,
+      `${who} looks like ${thing} from ${bold(randomItem(NOUNS.furryCon))}.`,
       `${who} looks like a cross between ${thing} and ${withArticle(pick())}.`,
    ]);
 }
 
-export const animalRoast = (who: string): string => roastFrame(who, () => randomItem(ANIMALS));
+export const animalRoast = (who: string): string => roastFrame(who, () => randomItem(NOUNS.animal));
 export const raceRoast = (who: string): string => roastFrame(who, () => randomItem(RACE_NAMES));
 export const classRoast = (who: string): string => roastFrame(who, composedClass);
 
@@ -46,14 +48,14 @@ export const classRoast = (who: string): string => roastFrame(who, composedClass
 export function whoisPhrase(who: string): string {
    if (chance(30))
       return randomItem([
-         `I think I saw ${who} in ${bold(randomItem(PLACES))}.`,
-         `${who} was with me in ${bold(randomItem(PLACES))}.`,
-         `I have definitely seen ${who} in ${bold(randomItem(PLACES))}.`,
+         `I think I saw ${who} in ${bold(randomItem(NOUNS.furryCon))}.`,
+         `${who} was with me in ${bold(randomItem(NOUNS.furryCon))}.`,
+         `I have definitely seen ${who} in ${bold(randomItem(NOUNS.furryCon))}.`,
       ]);
 
    const owner = chance(50) ? 'my' : `${randomPerson()}'s`;
-   const adjective = chance(70) ? `${randomItem(INSULT_ADJECTIVES)} ` : '';
-   const noun = chance(50) ? randomItem(ALL_CLASSES) : randomItem(ANIMALS);
+   const adjective = chance(70) ? `${randomItem(ADJECTIVES.insult)} ` : '';
+   const noun = chance(50) ? randomItem(ALL_CLASSES) : randomItem(NOUNS.animal);
    const verdict = `${owner} ${adjective}${bold(noun)}`;
 
    return randomItem([

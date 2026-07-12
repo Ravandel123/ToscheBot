@@ -1,6 +1,6 @@
 import { chance, randomInt, randomItem } from '../lib/random.js';
 import { bold } from '../lib/text.js';
-import { ANIMALS, PLACES } from '../lexicon.js';
+import { NOUNS } from '../grammar/vocabulary/nouns.js';
 import { randomPerson } from './people.js';
 import { randomWeapon } from './reactions.js';
 import { funnyEnding } from './flavor.js';
@@ -43,11 +43,11 @@ const SIZES = ['tiny', 'small', 'average', 'big', 'enormous'] as const;
 
 function dynamicAdvice(): string {
    return randomItem([
-      `You should take a trip to ${bold(randomItem(PLACES))}${funnyEnding('.')}`,
+      `You should take a trip to ${bold(randomItem(NOUNS.furryCon))}${funnyEnding('.')}`,
       `Learn how to use a ${randomWeapon()}${funnyEnding('.')}`,
-      `${randomItem(ACTION_VERBS)} a ${randomItem(ANIMALS)}${funnyEnding('.')}`,
+      `${randomItem(ACTION_VERBS)} a ${randomItem(NOUNS.animal)}${funnyEnding('.')}`,
       `Go outside for ${randomInt(1, 12)} hours${funnyEnding('.')}`,
-      `Have you tried going to ${bold(randomItem(PLACES))} and using a ${randomWeapon()}?`,
+      `Have you tried going to ${bold(randomItem(NOUNS.furryCon))} and using a ${randomWeapon()}?`,
       `Eat ${randomItem(SIZES)} ${randomItem(MEALS)}${funnyEnding('.')}`,
       `I think you should talk to ${bold(randomPerson())}${funnyEnding('.')}`,
    ]);

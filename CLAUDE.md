@@ -164,6 +164,7 @@ detail in `Ruleset/`. Numbers are append-only; new entries stay 1–3 lines here
 | D46 | Image compositing seam LIVE (`game/images/composite.ts`, `@napi-rs/canvas`, images.md §Compositing): pure `composite(spec) → Buffer` (base + `image`/`marker` layers at (x,y)); verified working on Sparkedhost via owner-only `h!imagetest` (renders synthetic in-memory fixtures, needs no art). Asset-hosting split: anything the bot's OWN renderer draws ON (map bases, avatar-frame overlays, board/piece art) is **repo-committed** under `assets/images/` and loaded by local path (D10 catalog: id → path) — the render path must not depend on a network fetch succeeding; purely-linked non-composited art may stay external, preferring GitHub raw links over third-party hosts (imgur-style hotlinking rots); a user-supplied `avatarUrl` is the one deliberate remote `ImageSource` inside a composite. No art catalog or DB wiring yet — the seam only. |
 | D47 | Rendering toolkit for the future gambling salon (extends D46): `composite()` grew `text`/`rect` layers, rotation + center anchors, and blank-canvas bases (a scene needs zero art); repo bundles DejaVu Sans (`assets/fonts/`, auto-registered by `game/images/fonts.ts` — identical text on every host; a font-less container would render text blank); `cards.ts`/`chips.ts` DRAW playing cards (52 + back, cached) and poker chips programmatically (vector suits + bundled font); `IMAGE_ASSETS` catalog (`assets.ts`: id → `assets/images/` path + named anchor points, file-existence test-validated). Rendering only — deck/shuffle/game rules belong to the salon's own module (PLAN S7). |
 | D48 | Animated GIF rendering (`game/images/animate.ts`, extends D46/D47): `renderGif(frames, opts)` encodes a `CompositeSpec[]` into one looping GIF via `@napi-rs/canvas`'s built-in `GifEncoder` (per-frame `getImageData` → `addFrame`) — one encode, one upload, no rerender+`editReply` timer loop (which would fight Discord's edit rate limit and re-upload a full image every tick). `renderCardSpinGif` demos it: a card shrinks to an edge-on sliver and swaps face↔back exactly at the `cos(angle) < 0` crossing (a real card's own geometry, not a canned flip animation) — the salon's reusable "reveal" beat. `h!imagetest gif` renders it live. `composite.ts` internals split into `renderToCanvas` (shared draw pass) + `composite` (PNG on top), so PNG and GIF paths share one layer-drawing implementation. |
+| D49 | Shared language engine `src/grammar/` (absorbs `lexicon.ts`, `lib/grammar.ts` and `lib/text.ts` morphology): `vocabulary/` = theme-tagged word-class catalogs (verbs/beings/nouns/adjectives/adverbs; the old lexicon lists live on as themes), `inflect.ts` = English morphology (plural/3rd-person/gerund/past/articles), `compose.ts` = `expand` with chainable modifiers, `sentence.ts` = the situation engine (`themeGrammar` + `randomSentence`; `SituationTheme` = themes covered by EVERY class, compile-enforced; live: combat/labor/mystic/tavern/wilds). First consumer `h!rumor`; fun-only pools stay in `fun/`; no generic `common/` dump. |
 
 ## Target architecture
 
@@ -199,13 +200,17 @@ src/
     chronicle.ts        Discord adapter (marked): public game log
     data/               static content catalogs (locations, items, skills, races, encounters,
                         hubActions, weather, traits, currencies…) — see D10
-  lexicon.ts            GENERAL flavour vocabulary (not fun-only)
+  grammar/              shared language engine (D49), consumed by fun AND game: inflect
+                        (English morphology), compose (Tracery-style expand + chainable
+                        inflection modifiers), sentence (situation-themed one-liners),
+                        vocabulary/ (theme-tagged word-class catalogs: verbs, beings,
+                        nouns, adjectives, adverbs — absorbed the old lexicon.ts)
   fun/                  fun-command response pools + generators
   ai/                   persona prompt + optional OpenAI service + trigger
   moderation/           banned-word matcher + #espionage reporting
   settings.ts           guild tunables (channel names, banned words, AI triggers)
-  lib/                  small typed helpers (log, random, text, number, units, discord,
-                        grammar, person, async)
+  lib/                  small typed helpers (log, random, text = markdown/capitalize,
+                        number, units, discord, person, async)
   types/*.ts            contracts: BotConfig, PrefixCommand/SlashCommand, ComponentHandler,
                         BotEvent (+ defineEvent), CronJob
   testing/              memoryDb (useTestDb), fakeInteraction harness
@@ -252,12 +257,17 @@ validator family, array-or-scalar polymorphism, or stringly-typed dispatchers; h
 real values and throw on genuine errors.
 
 Flavour composition has three layers (never hardcode flavour in a command): **data**
-(`lexicon.ts` general vocabulary + `fun/` per-command pools, `as const`), **generators**
-(`fun/generators.ts` fragment builders), **composer** (`lib/grammar.ts` Tracery-style
-`expand`). Pick by shape: fixed line pool → `defineRandomResponseCommand`
-(`commands/prefix/_randomResponse.ts`; `responses`/`extraResponses`/`funny` options); varied
-assembled sentence → `expand` + lexicon (worked example `h!cost`); fixed lines agreeing with
-ONE subject → `lib/person.ts` `personGrammar` (`h!love`). Adding a response = one array line.
+(`grammar/vocabulary/` theme-tagged word classes + `fun/` per-command pools, `as const`),
+**generators** (`fun/generators.ts` fragment builders), **composer** (`grammar/compose.ts`
+Tracery-style `expand`; modifiers chain and inflect via `grammar/inflect.ts`:
+`.a/.s/.past/.third/.ing/.capitalize`). Pick by shape: fixed line pool →
+`defineRandomResponseCommand` (`commands/prefix/_randomResponse.ts`;
+`responses`/`extraResponses`/`funny` options); varied assembled sentence → `expand` +
+vocabulary (worked example `h!cost`); situation-flavoured one-liner (game encounters, NPC
+gossip, troll commands) → `grammar/sentence.ts` `randomSentence(themes)` / `themeGrammar`
+(worked example `h!rumor`); fixed lines agreeing with ONE subject → `lib/person.ts`
+`personGrammar` (`h!love`). Adding a response/word = one array line; a new situation theme =
+one key mirrored across the five vocabulary maps (compile-checked).
 
 ### Testing (Vitest)
 
@@ -387,7 +397,7 @@ secrets), commands doing DB access directly.
 **Where the build queue lives: `PLAN.md`** (session-sized briefs + the owner decision queue).
 Idea backlog and full decision history: `DECISIONS.md`.
 
-**Built and green** (645 tests, build + lint pass): core runtime; the whole fun/utility/admin
+**Built and green** (661 tests, build + lint pass): core runtime; the whole fun/utility/admin
 prefix layer; AI persona; moderation + espionage logs; character creation wizard + owner
 approval; attributes + point-buy (D25); d100 checks + travel challenges (D26); `/play` hub +
 living locations (D30/D31); inventory/equipment + stash (D28/D33); skill trees + LIVE
@@ -399,7 +409,8 @@ loot source and the first live hub action); NPC roster v1 (D44, PLAN S2 — 7 na
 action opens durable conversations: an archetype small-talk template + Marrek's authored tree);
 image rendering (D46–D48 — `composite()` verified live on Sparkedhost via `h!imagetest`, the
 gambling-salon toolkit (text/rect layers, bundled fonts, programmatic cards/chips), and looping
-GIF animation (`h!imagetest gif`); no game consumer wired up yet).
+GIF animation (`h!imagetest gif`); no game consumer wired up yet); shared grammar engine
+(D49 — themed vocabulary + inflection + situation sentences; `h!rumor` is the first consumer).
 
 **Missing (current focus — the peaceful core loop, see PLAN.md):** economy/shop (S3 —
 nothing earns or spends coins yet), fishing (S6), the NPC behavior cron (6C's second half —
@@ -413,7 +424,7 @@ Atlas has still not been run.
 
 **Surfaces:**
 
-- **Prefix `h!`** — ~45 fun/utility commands (`h!help` auto-lists) + admin: `clear`,
+- **Prefix `h!`** — ~46 fun/utility commands (`h!help` auto-lists) + admin: `clear`,
   `directmessage`/`dm`, `messagechannel`/`mc`, `backup`, `imagetest` (D46 compositing smoke test).
 - **Slash** — `/character` (create wizard/view/list/skills/combat/switch), `/profile`,
   `/inventory` (+ Examine on foraged finds), `/stash`, `/item grant` (ownerOnly), `/smackdown`

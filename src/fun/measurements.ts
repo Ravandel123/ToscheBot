@@ -2,13 +2,13 @@ import { chance, randomInt, randomItem } from '../lib/random.js';
 import { accuracyPrefix } from './generators.js';
 import { randomMagnitude } from './amount.js';
 import { funnyEnding } from './flavor.js';
-import { PLACES } from '../lexicon.js';
+import { NOUNS } from '../grammar/vocabulary/nouns.js';
 import { bold } from '../lib/text.js';
 
 // `h!weight` / `h!height` / `h!capacity` / `h!size` / `h!when` / `h!where` — Tosch
 // measures things he cannot possibly measure, with total confidence. Ported from the
 // old measurement switch cases. Units are command-specific joke data (kept here, not
-// in the general lexicon); the numeric core reuses amount.ts's randomMagnitude.
+// in the shared vocabulary); the numeric core reuses amount.ts's randomMagnitude.
 
 export const WEIGHT_UNITS = ['decagrams', 'grams', 'kilograms', 'ounces', 'pounds', 'tons'] as const;
 export const LENGTH_UNITS = ['centimeters', 'decimeters', 'feet', 'inches', 'kilometers', 'meters', 'miles', 'millimeters', 'yards'] as const;
@@ -81,6 +81,6 @@ export function whenPhrase(): string {
 
 /** A made-up answer to "where?": a random (joke) place, in a varied frame. */
 export function wherePhrase(): string {
-   const place = bold(randomItem(PLACES));
+   const place = bold(randomItem(NOUNS.furryCon));
    return randomItem([place, `In ${place}.`, `Somewhere near ${place}.`, `Last I saw, ${place}.`]);
 }

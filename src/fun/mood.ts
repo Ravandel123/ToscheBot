@@ -1,6 +1,6 @@
 import { chance, randomItem } from '../lib/random.js';
 import { bold } from '../lib/text.js';
-import { PLACES } from '../lexicon.js';
+import { NOUNS } from '../grammar/vocabulary/nouns.js';
 import { randomPerson } from './people.js';
 
 // `h!mood` — what Tosch is "currently" up to. Ported from the old mood case: a
@@ -23,7 +23,7 @@ const PREPOSITIONS = ['at', 'in', 'on'] as const;
 
 /** Tosch's current mood/activity, e.g. "Dancing with Ravandel at Anthrocon." */
 export function moodPhrase(): string {
-   const place = `${randomItem(PREPOSITIONS)} ${bold(randomItem(PLACES))}`;
+   const place = `${randomItem(PREPOSITIONS)} ${bold(randomItem(NOUNS.furryCon))}`;
 
    return chance(50)
       ? `${randomItem(SOCIAL_ACTIVITIES)} ${randomPerson()} ${place}.`

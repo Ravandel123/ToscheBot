@@ -1,17 +1,19 @@
 import { chance, randomInt, randomItem } from '../lib/random.js';
 import { bold } from '../lib/text.js';
-import { ADVERBS, AFFLICTIONS, ANIMALS, PLACES, VIRTUES, WEAPONS } from '../lexicon.js';
+import { ADJECTIVES } from '../grammar/vocabulary/adjectives.js';
+import { ADVERBS } from '../grammar/vocabulary/adverbs.js';
+import { NOUNS } from '../grammar/vocabulary/nouns.js';
 import { randomPerson } from './people.js';
 import { funnyEnding } from './flavor.js';
 
 // `h!hug` / `h!rant` / `h!weapon(s)` — small interactive trolls. Ported from the old
-// hug/rant/weapon cases. Flavour pools come from the shared lexicon.
+// hug/rant/weapon cases. Flavour pools come from the shared vocabulary (grammar/).
 
-const MOODS = [...AFFLICTIONS, ...VIRTUES];
+const MOODS = [...ADJECTIVES.affliction, ...ADJECTIVES.virtue];
 
 /** A single bolded weapon, capitalized: "**Rocket launcher**". */
 export function randomWeapon(): string {
-   const weapon = randomItem(WEAPONS);
+   const weapon = randomItem(NOUNS.weapon);
    return bold(`${weapon[0].toUpperCase()}${weapon.slice(1)}`);
 }
 
@@ -28,7 +30,7 @@ export function celebratePhrase(): string {
       `Cool! Just remember not to invite ${randomPerson()}.`,
       `Awesome! Just remember to invite ${randomPerson()}.`,
       'Sorry, I am not joining that.',
-      `I will throw the party in ${bold(randomItem(PLACES))}.`,
+      `I will throw the party in ${bold(randomItem(NOUNS.furryCon))}.`,
       `Yeah! Let's bring a ${randomWeapon()} to the party!`,
       ':tada: :tada: :tada: :tada: :tada:',
    ]);
@@ -75,8 +77,8 @@ export function rantReply(hasContent: boolean): string {
       ':cry:',
       `Lol, no one cares anyway${funnyEnding('.')}`,
       `And you made ${randomPerson()} cry${funnyEnding('.')}`,
-      `${randomInt(1, 100)} ${randomItem(ANIMALS).toLowerCase()}s died because of that${funnyEnding('.')}`,
-      `That information just made me ${randomItem(ADVERBS)} ${randomItem(MOODS)}${funnyEnding('.')}`,
-      `You need to visit ${bold(randomItem(PLACES))} to get better${funnyEnding('.')}`,
+      `${randomInt(1, 100)} ${randomItem(NOUNS.animal).toLowerCase()}s died because of that${funnyEnding('.')}`,
+      `That information just made me ${randomItem(ADVERBS.manner)} ${randomItem(MOODS)}${funnyEnding('.')}`,
+      `You need to visit ${bold(randomItem(NOUNS.furryCon))} to get better${funnyEnding('.')}`,
    ]);
 }

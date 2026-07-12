@@ -146,11 +146,12 @@ No `Stress` field, no Afflictions/Disorders, no reputation/scars/cold/vice/hunge
 system exists in the data model or the code. This whole section of the Ruleset above is pure
 design intent, carried over unchanged from the original design docs.
 
-**One head start:** `src/lexicon.ts` already exports `AFFLICTIONS` and `VIRTUES` word lists
-(used today by the fun commands `reactions.ts`/`resolve.ts` for mood/8-ball flavor) — general
-vocabulary, not RPG-specific, but plausibly reusable as a starting point for Affliction/Virtue
-flavor text once Stress→Madness is actually built, instead of authoring a fresh list from
-scratch.
+**One head start:** `src/grammar/vocabulary/adjectives.ts` already carries `affliction` and
+`virtue` word pools (used today by the fun commands `reactions.ts`/`resolve.ts` for
+mood/8-ball flavor) — general vocabulary, not RPG-specific, but plausibly reusable as a
+starting point for Affliction/Virtue flavor text once Stress→Madness is actually built,
+instead of authoring a fresh list from scratch. The D49 sentence engine
+(`grammar/sentence.ts`) is likewise a ready seam for narrated affliction/mood lines.
 
 ---
 

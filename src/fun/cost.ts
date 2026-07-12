@@ -1,13 +1,13 @@
 import { chance, randomInt, randomItem } from '../lib/random.js';
-import { expand, type Grammar } from '../lib/grammar.js';
+import { expand, type Grammar } from '../grammar/compose.js';
 import { funnyEnding } from './flavor.js';
 import { accuracyPrefix } from './generators.js';
-import { FLAVOR_CURRENCIES } from '../lexicon.js';
+import { NOUNS } from '../grammar/vocabulary/nouns.js';
 
 // `h!cost <thing>` — Tosch appraises the price of something. A worked example of
 // the data + generator + grammar pattern: phrasings live in a grammar (varied,
 // not a fixed line), the price is computed and **injected as a runtime symbol**,
-// and the lexicon supplies the currency. The command file stays a one-liner.
+// and the shared vocabulary supplies the currency. The command file stays a one-liner.
 
 const PRICED_GRAMMAR: Grammar = {
    // `#price#` is supplied per call (see below) — the grammar itself is static.
@@ -25,7 +25,7 @@ export function costPhrase(): string {
       return expand(SPECIAL_GRAMMAR) + funnyEnding();
 
    const amount = randomInt(1, randomItem([10, 100, 1000]));
-   const price = `${accuracyPrefix()}${amount} ${randomItem(FLAVOR_CURRENCIES)}`;
+   const price = `${accuracyPrefix()}${amount} ${randomItem(NOUNS.currency)}`;
 
    // Merge the runtime `price` symbol into the static grammar, then expand.
    return expand({ ...PRICED_GRAMMAR, price: [price] }) + funnyEnding();

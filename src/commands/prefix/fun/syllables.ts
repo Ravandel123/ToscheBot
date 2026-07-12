@@ -1,5 +1,5 @@
 import type { PrefixCommand } from '../../../types/commands.js';
-import { countSyllables } from '../../../lib/text.js';
+import { countSyllables } from '../../../grammar/inflect.js';
 
 export default {
    name: 'syllables',
