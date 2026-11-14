@@ -6,11 +6,13 @@ import { isFightingStyleId, FIGHTING_STYLES } from '../../game/combat/styles.js'
 import { MAX_PLAN_RULES, sanitizeFamilyPlan } from '../../game/combat/plan.js';
 import {
    buildCombatPlanPanel,
+   buildFightingStylePanel,
    buildRuleStylePicker,
    buildTriggerPicker,
    familyPlanOf,
    isPlanFamily,
    parseTriggerValue,
+   type PanelView,
    type PlanFamily,
 } from './_combatPlanView.js';
 import type { CharacterDoc } from '../../db/models/character.js';
@@ -19,12 +21,14 @@ import type { CharacterDoc } from '../../db/models/character.js';
 // (D41). Ephemeral + personal, so the clicker owns the account — every action
 // re-resolves their ACTIVE character (stateless, restart-proof, and a character
 // switch mid-panel simply starts editing the new active one):
+//   simple                        → the simple "how do you fight?" panel;
+//   quick:<family>                → set the default style FROM the simple panel;
 //   style:<family>                → set the family's default style ('none' = plain);
 //   newrule:<family>              → open the rule builder (step 1: trigger);
 //   ruletrigger:<family>          → step 2: pick the style (trigger rides on);
 //   rulestyle:<family>:<trigger>  → append the rule and save;
 //   clearrules:<family>           → drop the family's rules;
-//   show                          → back to the main panel.
+//   show                          → the full tactics panel.
 //
 // A plan edit is one atomic $set of the family subtree — no lock needed: a
 // fight snapshots the plan once under ITS lock (combatProfile), so an edit
@@ -49,6 +53,10 @@ export default {
          await interaction.update(buildCombatPlanPanel(character));
          return;
       }
+      if (action === 'simple') {
+         await interaction.update(buildFightingStylePanel(character));
+         return;
+      }
 
       if (!family || !isPlanFamily(family)) {
          await interaction.reply({ content: 'That control belongs to a family I no longer know.', ...ephemeral });
@@ -57,6 +65,7 @@ export default {
 
       if (interaction.isStringSelectMenu()) {
          if (action === 'style') return setDefaultStyle(interaction, character, family);
+         if (action === 'quick') return setDefaultStyle(interaction, character, family, buildFightingStylePanel);
          if (action === 'ruletrigger') {
             await interaction.update(buildRuleStylePicker(character, family, interaction.values[0]));
             return;
@@ -70,13 +79,18 @@ export default {
    },
 } satisfies ComponentHandler;
 
-async function setDefaultStyle(interaction: StringSelectMenuInteraction, character: CharacterDoc, family: PlanFamily): Promise<void> {
+async function setDefaultStyle(
+   interaction: StringSelectMenuInteraction,
+   character: CharacterDoc,
+   family: PlanFamily,
+   repaint: (character: CharacterDoc) => PanelView = buildCombatPlanPanel,
+): Promise<void> {
    const picked = interaction.values[0];
    const style = picked !== 'none' && isFightingStyleId(picked) && FIGHTING_STYLES[picked].family === family
       ? picked
       : null;
 
-   await savePlan(interaction, character, family, { ...familyPlanOf(character, family), style });
+   await savePlan(interaction, character, family, { ...familyPlanOf(character, family), style }, repaint);
 }
 
 async function openRuleBuilder(interaction: ButtonInteraction, character: CharacterDoc, family: PlanFamily): Promise<void> {
@@ -121,10 +135,11 @@ async function savePlan(
    character: CharacterDoc,
    family: PlanFamily,
    plan: unknown,
+   repaint: (character: CharacterDoc) => PanelView = buildCombatPlanPanel,
 ): Promise<void> {
    const clean = sanitizeFamilyPlan(plan, family);
    await characterService.setCombatPlan(character._id, family, clean);
 
    const fresh = await characterService.get(character._id);
-   await interaction.update(buildCombatPlanPanel(fresh ?? character));
+   await interaction.update(repaint(fresh ?? character));
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PipelineStage } from 'mongoose';
 import { Character, defaultCharacterStats, type CharacterDoc, type CharacterIdentity } from '../models/character.js';
+import { MAX_ACTIVE_EFFECTS, effectDefinition } from '../../game/data/effects.js';
 import { activitySessionService } from './activitySessionService.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
@@ -193,6 +194,27 @@ export const characterService = {
       return levelUps;
    },
 
+   /** Starts (or restarts) a timed effect. Two writes — drop the old copy and
+    *  anything expired, then push the fresh one — because one update cannot
+    *  pull from and push to the same array. Callers hold the character lock.
+    *  False for an unknown effect id. */
+   async applyEffect(characterId: string, effectId: string, now = new Date()): Promise<boolean> {
+      const definition = effectDefinition(effectId);
+      if (!definition)
+         return false;
+
+      const expiresAt = new Date(now.getTime() + definition.durationMinutes * 60_000);
+      await Character.updateOne(
+         { _id: characterId },
+         { $pull: { effects: { $or: [{ effectId }, { expiresAt: { $lte: now } }] } } },
+      );
+      await Character.updateOne(
+         { _id: characterId },
+         { $push: { effects: { $each: [{ effectId, expiresAt }], $slice: -MAX_ACTIVE_EFFECTS } } },
+      );
+      return true;
+   },
+
    // The three status transitions are guarded on the CURRENT status (not just
    // the id): a decree message's buttons can outlive the verdict, and a stale
    // Approve click must not bless a character that was since rejected/edited.
@@ -297,8 +319,8 @@ export const characterService = {
    /** Bulk hourly regen for all characters except `excludeIds` (locked or
     *  mid-activity). Resources nudge toward max (placeholder flat amounts); AP
     *  just accumulates (no cap, D15). Returns the number of characters modified. */
-   async regenAll(excludeIds: string[] = []): Promise<number> {
-      const fields = regenFields('full');
+   async regenAll(excludeIds: string[] = [], hours = 1): Promise<number> {
+      const fields = regenFields('full', hours);
       const filter = excludeIds.length > 0 ? { _id: { $nin: excludeIds } } : {};
       const result = await Character.updateMany(filter, setStage(fields), PIPELINE);
       return result.modifiedCount;
@@ -308,20 +330,20 @@ export const characterService = {
     *  always accrues, but vitals not flagged `regenWhileBusy` pause (skipped,
     *  not deferred — you don't heal mid-climb). Safe without a lock: every
     *  field it touches is only ever written via atomic deltas. */
-   async regenAllBusy(ids: string[]): Promise<number> {
+   async regenAllBusy(ids: string[], hours = 1): Promise<number> {
       if (ids.length === 0)
          return 0;
 
-      const result = await Character.updateMany({ _id: { $in: ids } }, setStage(regenFields('busy')), PIPELINE);
+      const result = await Character.updateMany({ _id: { $in: ids } }, setStage(regenFields('busy', hours)), PIPELINE);
       return result.modifiedCount;
    },
 
    /** Single-character regen — the deferred op for a character locked at regen
     *  time (D7). Decides full-vs-busy at EXECUTION time: the op lands after the
     *  in-memory lock releases, but a durable session may still be running. */
-   async regen(characterId: string): Promise<void> {
+   async regen(characterId: string, hours = 1): Promise<void> {
       const session = await activitySessionService.getActiveForParticipant(characterId);
-      await Character.updateOne({ _id: characterId }, setStage(regenFields(session ? 'busy' : 'full')), PIPELINE);
+      await Character.updateOne({ _id: characterId }, setStage(regenFields(session ? 'busy' : 'full', hours)), PIPELINE);
    },
 };
 
@@ -330,11 +352,13 @@ export type RegenScope = 'full' | 'busy';
 // One regen tick as a clamped $set map; shared by bulk + single paths so they
 // can't drift. AP has no max, so it just grows — and it grows in BOTH scopes
 // (D15/D23); the 'busy' scope skips resources that pause mid-activity.
+// `hours` pays several ticks at once (catch-up after downtime) — the clamp to
+// max makes that identical to running the tick that many times.
 // Exported for tests only (pure).
-export function regenFields(scope: RegenScope): Record<string, unknown> {
+export function regenFields(scope: RegenScope, hours = 1): Record<string, unknown> {
    const fields: Record<string, unknown> = {
-      'actionPoints.current': { $add: ['$actionPoints.current', AP_REGEN_PER_HOUR] },
-      'actionPoints.totalEarned': { $add: ['$actionPoints.totalEarned', AP_REGEN_PER_HOUR] },
+      'actionPoints.current': { $add: ['$actionPoints.current', AP_REGEN_PER_HOUR * hours] },
+      'actionPoints.totalEarned': { $add: ['$actionPoints.totalEarned', AP_REGEN_PER_HOUR * hours] },
    };
 
    for (const [key, def] of Object.entries(RESOURCES)) {
@@ -344,7 +368,7 @@ export function regenFields(scope: RegenScope): Record<string, unknown> {
          continue;
 
       fields[`resources.${key}.current`] = {
-         $min: [`$resources.${key}.max`, { $add: [`$resources.${key}.current`, def.regenPerHour] }],
+         $min: [`$resources.${key}.max`, { $add: [`$resources.${key}.current`, def.regenPerHour * hours] }],
       };
    }
 

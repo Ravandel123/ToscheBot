@@ -36,5 +36,6 @@ export const CONSUMABLES = {
       weightKg: 1.0,
       value: 12,
       effects: { stamina: 2, health: 1 },
+      grantsEffect: 'dutch_courage',
    },
 } as const satisfies Record<string, ConsumableDefinition>;

@@ -25,6 +25,7 @@ import {
 } from '../../game/character/stash.js';
 import { itemDisplayName, type ItemInstance, type ResolvedItem } from '../../game/character/inventory.js';
 import { displayName } from '../../game/character/identity.js';
+import { truncate } from '../../lib/text.js';
 import { detailEmbed, lineSummary, type InventoryView } from './_inventoryPanel.js';
 import type { ItemDoc } from '../../db/models/item.js';
 import type { CharacterDoc } from '../../db/models/character.js';
@@ -177,8 +178,4 @@ export function buildStashCard(character: CharacterDoc, state: StashBrowseState,
    );
 
    return { embeds: [embed], components: [row] };
-}
-
-function truncate(text: string, max: number): string {
-   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }

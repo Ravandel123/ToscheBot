@@ -1,4 +1,5 @@
 import type { ActivityType } from '../../db/models/activitySession.js';
+import type { ActivityExit } from '../activity/exit.js';
 import type { CheckDefinition } from '../checks.js';
 import type { LocationCondition } from '../world/conditions.js';
 import type { TraitKey } from './traits.js';
@@ -78,6 +79,9 @@ export interface ActivityEncounter extends EncounterBase {
    options: readonly [ChallengeOption, ...ChallengeOption[]];
    /** Failed retries before the challenge forces the character back. */
    maxSetbacks: number;
+   /** Walking away, in character (D58). Ends the challenge at the origin and
+    *  must never be a better deal than the worst option above. */
+   exit: ActivityExit;
 }
 
 export type EncounterDefinition = FlavorEncounter | ActivityEncounter;
@@ -147,6 +151,14 @@ export const ENCOUNTERS = {
       weight: 3,
       intro: 'A storm-felled tree blocks the road, branches tangled like a barricade.',
       maxSetbacks: 3,
+      exit: {
+         label: 'Give up on the road',
+         emoji: '↩️',
+         lines: [
+            'You give the trunk a parting kick, curse the storm that dropped it and trudge back the way you came.',
+            'You spit at the tangle and turn around — let someone else clear the Imperator\'s roads.',
+         ],
+      },
       options: [
          {
             id: 'climb',
@@ -188,6 +200,17 @@ export const ENCOUNTERS = {
       weight: 2,
       intro: 'Someone is thrashing in the current, going under — their cries are getting weaker.',
       maxSetbacks: 2,
+      // Walking on at least gets you where you were going; backing away costs
+      // the same shame and the journey too.
+      exit: {
+         label: 'Back away from the bank',
+         emoji: '🙈',
+         lines: [
+            'You back away from the water, telling yourself someone braver will come along. The cries follow you all the way back.',
+            'You turn and hurry back the way you came, hands over your ears.',
+         ],
+         traits: { cowardice: 1 },
+      },
       options: [
          {
             id: 'swim',

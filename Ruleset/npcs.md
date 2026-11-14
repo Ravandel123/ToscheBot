@@ -10,6 +10,8 @@ This is root `CLAUDE.md`'s **Phase 6C**, designed here.
 
 ---
 
+> **What is built:** [implementation/npcs.md](implementation/npcs.md). This file holds only the rules.
+
 ## Reference (decided data & math)
 
 **An NPC is** — a `Character { ownerId: null, approvalStatus: 'approved' }` whose **`_id` is
@@ -56,7 +58,7 @@ db-tested) **idempotently upserts** the hand-authored roster (`game/data/npcs.ts
 gender, epithet, home, archetype, starting gear/coins) so a fresh Atlas cluster (or a wipe) is
 repopulated in one command. Idempotent by the stable NPC id (= the character id, D44):
 re-running never duplicates — it **updates the static half only** (identity, race, home) and
-never resets what the world has mutated (pack, coins, resources, progression — AUDIT §3.3).
+never resets what the world has mutated (pack, coins, resources, progression).
 Starting gear/coins are granted on CREATE only. NPC ids are append-only (D10). One v1 caveat:
 a reseed repositions a re-homed NPC (nothing else can move one yet) — the day the npc-tick
 cron lands, drift must win and that block in `npcSeed.ts` must be deleted.
@@ -103,38 +105,6 @@ Two tiers: **hand-authored named NPCs** (Mearog the tavern gambler, a quest-give
 persistent, memorable, quest-bearing) and **generic extras** (a nameless forager, a stall
 vendor — populate presence, provide ambient trade/talk, cheap to author in bulk or even generate
 procedurally). Ship a few named ones + a handful of generics per key location.
-
----
-
-## Implementation
-
-✅ **Step 1 is LIVE (S2/D44, 2026-07-10)** — the static roster:
-- `game/data/npcs.ts` — 7 named NPCs (plaza merchant, tavernkeeper, spire guard, ferryman,
-  herb-gatherer, old campaigner, wandering scholar) with archetype (data-only seam: nothing
-  reads it until the S3 shop / the behavior cron), home, starting gear, and 🟡 starting coins
-  (the plaza merchant's pool = the S3 shop's finite trading gold, per the owner's 2026-07-10
-  call). Content integrity (lengths, carry weight vs racial strength, a merchant anchored at
-  the plaza) is test-locked in `npcs.test.ts`.
-- `characterService.createNpc` mints an approved `ownerId: null` character under the stable
-  `npc-<npcId>` id — never through the wizard/approval flow (D13 vets players, not content);
-  `npcDefinition(characterId)` resolves the static half back from the catalog (D10).
-- `scripts/seed-npcs.ts` — the idempotent upsert (see Seeding above).
-- NPCs already show in `/play` presence with an *(NPC)* tag — zero new runtime code, as
-  designed.
-
-Build order, remaining:
-2. ⬜ `game/data/npcBehaviors.ts` + `jobs/npcTick.ts` — the hourly brain (start with just
-   **movement**, the highest-impact/lowest-risk action), bulk-first & lock-aware per D23.
-   **Blocked on the lifecycle decision** (PLAN Decision queue #7); when it lands, also flip
-   `npcSeed.ts`'s reseed-repositions-home block (location becomes mutable state).
-3. 🟨 Player-facing verbs, in demand order: **trade** ⬜ (PLAN S3, needs economy.md's shop) →
-   **conversation** ✅ (S4/D45, 2026-07-10: every NPC talks via its archetype's `small_talk`
-   template or an authored tree — `NpcDefinition.dialogueId`, Marrek's `marrek_tales` is the
-   proof piece; conversations.md Implementation. A mid-chat NPC is deliberately NOT session-
-   busy) → **teaming** ⬜ (needs the Side-A/B combat engine, combat.md) → autonomous
-   professions ⬜ (needs professions.md).
-4. ⬜ `disposition` (per-NPC-per-character) — add when teaming/gift content needs it; keep
-   bounded (sparse-only from day one, AUDIT §3.3).
 
 ---
 

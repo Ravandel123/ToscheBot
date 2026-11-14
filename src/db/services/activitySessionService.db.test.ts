@@ -40,13 +40,19 @@ describe('activitySessionService busy checks (cross-restart lock)', () => {
       );
    });
 
-   it('treats a lapsed session as no longer busy (lazy expiry)', async () => {
-      // A negative TTL puts expiresAt in the past — the doc still exists (the TTL
-      // sweep is periodic) but must read as expired.
-      await activitySessionService.create('challenge', ['char-1'], {}, -1000);
+   it('abandon reports the removal only once (the exit must not charge twice)', async () => {
+      const session = await activitySessionService.create('challenge', ['char-1']);
 
+      expect(await activitySessionService.abandon(session._id)).toBe(true);
+      expect(await activitySessionService.abandon(session._id)).toBe(false);
       expect(await activitySessionService.getActiveForParticipant('char-1')).toBeNull();
-      expect(await activitySessionService.activeParticipantIds()).not.toContain('char-1');
+   });
+
+   it('lists active sessions oldest first', async () => {
+      const first = await activitySessionService.create('challenge', ['char-1']);
+      const second = await activitySessionService.create('dialogue', ['char-2']);
+
+      expect((await activitySessionService.listActive()).map((session) => session._id)).toEqual([first._id, second._id]);
    });
 
    it('a completed session frees the participant', async () => {

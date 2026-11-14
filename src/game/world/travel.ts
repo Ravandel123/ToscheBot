@@ -1,7 +1,7 @@
 import { LOCATIONS, resolveLocationId, type LocationId } from '../data/locations.js';
 
-// Pure travel rules (D21) — no Discord, no DB. The `/travel` command and the
-// future NPC-movement cron (6C) both walk the same graph through these helpers.
+// Pure travel rules (D21) — no Discord, no DB. The `/play` hub's travel menu and
+// any future NPC movement both walk the same graph through these helpers.
 
 // PLACEHOLDER (D14): travel is free until the ruleset prices actions. The
 // spend path is already wired through `spendActionPoints`, so setting a real

@@ -95,3 +95,36 @@ describe('inventoryService.applyIdentification', () => {
       expect(await inventoryService.applyIdentification(id, 'no-such-id', { apply: 'reveal' })).toBeNull();
    });
 });
+
+describe('inventoryService.issueStarterKit', () => {
+   it('issues the kit once to an approved character', async () => {
+      const id = await freshCharacter();
+      await characterService.submitForApproval(id);
+      await characterService.approve(id);
+
+      const issued = await inventoryService.issueStarterKit(id);
+      expect(issued).toEqual(['Iron Dagger', 'Leather Jerkin', '2× Healer\'s Poultice']);
+
+      const stored = (await characterService.get(id))!;
+      expect(stored.starterKitGranted).toBe(true);
+      expect(inventoryOf(stored).map((item) => [item.itemId, item.quantity])).toEqual([
+         ['iron_dagger', 1],
+         ['leather_jerkin', 1],
+         ['healers_poultice', 2],
+      ]);
+
+      // A second call is a no-op — nothing is granted twice.
+      expect(await inventoryService.issueStarterKit(id)).toBeNull();
+      expect(inventoryOf((await characterService.get(id))!)).toHaveLength(3);
+   });
+
+   it('issues nothing to an unapproved character and leaves it eligible', async () => {
+      const id = await freshCharacter();
+
+      expect(await inventoryService.issueStarterKit(id)).toBeNull();
+
+      const stored = (await characterService.get(id))!;
+      expect(stored.starterKitGranted).toBeUndefined();
+      expect(inventoryOf(stored)).toHaveLength(0);
+   });
+});

@@ -1,15 +1,12 @@
 // The location action catalog (D10) — what a character can DO at the place they
 // are standing, surfaced as buttons on the `/play` hub. Travel is NOT here: it
 // is the hub's one structurally-distinct action (a destination picker), routed
-// specially. Everything in this catalog is currently a PLACEHOLDER — the button
-// exists and shows an in-character "coming soon" line — so the hub already
-// reads as a rich, per-location activity board (the backlog's "locations =
-// activity tables" idea) while the real activities are built one at a time.
+// specially.
 //
-// Turning a placeholder into a real action later = flip it to a handler in the
-// `play` component router (one case), keeping this catalog as the single source
-// of what each location offers. Ids are stable slugs (D10) — they ride in
-// `play:act:<id>` customIds.
+// An entry with a `comingSoon` line is UNBUILT: it stays here as the plan for
+// that location but the hub never shows it. Making it live = remove the line
+// and add its executor to HUB_EXECUTORS in the `play` component. Ids are stable
+// slugs (D10) — they ride in `play:act:<id>` customIds.
 
 import type { LocationCondition } from '../world/conditions.js';
 
@@ -37,6 +34,15 @@ export interface HubAction {
 }
 
 export const HUB_ACTIONS = {
+   // --- Live ---------------------------------------------------------------
+   arena: {
+      id: 'arena',
+      label: 'Enter the arena',
+      emoji: '🏟️',
+      description: 'Climb the Spire ladder — pick a champion and fight.',
+      locations: ['spire'],
+   },
+
    // --- Available everywhere (the three the owner called out) ------------------
    search: {
       id: 'search',
@@ -74,15 +80,16 @@ export const HUB_ACTIONS = {
       locations: ['spire'],
       comingSoon: 'The court is not yet hearing petitions — the Imperator is, ah, indisposed.',
    },
+   // LIVE (D60): opens the stall of the merchant NPC who keeps shop here
+   // (game/data/shops.ts). The same availability is re-checked on every trade.
    market: {
       id: 'market',
       label: 'Browse the market',
       emoji: '🪙',
-      description: 'See what the plaza stalls are selling today.',
+      description: 'Buy from the plaza stall, or sell what you carry.',
       locations: ['plaza'],
       // The owner's canonical example (D31): shops keep daylight hours.
       availability: { timeOfDay: ['morning', 'day'] },
-      comingSoon: 'The stalls are still setting up their wares. Come back when the economy opens.',
    },
    drink: {
       id: 'drink',

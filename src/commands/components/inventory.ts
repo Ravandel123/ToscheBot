@@ -7,6 +7,8 @@ import { activitySessionService } from '../../db/services/activitySessionService
 import { DEFAULT_CONTAINER, STORAGE_CONTAINERS } from '../../game/data/containers.js';
 import { ATTRIBUTES } from '../../game/data/attributes.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
+import { checkSubject } from '../../game/character/modifiers.js';
+import { effectDefinition } from '../../game/data/effects.js';
 import { isEquipmentSlotId, type EquipmentSlotId } from '../../game/data/equipmentSlots.js';
 import { isEquippable, type ConsumableDefinition } from '../../game/data/items.js';
 import { skillNode } from '../../game/data/skills.js';
@@ -14,7 +16,6 @@ import { checkTrainingWeight } from '../../game/checks.js';
 import { EXAMINE_AP_COST, examineInstance } from '../../game/professions/identify.js';
 import {
    INVENTORY_SORTS,
-   attributesWithEquipment,
    browseState,
    findItem,
    itemDisplayName,
@@ -25,6 +26,7 @@ import {
    type EquipCheck,
    type InventorySortId,
 } from '../../game/character/inventory.js';
+import { busyNote } from './_activities/registry.js';
 import { buildDropConfirm, buildInventoryHub, buildInventoryList, buildItemDetail, buildSlotChooser, stateForItem, type InventoryView } from './_inventoryPanel.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { ToscheClient } from '../../client.js';
@@ -41,7 +43,7 @@ import type { ToscheClient } from '../../client.js';
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 const STALE_ITEM_NOTE = '👻 That item is no longer in your pack.';
-const BUSY_NOTE = '⏳ You are in the middle of something — deal with it first.';
+const BUSY_NOTE = '⏳ Your character is busy right now — try again in a moment.';
 
 export default {
    namespace: 'inventory',
@@ -211,8 +213,7 @@ async function handleExamine(client: ToscheClient, interaction: ButtonInteractio
       if (!await characterService.spendActionPoints(fresh._id, EXAMINE_AP_COST))
          return detailOrList(fresh, instanceId, state, `⚡ You lack the Action Points to study it (it costs ${EXAMINE_AP_COST}).`);
 
-      const subject = { ...fresh, attributes: attributesWithEquipment(fresh) };
-      const result = examineInstance(subject, item.instance);
+      const result = examineInstance(checkSubject(fresh), item.instance);
 
       let shownInstanceId = instanceId;
       if (result.kind === 'revealed')
@@ -320,8 +321,9 @@ async function mutate(
          return;
       }
 
-      if (await activitySessionService.getActiveForParticipant(characterId)) {
-         await interaction.editReply(detailOrList(fresh, instanceId, state, BUSY_NOTE));
+      const session = await activitySessionService.getActiveForParticipant(characterId);
+      if (session) {
+         await interaction.editReply(detailOrList(fresh, instanceId, state, `${busyNote(session)} \`/play\` takes you back to it.`));
          return;
       }
 
@@ -344,6 +346,10 @@ async function ownedCharacter(interaction: PanelInteraction, characterId: string
 function describeEffects(definition: ConsumableDefinition): string {
    const parts = Object.entries(definition.effects)
       .map(([key, amount]) => `${amount > 0 ? '+' : ''}${amount} ${RESOURCES[key as ResourceKey].name}`);
+
+   const effect = definition.grantsEffect ? effectDefinition(definition.grantsEffect) : undefined;
+   if (effect)
+      parts.push(`${effect.emoji} ${effect.name}`);
 
    return parts.length > 0 ? ` (${parts.join(', ')})` : '';
 }

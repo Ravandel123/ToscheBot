@@ -19,6 +19,7 @@ import {
 } from 'discord.js';
 import {
    SKILL_ROOT_IDS,
+   isSkillVisible,
    SKILL_NODE_CAP,
    resolveBlend,
    skillNode,
@@ -32,6 +33,7 @@ import { ATTRIBUTES } from '../../game/data/attributes.js';
 import { effectiveSkill, nodePoints, usesForNextPoint, type SkillProgression } from '../../game/character/skills.js';
 import { displayName } from '../../game/character/identity.js';
 import type { CharacterDoc } from '../../db/models/character.js';
+import { backToPlayRow } from './_backToPlay.js';
 
 const PANEL_COLOR = 0x4E6E58; // quartermaster ledger green (matches /profile)
 
@@ -44,7 +46,7 @@ export interface SkillPanel {
 export function buildSkillOverview(character: CharacterDoc): SkillPanel {
    const skills = character.progression?.skills ?? {};
 
-   const lines = SKILL_ROOT_IDS.map((rootId) => {
+   const lines = SKILL_ROOT_IDS.filter(isSkillVisible).map((rootId) => {
       const trained = treeTrainedPoints(skills, rootId);
       const blend = formatBlend(resolveBlend(rootId));
       const mark = trained > 0 ? '📗' : '📖';
@@ -57,16 +59,17 @@ export function buildSkillOverview(character: CharacterDoc): SkillPanel {
       .setDescription(`${lines.join('\n')}\n\nOpen a tree below to inspect its branches.`)
       .setFooter({ text: 'Skills rise through use — nothing to spend here yet.' });
 
-   return { embeds: [embed], components: [treePickerRow()] };
+   return { embeds: [embed], components: [treePickerRow(), backToPlayRow()] };
 }
 
 /** One tree's full breakdown (falls back to the overview on an unknown root id). */
 export function buildSkillTreeView(character: CharacterDoc, rootId: string): SkillPanel {
-   if (!isSkillNodeId(rootId) || skillNode(rootId).parent !== null)
+   if (!isSkillNodeId(rootId) || skillNode(rootId).parent !== null || !isSkillVisible(rootId))
       return buildSkillOverview(character);
 
    const skills = character.progression?.skills ?? {};
    const table = subtreeIds(rootId)
+      .filter(isSkillVisible)
       .map((id) => nodeLine(character, skills, id))
       .join('\n');
 
@@ -138,7 +141,7 @@ function treePickerRow(selected?: SkillNodeId): ActionRowBuilder<MessageActionRo
       .setCustomId('charskills:open')
       .setPlaceholder('Open a skill tree…')
       .addOptions(
-         SKILL_ROOT_IDS.map((rootId) => ({
+         SKILL_ROOT_IDS.filter(isSkillVisible).map((rootId) => ({
             label: skillNode(rootId).name,
             value: rootId,
             description: skillNode(rootId).description?.slice(0, 100),

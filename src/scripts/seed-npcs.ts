@@ -1,7 +1,7 @@
 // Populates (or refreshes) the hand-authored NPC roster from game/data/npcs.ts:
 // an idempotent update-by-npcId (D44) — a fresh database gets the full cast, a
 // rerun refreshes names/races/homes and NEVER resets what NPCs have since
-// gained or lost (inventory, coins, progression — AUDIT §3.3). Run with:
+// gained or lost (inventory, coins, progression). Run with:
 // npm run seed-npcs (ENV_FILE=.env.production to target the live DB — see the
 // confirmation guard below).
 //

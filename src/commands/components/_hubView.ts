@@ -71,7 +71,8 @@ export function buildHubView(character: CharacterDoc, hub: HubContext, banner?: 
    const locationId = resolveLocationId(character.locationId);
    const location = LOCATIONS[locationId];
    const approved = character.approvalStatus === 'approved';
-   const actions = availableHubActions(locationId, hub.ctx);
+   // Unbuilt actions stay in the catalog but are never offered to players.
+   const actions = availableHubActions(locationId, hub.ctx).filter(({ action }) => action.comingSoon === undefined);
 
    const weather = WEATHER[hub.ctx.weather];
    const time = TIMES_OF_DAY[hub.ctx.timeOfDay];
@@ -184,5 +185,18 @@ function hubComponents(locationId: LocationId, actions: AvailableHubAction[]): A
    for (let i = 0; i < buttons.length; i += 5)
       rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(buttons.slice(i, i + 5)));
 
-   return rows;
+   // The character's own panels, one click away — `/play` is the one command
+   // a player has to know (D59). Always the last row; Discord allows five.
+   return [...rows.slice(0, 4), shortcutRow()];
+}
+
+function shortcutRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
+   const shortcut = (panel: string, label: string, emoji: string): ButtonBuilder =>
+      new ButtonBuilder().setCustomId(`play:open:${panel}`).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Primary);
+
+   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      shortcut('inventory', 'Pack', '🎒'),
+      shortcut('skills', 'Skills', '📜'),
+      shortcut('style', 'Fighting style', '⚔️'),
+   );
 }

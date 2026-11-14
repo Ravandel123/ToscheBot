@@ -20,6 +20,7 @@ import {
    availableDialogueOptions,
    dialogueGateCheck,
    dialogueNodeOf,
+   dialogueOf,
    dialogueOptionKey,
    dialogueProgress,
    dialogueStateFrom,
@@ -30,18 +31,22 @@ import {
    type DialogueState,
 } from '../../../game/activity/dialogue.js';
 import { canCharacterAct } from '../../../game/character/rules.js';
-import { attributesWithEquipment } from '../../../game/character/inventory.js';
+import { checkSubject } from '../../../game/character/modifiers.js';
 import { npcDefinition } from '../../../game/data/npcs.js';
 import { skillNode } from '../../../game/data/skills.js';
 import { checkTarget, checkTrainingWeight, rollAgainst } from '../../../game/checks.js';
 import { randomItem } from '../../../lib/random.js';
 import { log } from '../../../lib/log.js';
 import type { SkillLevelUp } from '../../../game/character/skills.js';
+import type { ActivityExit } from '../../../game/activity/exit.js';
 import type { ActivityHandler, ActivityView } from '../../../types/activities.js';
 import type { ActivitySessionDoc } from '../../../db/models/activitySession.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
 
 const DIALOGUE_COLOR = 0x8A6D9B; // tavern-candle violet
+
+/** For a session whose dialogue id no longer resolves (D10 rule 3). */
+const FALLBACK_EXIT: ActivityExit = { label: 'Take your leave', emoji: '🚶', lines: ['You take your leave.'] };
 
 export default {
    type: 'dialogue',
@@ -53,6 +58,9 @@ export default {
          // Crash-recovery window: the ending pick was persisted but the cleanup
          // may not have run. Offer to finish it.
          : farewellView(session, state);
+   },
+   title(session) {
+      return `A conversation with ${npcName(dialogueStateFrom(session.state).npcCharacterId)}`;
    },
    async onAction(client, interaction, session, actor, action, args) {
       if (!interaction.isButton())
@@ -105,7 +113,7 @@ async function handleOption(
    // Roll against the target computed (and shown) when the session opened;
    // fall back to a fresh computation for hand-edited blobs (D26/D28 pattern).
    const check = option.check
-      ? rollAgainst(state.optionTargets[dialogueOptionKey(state.nodeId, option.id)] ?? checkTarget({ ...actor, attributes: attributesWithEquipment(actor) }, option.check))
+      ? rollAgainst(state.optionTargets[dialogueOptionKey(state.nodeId, option.id)] ?? checkTarget(checkSubject(actor), option.check))
       : null;
    const success = check?.success ?? true;
    const outcome = appliedDialogueOutcome(option, success);
@@ -170,8 +178,10 @@ async function finalize(
    await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
 }
 
-/** Walking away mid-talk (D17 clean cancel): nothing to refund — starting a
- *  conversation is free, and rolled options were charged as they happened. */
+/** Cutting the talk short by the dialogue's exit (D58) — the rude way out, next
+ *  to the polite goodbyes each node offers. Nothing to refund: starting a
+ *  conversation is free and rolled lines were charged as they happened. The
+ *  session is removed first, so the exit's consequences apply exactly once. */
 async function handleLeave(
    interaction: ButtonInteraction,
    session: ActivitySessionDoc,
@@ -179,10 +189,18 @@ async function handleLeave(
 ): Promise<void> {
    const state = dialogueStateFrom(session.state);
 
-   await activitySessionService.abandon(session._id);
+   // A stale panel must not turn an already-finished talk into an insult.
+   if (dialogueProgress(state) !== 'ongoing') {
+      await finalize(interaction, session, actor, state);
+      return;
+   }
+
+   const exit = dialogueOf(state)?.exit ?? FALLBACK_EXIT;
+   if (await activitySessionService.abandon(session._id) && exit.traits)
+      await characterService.applyTraitDeltas(actor._id, exit.traits);
 
    const survivor = await characterService.get(actor._id);
-   const banner = `💬 You excuse yourself — **${npcName(state.npcCharacterId)}** has already turned back to their own affairs.`;
+   const banner = `${exit.emoji} ${fillDialogueLine(randomItem(exit.lines), state.npcCharacterId)}`;
    await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
 }
 
@@ -209,7 +227,7 @@ function nodeView(session: ActivitySessionDoc, state: DialogueState, note = ''):
          .setColor(DIALOGUE_COLOR)
          .setTitle(`💬 ${npcTitle(state.npcCharacterId)}`)
          .setDescription(`**${npcName(state.npcCharacterId)}** seems to have lost the thread of the conversation.`);
-      return { embeds: [embed], components: [leaveRow(session._id, 'Take your leave')] };
+      return { embeds: [embed], components: [leaveRow(session._id, FALLBACK_EXIT)] };
    }
 
    const options = availableDialogueOptions(state.nodeId, node, state);
@@ -232,10 +250,9 @@ function nodeView(session: ActivitySessionDoc, state: DialogueState, note = ''):
          // Rides only the pick that earned it — repaints stay quiet.
          note,
          optionLines.length > 0 ? `\n${optionLines.join('\n')}` : '',
-         '⏳ Walk away for too long and the conversation ends on its own.',
       ].filter(Boolean).join('\n'));
 
-   return { embeds: [embed], components: optionRows(session._id, options) };
+   return { embeds: [embed], components: optionRows(session._id, options, dialogueOf(state)?.exit ?? FALLBACK_EXIT) };
 }
 
 function farewellView(session: ActivitySessionDoc, state: DialogueState): ActivityView {
@@ -254,14 +271,14 @@ function farewellView(session: ActivitySessionDoc, state: DialogueState): Activi
    return { embeds: [embed], components: [row] };
 }
 
-/** One button per available line + Walk away, chunked into ≤5-wide rows.
- *  Locked options are listed in the embed (with why) but get no button. */
-function optionRows(sessionId: string, options: readonly AvailableDialogueOption[]): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
+/** One button per available line + the dialogue's exit, chunked into ≤5-wide
+ *  rows. Locked options are listed in the embed (with why) but get no button. */
+function optionRows(sessionId: string, options: readonly AvailableDialogueOption[], exit: ActivityExit): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
    const buttons = [
       ...options.filter(({ ok }) => ok).map(({ option }) =>
          new ButtonBuilder().setCustomId(`activity:opt:${sessionId}:${option.id}`).setLabel(option.label).setEmoji(option.emoji).setStyle(ButtonStyle.Primary),
       ),
-      new ButtonBuilder().setCustomId(`activity:leave:${sessionId}`).setLabel('Walk away').setEmoji('🚶').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`activity:leave:${sessionId}`).setLabel(exit.label).setEmoji(exit.emoji).setStyle(ButtonStyle.Secondary),
    ];
 
    const rows: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
@@ -271,9 +288,9 @@ function optionRows(sessionId: string, options: readonly AvailableDialogueOption
    return rows;
 }
 
-function leaveRow(sessionId: string, label: string): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function leaveRow(sessionId: string, exit: ActivityExit): ActionRowBuilder<MessageActionRowComponentBuilder> {
    return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`activity:leave:${sessionId}`).setLabel(label).setEmoji('🚶').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`activity:leave:${sessionId}`).setLabel(exit.label).setEmoji(exit.emoji).setStyle(ButtonStyle.Secondary),
    );
 }
 

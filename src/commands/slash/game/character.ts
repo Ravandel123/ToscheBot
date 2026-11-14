@@ -7,9 +7,10 @@ import { displayName, STATUS_LABEL } from '../../../game/character/identity.js';
 import { RACES } from '../../../game/data/races.js';
 import { buildIdentityModal } from '../../components/_characterModals.js';
 import { buildCharacterPanel } from '../../components/_characterPanel.js';
-import { buildCombatPlanPanel } from '../../components/_combatPlanView.js';
+import { buildFightingStylePanel } from '../../components/_combatPlanView.js';
 import { buildSkillOverview } from '../../components/_skillPanel.js';
-import { buildCharacterSheet } from './_characterSheet.js';
+import { buildCharacterSheetView } from './_characterSheet.js';
+import { truncate } from '../../../lib/text.js';
 import type { ToscheClient } from '../../../client.js';
 
 const SWITCH_FAILURE: Record<Exclude<SwitchResult, { ok: true }>['reason'], string> = {
@@ -35,7 +36,7 @@ export default {
       )
       .addSubcommand((sub) => sub.setName('list').setDescription('List the characters you command.'))
       .addSubcommand((sub) => sub.setName('skills').setDescription("Inspect your active character's skill trees."))
-      .addSubcommand((sub) => sub.setName('combat').setDescription('Set your combat plan — fighting styles and when to switch them.'))
+      .addSubcommand((sub) => sub.setName('combat').setDescription('Choose how you fight — your fighting style, and tactics for switching it.'))
       .addSubcommand((sub) =>
          sub
             .setName('switch')
@@ -117,7 +118,7 @@ async function viewCharacter(interaction: ChatInputCommandInteraction): Promise<
 
    // The frame is shown in the VIEWER's unit preference (R19), not the target's.
    const { units } = await accountService.getSettings(interaction.user.id);
-   await interaction.reply({ embeds: [buildCharacterSheet(character, units)] });
+   await interaction.reply(buildCharacterSheetView(character, units));
 }
 
 async function listCharacters(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -155,8 +156,9 @@ async function viewSkills(interaction: ChatInputCommandInteraction): Promise<voi
    await interaction.reply({ ...buildSkillOverview(character), ...ephemeral });
 }
 
-/** The combat-plan editor for your active character (D41). Ephemeral + personal;
- *  the controls live in the `combatplan` component handler. */
+/** The fighting-style panel for your active character (D41/D59): the simple
+ *  one-choice view, with the full tactics editor one button away. Ephemeral +
+ *  personal; the controls live in the `combatplan` component handler. */
 async function viewCombatPlan(interaction: ChatInputCommandInteraction): Promise<void> {
    const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
 
@@ -165,7 +167,7 @@ async function viewCombatPlan(interaction: ChatInputCommandInteraction): Promise
       return;
    }
 
-   await interaction.reply({ ...buildCombatPlanPanel(character), ...ephemeral });
+   await interaction.reply({ ...buildFightingStylePanel(character), ...ephemeral });
 }
 
 async function switchCharacter(client: ToscheClient, interaction: ChatInputCommandInteraction): Promise<void> {
@@ -179,8 +181,4 @@ async function switchCharacter(client: ToscheClient, interaction: ChatInputComma
 
    const character = await characterService.get(characterId);
    await interaction.reply({ content: `🎭 You are now controlling **${character ? displayName(character) : 'your character'}**.`, ...ephemeral });
-}
-
-function truncate(text: string, max: number): string {
-   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }

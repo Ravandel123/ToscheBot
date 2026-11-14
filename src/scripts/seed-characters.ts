@@ -12,11 +12,29 @@ import { config } from '../config.js';
 import { connectDb, disconnectDb } from '../db/connect.js';
 import { CharacterLockManager } from '../core/locks.js';
 import { confirmTargetDatabase } from './confirmDb.js';
-import { SEED_CHARACTERS } from './seed-data.js';
+import { SEED_CHARACTERS as TEMPLATE_ROSTER, type SeedCharacter } from './seed-data.js';
 import { runSeed, validateRoster } from './seed.js';
 
+// The real roster lives in the gitignored seed-data.local.ts (the repo is
+// public; Discord ids and names stay off it). The path is a variable so the
+// type-check does not require the file to exist (CI has none).
+async function loadRoster(): Promise<SeedCharacter[]> {
+   const localModule = './seed-data.local.js';
+   try {
+      const local = await import(localModule) as { SEED_CHARACTERS?: SeedCharacter[] };
+      if (local.SEED_CHARACTERS)
+         return local.SEED_CHARACTERS;
+   } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ERR_MODULE_NOT_FOUND')
+         throw error;
+   }
+   return TEMPLATE_ROSTER;
+}
+
+const SEED_CHARACTERS = await loadRoster();
+
 if (SEED_CHARACTERS.length === 0) {
-   console.log('seed-data.ts has no entries — add characters to SEED_CHARACTERS first.');
+   console.log('No entries — create src/scripts/seed-data.local.ts exporting SEED_CHARACTERS (template in seed-data.ts).');
    process.exit(0);
 }
 

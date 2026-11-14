@@ -115,7 +115,7 @@ describe('play:talkto (opening the session)', () => {
 
       const session = await activitySessionService.getActiveForParticipant(characterId);
       expect(session?._id).toBe(sessionId);
-      expect(JSON.stringify(captured.updates.at(-1))).toContain('in the middle of something');
+      expect(JSON.stringify(captured.updates.at(-1))).toContain('Unfinished business');
    });
 });
 
@@ -221,7 +221,7 @@ describe('activity dialogue steps', () => {
       await activityHandler.handle(fakeClient(), interaction);
 
       expect(await activitySessionService.get(sessionId)).toBeNull();
-      expect(JSON.stringify(captured.updates.at(-1))).toContain('excuse yourself');
+      expect(JSON.stringify(captured.updates.at(-1))).toContain('windbag');
    });
 
    it('a stale double-click repaints instead of advancing twice', async () => {

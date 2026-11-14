@@ -16,7 +16,10 @@ import type { GENDER_CHOICES } from '../game/character/identity.js';
 // changed identity field, or changed point-buy rules (CREATION_ATTRIBUTE_POINTS
 // / MAX_POINTS_PER_ATTRIBUTE). Never store derived stats in this file.
 //
-// Adding an entry: copy the template below into SEED_CHARACTERS and fill it in.
+// REAL entries go in the gitignored `seed-data.local.ts` (same export name,
+// `SEED_CHARACTERS`) — this repo is public, so Discord ids and names stay out
+// of it. This file keeps the type and the template only.
+// Adding an entry: copy the template below into that file and fill it in.
 // Rerunning `npm run seed` is safe — existing owner+name pairs are skipped.
 
 export interface SeedCharacter {

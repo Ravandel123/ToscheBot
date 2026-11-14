@@ -5,6 +5,7 @@ import { CURRENCIES, type CurrencyKey } from '../../game/data/currencies.js';
 import { TRAITS, type TraitKey } from '../../game/data/traits.js';
 import { STARTING_LOCATION } from '../../game/data/locations.js';
 import { effectiveAttributes, emptyAllocation, type AttributeAllocation } from '../../game/character/attributes.js';
+import type { ActiveEffectState } from '../../game/data/effects.js';
 import { recalculateMaxResources } from '../../game/character/resources.js';
 import { emptyProgression, type CharacterProgression } from '../../game/character/skills.js';
 import { defaultBody, type CharacterBody } from '../../game/character/body.js';
@@ -77,6 +78,13 @@ export interface CharacterDoc {
    // absent family fights plain) — adding a family/trigger needs no migration;
    // reads sanitize via game/combat/plan.ts (D10 rule 3).
    combatPlan: CombatPlan;
+   // Set once the starter kit has been issued (game/data/starterKit.ts).
+   // Absent on older docs = not issued yet, so they receive it too.
+   starterKitGranted?: boolean;
+   // Running timed effects (game/data/effects.ts). Bounded by
+   // MAX_ACTIVE_EFFECTS; expired entries are ignored on read and pruned when
+   // the next effect is applied. Absent = none.
+   effects?: ActiveEffectState[];
    createdAt: Date;
    updatedAt: Date;
 }
@@ -134,6 +142,8 @@ const characterSchema = new Schema({
    inventory: { type: [itemInstanceSchema], default: [] },
    equipment: { type: Schema.Types.Mixed, default: {} },
    combatPlan: { type: Schema.Types.Mixed, default: {} },
+   starterKitGranted: { type: Boolean },
+   effects: { type: [{ _id: false, effectId: { type: String, required: true }, expiresAt: { type: Date, required: true } }], default: undefined },
 }, { timestamps: true, minimize: false });
 
 export const Character = model('Character', characterSchema) as unknown as Model<CharacterDoc>;

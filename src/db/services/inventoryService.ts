@@ -6,6 +6,7 @@ import {
    findItem,
    findStack,
    inventoryOf,
+   mintInstanceId,
    qualityOf,
    slotOfInstance,
    type EquipPlan,
@@ -13,6 +14,7 @@ import {
    type MysteryFields,
 } from '../../game/character/inventory.js';
 import { ITEM_KINDS, itemDefinition, type ConsumableDefinition, type ItemQualityId } from '../../game/data/items.js';
+import { STARTER_KIT } from '../../game/data/starterKit.js';
 import type { EquipmentSlotId } from '../../game/data/equipmentSlots.js';
 
 // Inventory writes (D28). CONTRACT: callers hold the character's lock
@@ -29,6 +31,16 @@ export type GrantResult =
 export type RemoveResult =
    | { ok: true; removed: ItemInstance }
    | { ok: false; reason: 'not-found' };
+
+export type TransferResult =
+   | { ok: true; moved: number }
+   | { ok: false; reason: 'not-found' | 'equipped' | 'inventory-full' | 'too-heavy' };
+
+export interface StockEntry {
+   itemId: string;
+   quantity: number;
+   quality?: ItemQualityId;
+}
 
 export type ConsumeResult =
    | { ok: true; definition: ConsumableDefinition; depleted: boolean }
@@ -195,7 +207,113 @@ export const inventoryService = {
 
       await Character.updateOne({ _id: characterId }, { $pull: { inventory: { instanceId, quantity: { $lte: 0 } } } });
       await characterService.applyResourceDeltas(characterId, item.definition.effects);
+      if (item.definition.grantsEffect)
+         await characterService.applyEffect(characterId, item.definition.grantsEffect);
 
       return { ok: true, definition: item.definition, depleted: item.instance.quantity <= 1 };
+   },
+
+   /**
+    * Moves `quantity` units of one pack entry into ANOTHER character's pack —
+    * the item half of a trade. CONTRACT: the caller holds BOTH characters'
+    * locks. Insert-before-remove (D33): a crash in between duplicates the item,
+    * never loses it. What travels: the item, its quality and its wear. What
+    * does not: the identification veil — it was the previous owner's belief, so
+    * the goods arrive as what they truly are. An equipped item is refused
+    * (unequip it first). `ignoreWeight` is for a merchant's stall, which is not
+    * carried on anyone's back; the entry cap still applies.
+    */
+   async transferItem(fromId: string, toId: string, instanceId: string, quantity: number, options: { ignoreWeight?: boolean } = {}): Promise<TransferResult> {
+      const [from, to] = await Promise.all([characterService.get(fromId), characterService.get(toId)]);
+      const item = from ? findItem(from, instanceId) : null;
+      if (!from || !to || !item)
+         return { ok: false, reason: 'not-found' };
+      if (slotOfInstance(from, instanceId))
+         return { ok: false, reason: 'equipped' };
+
+      const stackable = ITEM_KINDS[item.definition.kind].stackable;
+      const amount = stackable ? Math.min(item.instance.quantity, Math.max(1, Math.floor(quantity))) : 1;
+      const quality = qualityOf(item.instance);
+
+      const check = canAddItems(to, item.instance.itemId, item.definition, quality, amount, false, options.ignoreWeight);
+      if (!check.ok)
+         return check;
+
+      if (check.stackWith) {
+         await Character.updateOne(
+            { _id: toId, 'inventory.instanceId': check.stackWith.instanceId },
+            { $inc: { 'inventory.$.quantity': amount } },
+         );
+      } else {
+         const arrival: ItemInstance = {
+            instanceId: mintInstanceId(new Set(inventoryOf(to).map((entry) => entry.instanceId))),
+            itemId: item.instance.itemId,
+            quality,
+            quantity: amount,
+            ...(item.instance.durability === undefined ? {} : { durability: item.instance.durability }),
+            acquiredAt: new Date(),
+         };
+         await Character.updateOne({ _id: toId }, { $push: { inventory: arrival } });
+      }
+
+      if (amount >= item.instance.quantity)
+         await Character.updateOne({ _id: fromId }, { $pull: { inventory: { instanceId } } });
+      else
+         await Character.updateOne(
+            { _id: fromId, inventory: { $elemMatch: { instanceId, quantity: { $gte: amount } } } },
+            { $inc: { 'inventory.$.quantity': -amount } },
+         );
+
+      return { ok: true, moved: amount };
+   },
+
+   /**
+    * Replaces a character's whole pack with a fixed stock list — a merchant
+    * laying out the stall for the day. CONTRACT: the caller holds the lock.
+    * Unknown item ids are skipped (D10 rule 3). Not for player characters.
+    */
+   async setStock(characterId: string, stock: readonly StockEntry[]): Promise<void> {
+      const ids = new Set<string>();
+      const instances: ItemInstance[] = [];
+
+      for (const entry of stock) {
+         const definition = itemDefinition(entry.itemId);
+         if (!definition)
+            continue;
+
+         const quality = entry.quality ?? 'common';
+         const perInstance = ITEM_KINDS[definition.kind].stackable ? [entry.quantity] : Array<number>(entry.quantity).fill(1);
+         for (const quantity of perInstance) {
+            const instance = createItemInstance(entry.itemId, definition, quality, quantity, ids);
+            ids.add(instance.instanceId);
+            instances.push(instance);
+         }
+      }
+
+      await Character.updateOne({ _id: characterId }, { $set: { inventory: instances, equipment: {} } });
+   },
+
+   /**
+    * Issues the starter kit to an approved character that has not had one.
+    * CONTRACT: the caller holds the character lock (that is what makes "check
+    * the flag, grant, set the flag" safe against a second `/play`). Returns the
+    * names of what was handed over, or null when nothing was due. The flag is
+    * set even if an item did not fit — the kit is offered once, not retried.
+    */
+   async issueStarterKit(characterId: string): Promise<string[] | null> {
+      const character = await characterService.get(characterId);
+      if (character?.approvalStatus !== 'approved' || character.starterKitGranted)
+         return null;
+
+      const issued: string[] = [];
+      for (const entry of STARTER_KIT) {
+         const granted = await this.grantItems(characterId, entry.itemId, entry.quality, entry.quantity);
+         const name = itemDefinition(entry.itemId)?.name ?? entry.itemId;
+         if (granted.ok)
+            issued.push(entry.quantity > 1 ? `${entry.quantity}× ${name}` : name);
+      }
+
+      await Character.updateOne({ _id: characterId }, { $set: { starterKitGranted: true } });
+      return issued;
    },
 };

@@ -2,11 +2,11 @@ import { checkTarget, type CheckSubject } from '../checks.js';
 import { attributeBonus } from './stats.js';
 import { fightingStyle, type FightingStyleId, type StyleFamily } from './styles.js';
 import { sanitizeFamilyPlan, type FamilyPlan } from './plan.js';
-import { attributesWithEquipment, equipmentOf, findItem, totalEquippedArmor } from '../character/inventory.js';
+import { equipmentOf, findItem, totalEquippedArmor } from '../character/inventory.js';
+import { checkSubject } from '../character/modifiers.js';
 import { displayName } from '../character/identity.js';
 import type { BoutLoadout } from './bouts.js';
 import type { CombatProfile, DamageType, StyleTargets } from './duel.js';
-import type { AttributeKey } from '../data/attributes.js';
 import type { SkillNodeId } from '../data/skills.js';
 import type { WeaponDefinition } from '../data/items.js';
 import type { CharacterDoc } from '../../db/models/character.js';
@@ -45,12 +45,11 @@ export interface CombatProfileOptions {
 export function combatProfile(character: CharacterDoc, options: CombatProfileOptions = {}): CombatProfile {
    const stripped = options.loadout === 'unarmed-unarmored';
 
-   // Stripped fighters use their BARE attributes (no equip modifiers) and wield
+   // Stripped fighters set their gear aside (no equip modifiers) and wield
    // nothing; otherwise equipment shapes the whole profile.
-   const attributes = stripped ? bareAttributes(character) : attributesWithEquipment(character);
-   // checkTarget wants the same subject shape the challenge activity passes —
-   // the character with its attributes swapped for the set in play this bout.
-   const subject = { ...character, attributes };
+   // Timed effects follow the fighter into the ring either way.
+   const subject = checkSubject(character, { gear: !stripped });
+   const attributes = subject.attributes;
 
    const weapon = stripped ? null : equippedWeapon(character);
    const armorValue = stripped ? 0 : totalEquippedArmor(character);
@@ -124,12 +123,6 @@ function buildStyleTargets(
    return targets;
 }
 
-/** A character's attributes WITHOUT any equipment modifiers — what a bare-knuckle
- *  bout rolls against (armour penalties don't apply to gear you took off). */
-function bareAttributes(character: CharacterDoc): Record<AttributeKey, number> {
-   return character.attributes;
-}
-
 /** True when a character is Downed (0 Health) — unconscious, cannot fight or act
  *  (canCharacterAct reports the same as 'incapacitated'). Derived, no stored
  *  flag: healing above 0 clears it. SEAM for a richer recovery/infirmary state. */
@@ -158,6 +151,13 @@ function weaponSkillNode(weapon: WeaponDefinition): SkillNodeId {
 /** The style family a weapon's grip puts its wielder in (D42). */
 function weaponFamily(weapon: WeaponDefinition): StyleFamily {
    return weapon.hands === 2 ? 'two_handed' : 'one_handed';
+}
+
+/** The family a character would fight in right now, with what is in hand —
+ *  the one family the simple fighting-style panel asks about. */
+export function wieldedFamily(character: CharacterDoc): StyleFamily {
+   const weapon = equippedWeapon(character);
+   return weapon ? weaponFamily(weapon) : 'unarmed';
 }
 
 /** Coarse damage family from a weapon's properties — display/seam only (the

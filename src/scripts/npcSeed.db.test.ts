@@ -8,7 +8,7 @@ import { NPC_IDS, npcCharacterId, type NpcDefinition } from '../game/data/npcs.j
 // The NPC seed end-to-end against the in-memory Mongo (like seed.db.test.ts):
 // the create path must mint a fully usable ownerless character, and the update
 // path must refresh ONLY the static half — resetting an NPC's mutated state on
-// a reseed is the exact bug AUDIT §3.3 warns about, so it's pinned here.
+// a reseed is exactly the bug to avoid, so it's pinned here.
 
 const NPC_ID = 'test_npc';
 const CHARACTER_ID = npcCharacterId(NPC_ID);

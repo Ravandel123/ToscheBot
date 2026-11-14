@@ -1,4 +1,5 @@
 import { npcDefinition, type NpcArchetype } from './npcs.js';
+import type { ActivityExit } from '../activity/exit.js';
 import type { CheckDefinition } from '../checks.js';
 import type { TraitKey } from './traits.js';
 
@@ -9,7 +10,7 @@ import type { TraitKey } from './traits.js';
 // state and `activity:opt:<sessionId>:<optionId>` customIds; the catalog test
 // validates the graph (every `next` resolves, every node reachable, no dupes).
 //
-// Template-first (AUDIT §3.4): ONE reusable small-talk dialogue serves every
+// Template-first: ONE reusable small-talk dialogue serves every
 // archetype (greetings, rumors, a pointer to the NPC's function), so a new NPC
 // talks for free; hand-authored trees are assigned per NPC via
 // `NpcDefinition.dialogueId` and should stay few and GOOD (the authoring-cost
@@ -76,6 +77,9 @@ export interface DialogueNode {
 export interface DialogueDefinition {
    /** Entry node id. */
    start: string;
+   /** Cutting the talk short, in character (D58) — offered on every node next
+    *  to the polite goodbyes. {npc}/{epithet} fill like node lines. */
+   exit: ActivityExit;
    nodes: Record<string, DialogueNode>;
 }
 
@@ -100,6 +104,14 @@ export const DIALOGUES = {
    // === The reusable small-talk template (every archetype's default) ==========
    small_talk: {
       start: 'greet',
+      exit: {
+         label: 'Cut them off',
+         emoji: '🙄',
+         lines: [
+            'You tell {npc} their chatter could bore a stone, and turn your back mid-sentence.',
+            '"Save it for someone with time to waste." You walk off while {npc} is still talking.',
+         ],
+      },
       nodes: {
          greet: {
             line: '{npc} turns to you. "Well met. Something on your mind, or just stretching your legs?"',
@@ -205,6 +217,11 @@ export const DIALOGUES = {
    // Campaigner — gates, checks, trait awards and a hidden line in ~8 nodes ====
    marrek_tales: {
       start: 'corner',
+      exit: {
+         label: 'Walk out on him',
+         emoji: '🙄',
+         lines: ['"Tell it to the cup, old windbag." You shove back your stool and leave Marrek glaring after you.'],
+      },
       nodes: {
          corner: {
             line: 'Marrek does not look up from his cup. "Sit or don\'t, pup. This table has heard every story I own and a few I borrowed."',

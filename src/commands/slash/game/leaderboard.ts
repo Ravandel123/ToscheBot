@@ -10,7 +10,7 @@ export default {
       .setName('leaderboard')
       .setDescription('Top fighters of the Smackdown Spire.')
       .addStringOption((option) => {
-         option.setName('category').setDescription('Which board to show (default: ranking).');
+         option.setName('category').setDescription('Which board to show (default: duelists).');
          for (const id of LEADERBOARD_CATEGORY_IDS) {
             const category = leaderboardCategory(id);
             option.addChoices({ name: `${category.emoji} ${category.name}`, value: id });
@@ -23,7 +23,7 @@ export default {
       const records = await smackdownService.getLeaderboard(category.sortField, 10);
 
       if (records.length === 0) {
-         await interaction.reply('No one has fought in the Spire yet. Be the first — `/smackdown`.');
+         await interaction.reply(`Nobody is on the ${category.name} board yet. Be the first — \`/smackdown\`.`);
          return;
       }
 

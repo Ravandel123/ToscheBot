@@ -1,21 +1,25 @@
 # Ruleset/ — single source of truth for the server-RPG
 
-This folder is **the** place to read and edit the server-RPG game model — both the *design*
-(what the rule should be, and why) and the *implementation* (what is actually built, in
-`ToscheBot`'s code, right now). Before this folder existed the same information was split
-across three places that drifted apart: `RPG/Ruleset.md` (design), `RPG_SYSTEM.md`
-(implementation) and `CLAUDE.md`'s decision log (both, mixed with unrelated bot-engineering
-decisions). **The first two no longer exist — deleted after migration — read here instead**
-(see "Superseded sources" at the bottom).
+This folder is **the** place to read and edit the server-RPG game model. It has two layers,
+kept in separate files since 2026-11-11 so the rules can be read and thought about on their
+own:
 
-**Audience:** both the human owner and any AI assistant picking up work on the game. A topic
-file should let either one understand *what the rule is*, *why it is that way*, and *how far
-the code currently gets it*, without cross-referencing three other documents.
+- **The rules** — one file per topic in this folder (`combat.md`, `skills.md`…): what the
+  rule is and why. No file paths, no model fields. This is the layer to open when designing.
+- **The implementation** — one file per topic in [`implementation/`](implementation/), same
+  names: which files in `src/` carry each rule and how far the code gets it. This is the
+  layer to open when changing code.
+
+A rule file never needs the implementation file to be understood. A change to game code
+updates the implementation file; a change to a rule updates the rule file, and the
+implementation file only if the code changed with it.
+
+**Audience:** both the human owner and any AI assistant picking up work on the game.
 
 ## How this folder is organized
 
-One file per topic. **Every topic file has the same five-part shape** (the owner's "raw data on
-top, explanations after" request):
+One rule file per topic. **Every rule file has the same four-part shape** (the owner's "raw
+data on top, explanations after" request):
 
 0. **Reference (decided data & math)** — the terse, authoritative dump at the **top** of the
    file: the decided values, catalogs (name + what each does), and formulas/math, with **no
@@ -28,11 +32,9 @@ top, explanations after" request):
    should get every formula the system uses without scrolling past the first screen.
 1. **Ruleset** — the design: the rule as currently decided (or the leading proposal, if not
    yet locked), and the reasoning behind it. This is the "what should happen / why" layer.
-2. **Implementation** — what exists in `src/` today: which models/services/files carry the
-   rule, and how far it got (structure only? real numbers? not started?).
-3. **Open questions** — what's still undecided, deferred, or waiting on the owner: a fork with (at
+2. **Open questions** — what's still undecided, deferred, or waiting on the owner: a fork with (at
    least) two named directions, framed and ready for a decision.
-4. **Expansion ideas & risks** — the informal, ongoing "notebook" section: unprompted proposals
+3. **Expansion ideas & risks** — the informal, ongoing "notebook" section: unprompted proposals
    for making a system richer (not yet a decision, not even necessarily a good idea — a place to
    park it before it's lost), and named risks/problems with the *current* design as written (a
    thing that could go wrong or feel bad in play, not a missing number). Unlike "Open questions,"
@@ -149,30 +151,14 @@ The world is run by the **bot** (exploration, travel, encounters) plus the **Imp
 
 ## Status at a glance
 
-**Built and real, not placeholder:** the Account↔Character split, the approval lifecycle, the
-creation wizard, the 8-attribute set with racial bases + point-buy, the d100 check engine, the
-skill-tree model (structure — content is a prototype), deed traits (shape), the location graph
-+ travel + living locations + multi-approach travel challenges, the inventory/equipment
-prototype + the stash, one currency, Action Points (no cap), the chronicle, durable
-activity sessions (the infrastructure future duels will reuse), for-fun sparring with ELO.
+The cross-system status — what is built, what has no consumer yet, what is design-only — lives
+in the repo-root `CLAUDE.md` ("Status") and [`PLAN.md`](../PLAN.md), so it is kept in one place. *(This
+section used to carry its own summary; it described 2026-07-05 and still listed the duel
+engine, NPC seeding, foraging and dialogue as unbuilt after all four had shipped.)*
 
-**Still placeholder or missing:** almost every *number* (resource maxes, AP costs, difficulty
-values, damage/soak, item stats, growth rates) — these wait on playtesting once each system's
-shape is locked; real combat (the R12 Health-pool + hit-locations model, Soak/Downed, the serious
-`/smackdown duel`); Roles and the XP/talent economy; Stress→insanity and the rest of the flavor
-menu; the economy layer (per-race currencies, trade); NPC seeding/movement.
-
-**Newly *designed* (2026-07-05), not yet built — R12–R22 / this batch:** the Health-pool + hit-
-location combat model (drops Wounds), armour ✕ weapon-type, criticals/fumbles, combat styles +
-counter-play + named moves; skill-gated XP attribute raises + talent requirements + the skill
-panel; **factions & reputation**; **conversations** (dialogue events); **professions** (foraging
-with (mis)identification, fishing, gardening, cooking's flavor engine); **NPC** simulation;
-server-wide account settings (units/country/timezone); character body/age/state/likes/movement;
-fate points. These are **design only** — the "Implementation" section of each file says ⬜.
-
-See each topic file's "Reference" section for the decided data/math at a glance, its
-"Implementation" section for the precise ✅/🟡/⬜ breakdown, and its "Open questions" section for
-what's still waiting on the owner.
+Per system: see each topic file's "Reference" section for the decided data/math at a glance,
+its `implementation/` file for the precise ✅/🟡/⬜ breakdown, and its "Open questions" section
+for what's still waiting on the owner.
 
 ---
 
@@ -199,7 +185,7 @@ it; this table is the chronological master list.
 | D12 | Account ↔ Character split; currencies/ELO live per character. | character.md |
 | D13 | Characters have an approval lifecycle (draft→pending→approved/rejected). | character.md |
 | D15 | Action Points: no cap, accrue hourly even while busy. | world-travel.md |
-| D16 | Smackdown has two tiers: for-fun sparring (built) vs a future serious duel. | combat.md |
+| D16 | (superseded by D51) Smackdown had two tiers: for-fun sparring vs the serious duel. | combat.md |
 | D19 | One currency (`deltradaCoins`) until the economy layer exists. | economy.md |
 | D20 | Character creation is a step-driven wizard over the draft doc. | character.md |
 | D21 | The world is a data-driven location graph with a travel-encounter seam. | world-travel.md |
@@ -227,6 +213,9 @@ it; this table is the chronological master list.
 | R25 | **Positioning grid + terrain tags** (cramped rooms block 2H weapons, sand hinders footwork styles) — designed direction, explicitly deferred until after R24's manual mode exists. | combat.md |
 | R26 | **Images are optional art** for events/places/characters — code renders text-first and includes an image only if it resolves (never breaks when absent); places carry **variants keyed on weather + time-of-day** (D31 world state), picked most-specific-first with graceful fallback; the id→image mapping is a code catalog (D10), not filenames in the DB. | images.md |
 | D39 | **Health/Stamina max are attribute-derived** (Constitution-led, 2×; Strength/Willpower a lesser 1× nudge each on Health, Willpower alone on Stamina) — closes the `recalculateMaxResources` seam. Constants tuned so a raceless/unallocated draft matches the old flat defaults (Health 20/Stamina 10). | character.md |
+| D58 | **Activities never expire; every one has an in-character exit** that is never better than its worst choice (the climber lets go, the talker insults, the fighter yields). The owner can end a stuck one. | world-travel.md, conversations.md |
+| D59 | **One command to know**: the `/play` hub links to the pack, skills and fighting style; the fighting-style panel asks one question, with tactics behind a button. | world-travel.md, combat.md |
+| D60 | **A shop is a merchant NPC** — its pack is the stall, its coins the till. Buy at value, sell at half; unidentified finds do not sell, mislabeled ones sell by their label. The stall resets each game day. | economy.md, npcs.md |
 | — | **The overall mental-health gauge term is Sanity** (owner, 2026-07-07) — `Sanity = MENTAL_MAX − Stress`; the gauge/mechanic itself is still ⬜. | character.md |
 
 New decisions get the next free number in whichever series makes sense (a design call →
@@ -285,11 +274,18 @@ race table and this file's "Setting" section):
 - `RPG/CLAUDE.md`, `RPG/Ruleset.md`, `RPG/Propositions.md`, `RPG/Examples.md`, `RPG/memory/` —
   the original design-project workspace. Fully folded into this folder's topic files.
 - `RPG_SYSTEM.md` (repo root) — the original implementation-tracking doc. Fully folded into
-  this folder's "Implementation" sections.
+  this folder's `implementation/` files.
 
 If you find a citation anywhere (root `CLAUDE.md`'s decision log, a topic file's prose) still
 pointing at a path under `RPG/` or at `RPG_SYSTEM.md`, it's a stale reference from before the
 deletion — the content it pointed to is here, in the relevant topic file, not lost.
+
+> **2026-11-10:** the owner restored the original workspace as **`Ruleset/RPG/`** — a local,
+> gitignored, **read-only archive** (it is not in the GitHub repo). It is frozen at 2026-07-02
+> and stops at R10: it still describes Wounds, careers and "nothing is coded yet". **Nothing in
+> it is current** — not its rules, not its `CLAUDE.md`, not its `memory/`. Where it disagrees
+> with a topic file in this folder, the topic file wins. Use it only to look up how a decision
+> was originally framed.
 
 Root `CLAUDE.md` still owns the bot's engineering conventions and its own decision log for
 non-game infrastructure calls (D1–D11, D14, D17, D18, D22–D24, D29, D30 and similar) — those

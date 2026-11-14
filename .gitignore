@@ -24,6 +24,13 @@ OldBot/
 TODO.md
 
 # Personal, beginner-friendly guide (Polish) — not for GitHub
-PRZEWODNIK.md
+przewodnik.md
+GUIDE.md
+
+# Local notes about building the RPG system for the game
+Ruleset/RPG
 
 .playwright-mcp
+
+# Real seed roster (Discord ids, names) — the repo is public; seed-data.ts holds only the template
+src/scripts/seed-data.local.ts

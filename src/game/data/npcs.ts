@@ -15,7 +15,7 @@ import type { GENDER_CHOICES } from '../character/identity.js';
 // and ':'-free because character ids ride in colon-separated customIds. That id
 // doubles as the seed's idempotency key: a reseed UPDATES the static half
 // (identity, race, home) and never resets what the world has mutated since
-// (pack, coins, resources, progression — AUDIT §3.3).
+// (pack, coins, resources, progression).
 //
 // startingInventory/startingCoins are granted ONCE, on first seed. 🟡 All coin
 // amounts are balance placeholders until the owner signs off (the plaza

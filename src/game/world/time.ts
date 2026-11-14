@@ -28,6 +28,12 @@ export function gameHour(date = new Date()): number {
    return (date.getUTCHours() + GAME_UTC_OFFSET_HOURS) % 24;
 }
 
+/** The game-calendar day a real instant falls in, as a running day number
+ *  (days since the Unix epoch on the game clock). Changes at game midnight. */
+export function gameDay(date = new Date()): number {
+   return Math.floor((date.getTime() + GAME_UTC_OFFSET_HOURS * 3_600_000) / 86_400_000);
+}
+
 /** Which part of the game day a real instant falls in. Pure. */
 export function timeOfDay(date = new Date()): TimeOfDayId {
    const hour = gameHour(date);

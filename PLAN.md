@@ -1,278 +1,204 @@
-# PLAN.md — the build queue (session-sized briefs)
+# PLAN.md — the plan the owner and the assistant agreed on
 
-Created 2026-07-10 with the owner. This is the ordered work queue for Claude Code sessions;
-it complements `CLAUDE.md` (conventions + status) and `Ruleset/` (game design). The 2026-07-06
-audit's build-order advice (AUDIT §3) is baked into the ordering.
+This file holds only what was **decided together**. Nothing here is the assistant's private
+to-do list. How to read it:
 
-**The reasoning behind the order:** combat and skills went *wide* (D35–D42) while the game
-still has no peaceful core loop — no way to gather anything (the only loot source is the
-owner-run `/item grant`), no way to earn or spend a single coin, nobody to meet, and every
-`/play` hub action is a placeholder. The queue below builds that loop **engine-first**:
-each session ships a small reusable engine plus minimal content, so widening later is a
-catalog edit, not a refactor (D10 discipline). Sessions S1–S3 and S6 need **no new owner
-decisions** — everything they build is already designed in `Ruleset/` (professions R16,
-npcs R18, economy's flat-price shop). Things that DO need the owner's call are parked in
-the **Decision queue** at the bottom, deliberately out of the session path.
+- **Now** — the next things to build, written out concretely enough to start work.
+- **Next** — the order after that, one line each. Details are written when a step moves up.
+- **To decide** — proposals waiting for the owner's yes, no or change.
+- **Known issues** — real, accepted, not scheduled.
+- **Done** — what was finished, newest first.
 
-## How to run a session
+Status marks: ✅ agreed · 🟡 proposed by the assistant, not yet confirmed by the owner.
 
-Start a fresh Claude Code session with:
+To run something: *"Przeczytaj CLAUDE.md i PLAN.md. Zrób N1."*
 
-> Przeczytaj CLAUDE.md i PLAN.md. Wykonaj sesję S<N> zgodnie z jej briefem i "Session rules".
+## Rules
 
-One session = one brief. If a session finishes early, take items from **Fillers**, not from
-the next brief.
+1. **One system at a time.** A step is finished when it is playable on the live server.
+2. **Unfinished = hidden.** No "coming soon" buttons, no skill trees nothing can train, no
+   meter nothing spends. Hidden things stay in their catalogs, flagged, until they go live.
+3. **Complex inside, one button outside.** A player who never opens a breakdown must still
+   be able to play everything.
+4. **Numbers are 🟡 until the owner signs off.** When balance is not obvious, simulate first
+   and report the distribution.
+5. **Done means:** `npm run build` + `lint` + `test` green, the matching `Ruleset/` file
+   updated in the same change, `przewodnik.md` updated if the change touches anything it
+   describes, and a note here if a slash definition changed (the owner runs
+   `npm run deploy`).
+6. **Git is the owner's.** The assistant edits files; the owner commits and pushes.
 
-## Session rules (apply to every session)
+## Now
 
-1. **Read the linked `Ruleset/` file(s) before coding** and update their Implementation
-   sections in the same change. New mechanics follow the design written there — do not invent.
-2. **Engine/content split (D10)**: mechanics once, content as catalog entries; adding an
-   entry must never need a migration or a new handler.
-3. **All new numbers are 🟡** until the owner signs off. When balance isn't obvious, simulate
-   (the D42 pattern) and report the distribution in the session summary.
-4. **Never resolve an open design fork silently.** Build a typed seam around it and add the
-   fork to the Decision queue below.
-5. **Definition of done**: `npm run build` + `npm run lint` + `npm test` green; new logic
-   tested (pure > db > flow, per CLAUDE.md's testing layers); a 1–3-line decision-log row in
-   CLAUDE.md if a rule was set; CLAUDE.md's Status section updated; **flag here if a slash
-   definition changed** (the owner runs `npm run deploy` — sessions never deploy).
-6. **Close the loop here**: mark the session ✅ in the Log with the date + 2 lines on any
-   divergence; append discovered follow-ups to Fillers or the Decision queue.
+### N1. Try the 2026-11-14 work on the live bot · owner
+Built and covered by tests, never run on Discord. After the owner ops at the bottom of
+this file, check:
 
-## Pending ops (owner, ~5 min)
+- **Unfinished activities.** Start a travel challenge, leave it, come back hours later: it
+  is still there. Use another command meanwhile: it names what is unfinished and shows the
+  step. Take the exit at "A cry from the river": back at the origin, +1 Cowardice.
+  `h!session` lists the open sessions and ends one.
+- **One command.** `/play` shows Pack / Skills / Fighting style buttons; each turns the
+  hub into its panel, and "Back to /play" turns it back (also on panels opened by their own
+  command). `/character combat` asks one question; "Tactics…"
+  opens the full editor. `/character view` has a Refresh button anyone can press.
+- **Challenge spam.** A second `/smackdown duel` within 30 s is refused; so is a challenge
+  to someone who has not answered the last one.
+- **The stall.** At the plaza in the morning or daytime, "Browse the market": buy, sell,
+  buy back, empty the till. At night it is shut.
+- **How it reads.** Whether the exit lines, the stall panel and the simple fighting panel
+  feel right is for the owner to judge — the wording is a first draft.
 
-- [ ] `npm run deploy` — pending slash changes: `/character combat`, `/smackdown` (trial
-      browser), `/stash` (new command), `/leaderboard` (categories).
-- [ ] `npm run seed-npcs` — populates the S2 NPC roster on the live DB (idempotent; guard
-      asks for the DB name, or `SEED_NPCS_CONFIRM_DB=<name>`).
-- [ ] A live end-to-end smoke against Atlas (`.env` + real guild) still hasn't been run —
-      after S1 it should include one `forage` click and one Examine on the find; after S2
-      also a `/play` presence check at the plaza/tavern (NPCs should be standing there);
-      after S4 also one `talk` → a small-talk exchange, plus one rolled option (Marrek's
-      `[Persuade]` at the tavern) to see the AP charge and the dice line.
+### N2. The merchant, second pass · ✅ direction (owner, 2026-11-14), details open
+The plaza merchant is already a real NPC character: his pack is the stall, his coins the
+till (D60). His only behaviour is a reset at the start of each game day. The owner wants
+merchants — and then the other NPCs — to have a simple mind of their own instead. To settle
+before building:
 
----
+- 🟡 What a merchant does by himself: restock from where (other NPCs, a caravan that
+  arrives on some days), raise the price of what sells out, close early when the till is
+  empty.
+- 🟡 Whether the stock list, the till (250 a day) and the sell rate (half) are right — see
+  "To decide" 7.
+- This is the first slice of "NPCs acting behind the scenes" in "Later"; design it so the
+  same routine shape serves the tavernkeeper and the guards next.
 
-## The queue
+## Next
 
-### S1 — Gathering engine + Foraging v1 · [M] · SAFE · ✅ 2026-07-10
-**Design**: `Ruleset/professions.md` (R16 — the shared gather loop + identification),
-`Ruleset/skills.md` (D40 crediting), AUDIT §3.1.
-**Why first**: converts three built-but-idle engines (skills, checks, items) into the first
-peaceful loop and the first real loot source; professions.md's own build order says foraging
-first because it exercises the two novelties (identification, quality-from-check) that
-fishing/cooking then reuse.
-**Build**:
-- `resourceNodes` on the location catalog (static field; ids test-validated like edges).
-- A **generic gather resolver** (pure, `game/professions/gather.ts`): spend AP (cost 🟡) →
-  d100 check vs node difficulty with race affinity → yield where **quantity scales with SL**
-  and **per-instance quality comes from check surplus** (shared `qualityFromCheck` helper —
-  smithing will reuse it) → grant to pack (encumbrance-checked) → `creditSkillUse`
-  (difficulty weight, D40) → chronicle only rare finds. A gather is a **short action**
-  (D5 rule 1) under the character lock — NOT an ActivitySession.
-- Foraging skill tree (root + Identify leaf per the R16 table) — catalog only, zero migration.
-- `game/data/foragables.ts`: ~6–10 `material` items + per-family descriptor pools.
-- **Identification (R16)**: instance fields `identified` / `apparentItemId` / `descriptorId`
-  (optional ⇒ no migration); auto-identify vs skill on gather; a failed identify may
-  **plausibly mislabel** (same-family wrong id); re-check via an Identify action on the
-  `/inventory` item card. Reveal-on-consumption waits for edibles (cooking, later).
-- Flip the `forage` hub action live (riverbank + a woodland location — add it if absent);
-  `/inventory` + item card render unidentified/mislabeled names.
-**Not in scope**: fishing, cooking, gardening, selling, NPC identify-for-fee (leave a seam).
-**Redeploy**: none (hub action + component only).
+4. **Action Points** — prices for travel, fights and gathering; the effort choice (see "To
+   decide" 2).
+5. **Skill ratings** — see "To decide" 3. Small code change, mostly a rule for new content.
+6. **Stamina in combat** — each exchange costs Stamina by style; empty = "winded"; combat
+   plans gain an "own Stamina below X %" rule. Simulate first. A good moment to split the
+   duel engine into single steps (see Known issues).
+7. **Fishing** — second gathering profession on the existing engine. A plain roll, not a
+   minigame. Fish sell at the shop.
+8. **Tavern** — `drink` goes live; gambling after it, with its own rules file first.
 
-### S2 — NPC roster v1 (static half of 6C) · [S–M] · SAFE · ✅ 2026-07-10
-**Design**: `Ruleset/npcs.md` (R18 build order), AUDIT §3.3.
-**Why**: presence rendering already shows NPCs — the world just has none; prerequisite for
-the shop (S3) and dialogue (S4); zero new runtime engine.
-**Build**: `game/data/npcs.ts` (stable `npcId`, name/race/epithet, home location, archetype,
-optional starting inventory); a dedicated `characterService.createNpc`-style path minting an
-approved `Character` with `ownerId: null` (never through the wizard/approval flow); an
-idempotent `scripts/seed-npcs.ts` reusing `confirmDb` — **update-by-npcId, never reset**
-(the idempotency key becomes load-bearing the moment ticks mutate NPC state — AUDIT §3.3).
-Content: ~5–8 named NPCs across locations (tavernkeeper, plaza merchant, guard, ferryman…).
-**Not in scope**: the movement/behavior cron (blocked on Decision queue #7), disposition,
-dialogue, dueling NPCs (owner ruled it out — D37).
-**Redeploy**: none.
+Later, unordered: NPCs acting behind the scenes (a real NPC-to-NPC economy replacing the
+daily budget, NPC movement — the owner's flagship idea, needs its own design) · crafting ·
+gambling salon · faction reputation · Stress/Sanity · hunger and thirst · XP, talents, Roles
+· combat depth (hit locations, crits, manual turns) · travel-encounter stakes · ambient chat
+events · a weekly co-op event · more locations, encounters and dialogue trees.
 
-### S3 — Merchant shop / economy v1 · [M] · SAFE
-**Design**: `Ruleset/economy.md` + `npcs.md` (merchant stock = NPC inventory), AUDIT §3.6.
-**Why**: closes the loop S1/S2 open (goods → coins → gear). Economy.md's own risk note: every
-later system must assume THIS flat-price shop exists instead of improvising a stand-in.
-**Build**: the plaza merchant NPC's embedded inventory = the stock (v1 restock: static top-up
-on read or a simple daily cron — no supply chain); a `shop` component panel reusing the
-`/inventory` renderers (as `/stash` did); **buy** = coins out via `applyCurrencyDeltas` + item
-transfer NPC→player pack under both characters' locks (insert-before-remove, D33 pattern);
-**sell** = reverse at `value × sellRate` (🟡 ~50%) × quality multiplier; prices flat from the
-catalog `value` — **no haggle, no reputation modifiers** (both are read-time multipliers
-added later without touching stored data); flip the `market` hub action (plaza, daylight
-hours already in the catalog). **NPC gold is a real, finite per-character pool** (owner
-call, 2026-07-10) — not infinite: buying from a player debits the merchant's own
-`deltradaCoins` via the same `applyCurrencyDeltas`, and items sold to the merchant land in
-its real inventory (not vanish) so they can resurface as stock or move on to another NPC.
-Gold needs a regen source (🟡 — cron top-up like vitals, or a slow drip tied to trade volume;
-decide the mechanism during the build) so a merchant can't be drained to zero and softlock
-the shop. NPC→NPC item/gold transfer is the same `applyCurrencyDeltas` + insert-before-remove
-pattern as player↔NPC — no new primitive, just a second consumer.
-**Not in scope**: haggle checks, reputation pricing, regional currencies (D19), player↔player
-trade, buyback, NPC↔NPC autonomous trading behavior (that's a lifecycle/cron concern — Decision
-queue #7; v1 only needs the pool + transfer primitive to exist, not NPCs trading on their own).
-**Redeploy**: none.
+## To decide (owner)
 
-### S4 — Dialogue v1 — talk to an NPC · [M–L] · MOSTLY SAFE · ✅ 2026-07-10
-**Design**: `Ruleset/conversations.md` (R14), AUDIT §3.4 ("it's an ActivitySession — resist a
-new engine").
-**Why**: `talk` is the most-tempting dead button and NPCs exist after S3. Author cost is the
-real risk, so: **template-first** — one reusable merchant/guard small-talk archetype (rumors,
-greetings, a pointer to their function) + exactly ONE authored named-NPC tree as proof.
-**Build**: `dialogue` ActivitySession type + `_activities/` handler; node catalog in code;
-options gated/rolled through the existing condition + check language; rolled options credit
-speechcraft (D40); session-scoped flags only.
-**Not in scope**: persistent quest flags (Decision queue), group dialogue, AI-generated small
-talk, quests/rewards.
-**Redeploy**: none.
+**1. Starter kit.** Switched off on 2026-11-14 at the owner's request ("this needs a closer
+look") — the mechanism stays, nothing is issued. To decide: whether a new character gets
+anything at all, and what. Until then a new character has no gear and no coins, so the first
+coins come from the Spire ladder (fought bare-handed) or from selling foraged finds. Options:
+a small purse instead of items (🟡 30 coins — the player chooses at the stall), the old kit,
+or nothing.
 
-### S5 — Faction reputation v1 · [S] · SAFE (build only after S3/S4 give it consumers)
-**Design**: `Ruleset/factions.md`, AUDIT §3.5.
-**Build**: faction catalog + sparse per-character `reputation` map (racial baselines applied
-at read time — never stored, or a retune becomes a migration); a `minReputation` condition
-field (every gate surface inherits it for free); a price-modifier seam in the shop; small ±
-rep deltas from dialogue/challenge outcomes.
+**2. Action Points — effort levels.**
 
-### S6 — Fishing v1 · [M] · SAFE · deprioritized 2026-07-10
-**Design**: `Ruleset/professions.md` (R16 fishing — "ported & bounded"); reuses the S1 engine.
-**Why moved later**: originally S2; the owner deferred it behind the NPC/economy/dialogue arc
-(now S2–S5) since foraging already proves the gather engine is generic — a second consumer
-isn't urgent.
-**Scope call (owner, 2026-07-10): NOT an interactive minigame.** Fishing stays a plain
-roll-based short action on the same `game/professions/gather.ts` resolver as foraging (AP →
-d100 check → SL-scaled yield) — no timing/reaction minigame, no separate interaction loop.
-**Build**: per-water fish tables via `resourceNodes`; weather/time bias through the D31
-condition language; rod/lure as items (a new `tool` item kind + bait — one union member + one
-`ITEM_KINDS` meta entry per D28) modifying the check and/or table; fish = item instances with
-a per-instance `weightKg` (the bragging stat — bounded per D32: the catch lands in pack/stash,
-NEVER an unbounded catch log like OldBot's `gFishing.fish[]`); fishing skill tree (root +
-Angling leaf; Netting/Deep-water = later content); flip the `fish` hub action; chronicle rare
-catches. **Stretch** (only if trivially cheap): a per-character `heaviestCatch` snapshot for a
-future leaderboard category.
-**Not in scope**: selling, cooking, a tackle shop, netting/deep-water content, any interactive
-minigame.
-**Redeploy**: none.
+| Effort | Cost | What happens |
+|---|---|---|
+| Quick | 1 AP | One roll, as today |
+| Careful | 2 AP | One roll at +15 % |
+| Long shift | 5 AP | Five quick rolls, one summary message |
 
-### S7 — Gambling salon · [L] · NEEDS DESIGN FIRST — announced by the owner 2026-07-11
-**Prereqs**: S3 (the salon is a coin sink — coins must be earnable/spendable first). The
-rendering toolkit is ready (D46/D47: `composite()`, programmatic cards/chips/hands — a table
-renders as one PNG per step with zero art assets).
-**Design first**: no `Ruleset/` topic exists. Owner decisions before building: which games
-(cards? dice? BtWD-flavored originals?), stakes (coins only? AP?), house edge / anti-farm
-balance (sim per D42), where it lives (the tavern? its own location?) and any NPC dealer
-tie-in. Write `Ruleset/gambling.md` first, then a session brief.
-**Engine note**: turn-based table games are durable `ActivitySession`s on the proven
-challenge/dialogue stack (D17/D22) — per-step commit, crash-safe resume, double-click
-idempotency all come free; the D47 toolkit is the *view* layer on top.
+Careful work teaches less with no new rule: skill gain is `2 × (1 − chance)`. Travel 1 AP,
+a fight 1 AP. AP stays uncapped; the long shift is how a banked pile gets spent.
 
-### Fillers (safe leftovers for a session that runs short)
-- `locationStateService.discoverFeature`: convert the `modifiedCount` check to a filter guard
-  (known double-fire risk — CLAUDE.md testing caveat).
-- Pure content: more encounters/foragables/fish/locations/hub flavor (catalog entries only).
-- More flow tests around whichever panel the session touched.
-- AUDIT §2.6 index/eviction chores ONLY if actually measured as a problem (audit says don't
-  preempt).
-- (S1 follow-ups) An Examine action on `/stash` item cards (today: withdraw first); foraging's
-  per-family leaves (Mushrooms/Herbs/Fruit & Forage) once per-family gathering matters;
-  seasonal/weather-gated table entries via the D31 condition language (one field, no engine).
+**3. Skill ratings.** Measured: an untrained character has 9 % on a standard Smithing task
+and 30 % on a standard Athletics task (attribute weights sum to 0.3 vs 1.0); after 500 uses
+a three-node path totals 46 points, a one-node skill 12. Proposal:
 
----
+- **Rating.** Every task has a Rating — the skill total at which it is a coin flip.
+  `chance = 50 + total − Rating`. Same engine as today, existing content unchanged.
+- **Equal start.** Every skill's attribute weights sum to the same total (🟡 1.0).
+- **Tasks live at their depth.** Basic tasks check the root (Rating 30–80, same band in
+  every skill), specialist tasks a branch (80–160), expert tasks a leaf (160–260+). A
+  one-node skill ends at the basic band; a deep tree keeps going.
+- **Own-node floor.** Advanced content may require N points in its own node. A new leaf
+  starts at 0 for everyone, so new content means new work even for a master.
+- **No separate Mastery rule** (owner not convinced by "+1 Success Level per 20 over 100").
+  Quality reads the margin (`total − Rating`) plus the roll's luck. The 5–95 clamp applies
+  only where there is risk. A routine task far below the character's level (margin about
+  +50 or more) is not rolled: automatic success, no learning.
 
-## Decision queue — do przemyślenia przez właściciela (offline, bez sesji)
+| Uses | Days at 24 AP | Root | Branch | Leaf | Three-node total |
+|---|---|---|---|---|---|
+| 100 | 4 | 6 | 6 | 8 | 20 |
+| 500 | 21 | 12 | 15 | 19 | 46 |
+| 2,000 | 83 | 23 | 32 | 38 | 93 |
+| 5,000 | 208 | 38 | 51 | 59 | 148 |
+| 15,000 | 625 | 64 | 100 | 100 | 264 |
 
-Brainstorm topics. None of these blocks S1–S5 or S6; each blocks the thing named in **Blocks**.
-When one is decided: write the outcome into the named `Ruleset/` file (Reference/Ruleset
-section), then it can become a session brief.
+**4. Dutch Courage** (Honeyed Mead: +5 Willpower, −5 Perception, 2 h) — keep, change or drop.
 
-1. **Skill scale & caps** *(the owner's own top question — `Ruleset/TODO.md`)*: path sums
-   reach ~300 (root+branch+leaf) vs the d100 roll; cap at 100? per-tree sum caps? Today
-   `checkTarget` clamps [5,95] so nothing breaks, but decide before mass content tuning.
-   → `skills.md`. **Blocks**: long-term balance tuning, Mastery >100 design.
-2. **Encounter stakes & AP prices**: real damage/loot on travel-challenge outcomes; AP cost
-   of travel (placeholder 0) and of gather actions (S1 sets 🟡 values). → `world-travel.md`.
-   **Blocks**: travel mattering; a loot-table pass over encounters.
-3. **Tavern package**: what a drink does (coins → small heal? Stress relief once Stress
-   exists?), Mearog dice rules (the canon gambling game — old backlog), rest/recovery
-   specifics (`combat.md` P-recovery). **Blocks**: a tavern session (drink/gamble actions).
-4. **XP / points economy + talents** (R13): XP sources, attribute-raise gating/cost curve,
-   the launch talent list + requirement modeling. → `skills.md`. **Blocks**: talents UI,
-   attribute raises, `progression.points` consumers.
-5. **Stress / Sanity numbers & ship timing** (design says: a headline pillar, ships with
-   combat depth, not bolted on later). → `flavor-progression.md`. **Blocks**: the Stress bar.
-6. **Combat depth order** (Phase 7): hit locations + trauma tally, crit/fumble tables, fate
-   points, armour × weapon-type table. Manual turn-by-turn combat only AFTER auto-resolve has
-   actually been played (AUDIT §5). → `combat.md`. **Blocks**: all combat layering.
-7. **NPC lifecycle**: mortality/reseed-vs-persist policy + hourly tick budget/behavior depth —
-   must land BEFORE the NPC movement cron (NOT needed for S2's static roster) AND before any
-   NPC↔NPC autonomous trading behavior (S3 only needs the gold-pool + transfer primitive).
-   → `npcs.md`. **Blocks**: the second half of 6C, autonomous NPC trading. *(When the cron
-   lands, also flip `npcSeed.ts`'s reseed-repositions-home block — location becomes mutable
-   NPC state; flagged in the code.)*
-8. **Hunger/thirst** *(owner's `Ruleset/TODO.md`)*: rising meters with inverted tick
-   semantics — design the model (and whether it's fun at all on a casual server) before any
-   build. → `character.md`.
-9. **Sparring Elo removal + leaderboard rework** to W/L + streaks + funny stats (the D16
-   leftover). Small; anytime.
-10. **Old idea backlog** (archived in `DECISIONS.md`; each needs an explicit yes): ambient
-    events in normal chat (the highest-retention idea), weekly co-op "Defense of Deltrada"
-    (also the AP sink), titles/achievements, seasons/campaigns, Tosch-as-game-actor (AI
-    flavor-only per README R6), the images pipeline (`images.md` — needs art + a hosting
-    decision first).
+**5. What a tavern drink does** (blocks step 8).
 
-## Parking lot (explicitly NOT now)
+**6. `Ruleset/` clean-up, part two.** Done 2026-11-11: rules and implementation are in
+separate files (`Ruleset/<topic>.md` vs `Ruleset/implementation/<topic>.md`), moved without
+rewording. Still open:
+- 🟡 Read each rule file once and remove what the split left behind: code paths and
+  "built" notes inside rule text, and statements that are out of date. One topic at a time,
+  starting with the one being built.
+- `Ruleset/RPG/` (local, not in git, frozen at July 2026) — the owner deletes it, or keeps
+  it as a private archive. Its content was checked against the topic files when it was
+  first folded in.
+- `Ruleset/TODO.md` — both its items are tracked here (To decide 3, "Later").
 
-- Manual turn-by-turn combat — play auto-resolve first (AUDIT §5).
-- Cooking & gardening — after foraging/fishing prove the loop; gardening needs property +
-  growth-cron infra (professions.md's own order).
-- Mongo transactions / service split / ORM / DI — never at this scale (AUDIT §5).
-- Regional currencies & exchange (D19), haggle/reputation pricing (until S3+S5 exist).
-- Per-location armour coverage & the armour × weapon-type table (needs Decision #6).
+**7. Shop numbers.** First guesses, all 🟡: the merchant pays half of an item's value; the
+till starts each day at 250 coins; the stock is 4 kinds of food and healing plus 10 pieces
+of basic gear (list in `Ruleset/economy.md`). For scale: the Spire ladder pays 1,680 coins
+in total per character, a foraged find is worth 1–12.
 
-## Log
+**8. What an exit costs.** Agreed: an exit is never better than the worst choice. The two
+authored costs are first guesses: giving up at the fallen tree is free (failing there is
+free too); backing away from the drowning stranger costs 1 Cowardice. Cutting a conversation
+short costs nothing yet, because NPCs do not remember how they were treated.
 
-- **2026-07-11 — Image rendering (ad-hoc, owner-driven)** ✅ → **D46 + D47 + D48**:
-  `@napi-rs/canvas` compositing seam (`game/images/`), verified live on Sparkedhost via the new
-  owner-only `h!imagetest`; asset-hosting split decided (repo `assets/images/` for anything the
-  renderer draws on); the gambling-salon toolkit — text/rect layers + rotation, bundled DejaVu
-  fonts (`assets/fonts/`), programmatic card/chip/hand renderers, the `IMAGE_ASSETS` catalog
-  with named anchors; then looping GIF animation (`game/images/animate.ts`, `@napi-rs/canvas`'s
-  own `GifEncoder` — one encoded file, never a rerender+edit timer loop) with a spinning-card
-  demo at `h!imagetest gif`. No consumer wired yet; S7 stub added above. No redeploy (prefix
-  command only).
-- **2026-07-10 — S4 (Dialogue v1)** ✅ → **D45**: run ahead of S3 on the owner's call (dialogue
-  needs only the S2 roster, not the shop). Everything in the brief shipped: `dialogue`
-  ActivitySession + `_activities/` handler; the node catalog in code (graph-test-validated);
-  options gated/rolled through flags + `minTraits` + the check engine; rolled options credit
-  speechcraft (D40); session-scoped flags only; the `small_talk` archetype template (all 7 NPCs
-  talk) + `marrek_tales` as the one authored tree; the `talk` hub action live with an NPC
-  picker. Divergences: rolled options cost **1 AP 🟡** (anti-farm — re-rolling persuade is
-  priced like a forage roll; checkless talk stays free); gates ship flags+traits only
-  (minRep/item/skill floors are additive fields for S5+); the NPC is **not** a session
-  participant (a chat must not lock the merchant — revisit when dialogue mutates NPC state,
-  noted in conversations.md). No redeploy (hub action + component only).
-- **2026-07-10 — S2 (NPC roster v1)** ✅ → **D44**: everything in the brief shipped
-  (`game/data/npcs.ts` with 7 named NPCs across all 5 locations, `characterService.createNpc`,
-  idempotent `npm run seed-npcs` — update-by-npcId refreshing only the static half, db-tested
-  against the real roster). Divergences: an NPC's `Character._id` IS `npc-<npcId>` (no stored
-  npcId field — zero schema change, and the static half resolves from the catalog per D10);
-  `startingCoins` 🟡 added ahead of S3 (the owner's finite-merchant-gold call needs the plaza
-  merchant seeded with a pool); a reseed repositions a re-homed NPC until the npc-tick cron
-  exists (flip flagged in code + Decision queue #7). No redeploy; owner op: `npm run seed-npcs`.
-- **2026-07-10 — S1 (Gathering engine + Foraging v1)** ✅ → **D43**: everything in the brief
-  shipped (gather resolver + `qualityFromCheck`, resourceNodes + the new `tanglewood`
-  woodland, foraging tree, 8 foragables + descriptor pools, identification veil + Examine,
-  live `forage` hub action, sim-tuned 🟡 numbers — distributions in DECISIONS.md D43).
-  Divergences: quality bands retuned after the first sim (masterwork was becoming the mode at
-  high skill); Examine charges a **uniform** 1 AP even on known items (anti-leak — accepted
-  trade-off logged in professions.md); no redeploy needed (component-only), but the owner's
-  live smoke should include one forage + one Examine.
-- **2026-07-10 — S0 (docs)** ✅: CLAUDE.md slimmed (~50% shorter; full D1–D42 texts + old
-  backlog archived verbatim in `DECISIONS.md`), PLAN.md created with the S1–S6 queue and the
-  owner Decision queue. No code changes.
+## Known issues
+
+- **Duel engine resolves a whole fight in one function.** Group fights and manual turns
+  need it split into single steps. Planned alongside step 6.
+- **Fight narration runs under the fighters' locks** (30–45 s). The outcome is already
+  saved first; the only effect is "character is busy" for the participants meanwhile.
+- **Session state has no version.** A deploy that changes an activity's state shape can
+  confuse a session in progress. Deploy when nobody is mid-activity, or read old shapes
+  tolerantly.
+- **Comments cite decision numbers and old paths** (`RPG/`, old plan step numbers). Fix a
+  file's comments when touching it; do not add new ones.
+- **Both bots answer in `tosche-office`** and on ambient chance when the test bot runs on
+  the shared server.
+- **Two players can talk to the same NPC at once.** Fine while dialogue does not change NPC
+  state.
+- **A character parked in an activity cannot be touched.** Sessions never expire, so a
+  player can leave a character busy for good. Harmless today (duels need consent). Once
+  something can target a character without consent — theft, an NPC attack — being busy
+  must not be a shield.
+- **A new character has no gear** while the starter kit is off (To decide 1).
+- **One unexplained test failure.** On 2026-11-14 one run of eight failed three tests in
+  one file; it was the first run after hours idle and took half again as long, and the next
+  seven passed. Probably a timeout on a cold start. If it shows up in CI, find the file.
+
+## Done
+
+- **2026-11-14** — Activities never expire and every one has an in-character exit;
+  `h!session` for the owner. Hub shortcuts, the two-level fighting-style panel, Refresh on
+  the public sheet, the duel-challenge spam guard. The first shop: the plaza merchant
+  trades from his own pack and purse. Starter kit switched off.
+- **2026-11-11** — `Ruleset/` split into rule files and `Ruleset/implementation/`.
+  `przewodnik.md` rewritten from scratch; keeping it current is now a rule in `CLAUDE.md`.
+- **2026-11-11** — Regeneration catches up after downtime (hours missed while offline are
+  paid at startup; capped at a week). `AI_TRIGGER_NAMES` lets the test bot answer to its
+  own name. Docs tidied: `AUDIT.md` and `STATE.md` folded into `CLAUDE.md` and this file.
+- **2026-11-11** — Groundwork: modifier layer with timed effects; `npm run migrate`.
+- **2026-11-11** — Steps 1–3: repeated-discovery bug fixed; unbuilt hub actions, unused
+  skill trees and Stamina hidden; duels and trials save before narrating and write records;
+  `/smackdown sparring` and Elo removed; "Enter the arena" at the Spire; starter kit;
+  database connect retry at startup; real seed roster moved to a gitignored file.
+- **2026-11-10** — Full review of the project; plan rebuilt.
+- **Earlier (July 2026)** — everything listed under "Status" in `CLAUDE.md`.
+
+**Owner ops outstanding:**
+- `npm run deploy` — `/smackdown` lost `sparring`, `/leaderboard` has new categories,
+  `/character combat` has a new description.
+- `h!backup`, then `npm run migrate` once on the live database — drops the old sparring
+  record fields and the session time limit. Until it runs, sessions that were open before
+  the update can still vanish; new ones cannot.
+- `npm run seed-npcs` on the live database if it has no NPCs yet — the stall needs the
+  merchant character to exist.

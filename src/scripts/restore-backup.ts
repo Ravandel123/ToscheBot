@@ -1,6 +1,6 @@
 // Restores a database backup dump — the JSON file the daily `db-backup` job
 // (or `h!backup`) posts to #espionage — into whatever `MONGODB_URI` resolves
-// to (AUDIT.md §2.3): every collection is wiped and re-created from the dump,
+// to: every collection is wiped and re-created from the dump,
 // so the database ends up as the snapshot, never a merge. Run with:
 //    npm run restore -- <path to tosche-backup-YYYY-MM-DD.json>
 // (`ENV_FILE=.env.production npm run restore -- …` targets the live DB.) Like

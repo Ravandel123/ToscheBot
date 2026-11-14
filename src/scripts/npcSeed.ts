@@ -5,7 +5,7 @@ import { NPCS, npcCharacterId, type NpcDefinition } from '../game/data/npcs.js';
 
 // The NPC seed's pure core (D44), split from the CLI (seed-npcs.ts) exactly
 // like seed.ts is from seed-characters.ts: no `config` import, so it runs
-// against the in-memory test DB. Idempotent update-by-npcId (AUDIT §3.3):
+// against the in-memory test DB. Idempotent update-by-npcId:
 // the roster catalog owns each NPC's STATIC half and a rerun refreshes it;
 // everything the world can mutate is the NPC's own state and is never reset.
 

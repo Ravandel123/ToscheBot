@@ -28,16 +28,20 @@ import {
    type ChallengeState,
 } from '../../../game/activity/challenge.js';
 import { checkTarget, checkTrainingWeight, rollAgainst } from '../../../game/checks.js';
-import { attributesWithEquipment } from '../../../game/character/inventory.js';
+import { checkSubject } from '../../../game/character/modifiers.js';
 import { skillNode } from '../../../game/data/skills.js';
 import { randomItem } from '../../../lib/random.js';
 import type { SkillLevelUp } from '../../../game/character/skills.js';
+import type { ActivityExit } from '../../../game/activity/exit.js';
 import type { ActivityHandler, ActivityView } from '../../../types/activities.js';
 import type { ActivitySessionDoc } from '../../../db/models/activitySession.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
 import type { ToscheClient } from '../../../client.js';
 
 const CHALLENGE_COLOR = 0x7A5C3E; // weathered timber
+
+/** For a session whose encounter id no longer resolves (D10 rule 3). */
+const FALLBACK_EXIT: ActivityExit = { label: 'Turn back', emoji: '↩️', lines: ['You turn back the way you came.'] };
 
 export default {
    type: 'challenge',
@@ -50,13 +54,17 @@ export default {
          // (move/cleanup) may not have run. Offer to finish it.
          : finalizeView(session, state);
    },
+   title(session) {
+      const state = challengeStateFrom(session.state);
+      return `${encounterName(state.encounterId)}, on the road to ${locationName(state.toId)}`;
+   },
    async onAction(client, interaction, session, actor, action, args) {
       if (!interaction.isButton())
          return;
 
       if (action === 'opt') return handleOption(client, interaction, session, actor, args[0]);
       if (action === 'finalize') return finalize(client, interaction, session, actor, challengeStateFrom(session.state));
-      if (action === 'retreat') return handleRetreat(interaction, session, actor);
+      if (action === 'retreat') return handleExit(client, interaction, session, actor);
    },
 } satisfies ActivityHandler;
 
@@ -86,7 +94,7 @@ async function handleOption(
    // fall back to a fresh computation for pre-D26 blobs (with equipped-gear
    // modifiers applied, like the session-start computation — D28).
    const check = option.check
-      ? rollAgainst(state.optionTargets[option.id] ?? checkTarget({ ...actor, attributes: attributesWithEquipment(actor) }, option.check))
+      ? rollAgainst(state.optionTargets[option.id] ?? checkTarget(checkSubject(actor), option.check))
       : null;
    const success = check?.success ?? true;
    const outcome = appliedOutcome(option, success);
@@ -168,18 +176,29 @@ async function finalize(
       : `🧭 **${name}** set out for **${locationName(state.toId)}**, but ${challenge.toLowerCase()} forced them back to **${locationName(state.fromId)}**.`);
 }
 
-/** Clean cancel (D17): any AP refund would go here — travel is free for now (D14 placeholder). */
-async function handleRetreat(
+/** Taking the encounter's exit (D58). The session is removed FIRST: winning
+ *  that delete is what entitles this click to apply the exit's consequences,
+ *  so a double-click cannot charge them twice. */
+async function handleExit(
+   client: ToscheClient,
    interaction: ButtonInteraction,
    session: ActivitySessionDoc,
    actor: CharacterDoc,
 ): Promise<void> {
    const state = challengeStateFrom(session.state);
 
-   await activitySessionService.abandon(session._id);
+   // A stale panel must not turn an already-won crossing into a retreat.
+   if (challengeProgress(state) !== 'ongoing') {
+      await finalize(client, interaction, session, actor, state);
+      return;
+   }
+
+   const exit = activityEncounter(state.encounterId)?.exit ?? FALLBACK_EXIT;
+   if (await activitySessionService.abandon(session._id) && exit.traits)
+      await characterService.applyTraitDeltas(actor._id, exit.traits);
 
    const survivor = await characterService.get(actor._id);
-   const banner = `↩️ You think better of it and turn back toward **${locationName(state.fromId)}**.`;
+   const banner = `${exit.emoji} ${randomItem(exit.lines)}\nYou are back at **${locationName(state.fromId)}**.`;
    await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
 }
 
@@ -217,10 +236,9 @@ function stepView(session: ActivitySessionDoc, state: ChallengeState, trainingNo
          trainingNote,
          optionLines.length > 0 ? `\n${optionLines.join('\n')}` : '',
          encounter ? `\nSetbacks: **${state.setbacks}/${encounter.maxSetbacks}**` : '',
-         '⏳ Walk away for too long and you will give up the crossing.',
       ].filter(Boolean).join('\n'));
 
-   return { embeds: [embed], components: optionRows(session._id, options) };
+   return { embeds: [embed], components: optionRows(session._id, options, encounter?.exit ?? FALLBACK_EXIT) };
 }
 
 function finalizeView(session: ActivitySessionDoc, state: ChallengeState): ActivityView {
@@ -239,13 +257,13 @@ function finalizeView(session: ActivitySessionDoc, state: ChallengeState): Activ
    return { embeds: [embed], components: [row] };
 }
 
-/** One button per available approach + Turn back, chunked into ≤5-wide rows. */
-function optionRows(sessionId: string, options: readonly ChallengeOption[]): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
+/** One button per available approach + the encounter's exit, chunked into ≤5-wide rows. */
+function optionRows(sessionId: string, options: readonly ChallengeOption[], exit: ActivityExit): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
    const buttons = [
       ...options.map((option) =>
          new ButtonBuilder().setCustomId(`activity:opt:${sessionId}:${option.id}`).setLabel(option.label).setEmoji(option.emoji).setStyle(ButtonStyle.Primary),
       ),
-      new ButtonBuilder().setCustomId(`activity:retreat:${sessionId}`).setLabel('Turn back').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`activity:retreat:${sessionId}`).setLabel(exit.label).setEmoji(exit.emoji).setStyle(ButtonStyle.Secondary),
    ];
 
    const rows: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];

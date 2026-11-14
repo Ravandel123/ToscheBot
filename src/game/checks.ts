@@ -43,6 +43,10 @@ export const CHECK_MAX_TARGET = 95;
 
 export type CheckSubject = Pick<CharacterDoc, 'attributes' | 'progression'> & {
    identity: Pick<CharacterDoc['identity'], 'race'>;
+   /** Flat shift to every target from the character's active modifiers. Build
+    *  subjects with `checkSubject` (game/character/modifiers.ts), which also
+    *  applies attribute shifts — never pass a raw character document. */
+   checkBonus?: number;
 };
 
 /**
@@ -64,7 +68,7 @@ export function checkEffective(subject: CheckSubject, check: CheckDefinition): n
  *  racial affinity, clamped to [5, 95]. Pure. */
 export function checkTarget(subject: CheckSubject, check: CheckDefinition): number {
    const affinity = (subject.identity.race ? check.raceAffinity?.[subject.identity.race] : undefined) ?? 1;
-   const target = (checkEffective(subject, check) + (check.modifier ?? 0)) * affinity;
+   const target = (checkEffective(subject, check) + (check.modifier ?? 0) + (subject.checkBonus ?? 0)) * affinity;
 
    return Math.max(CHECK_MIN_TARGET, Math.min(CHECK_MAX_TARGET, Math.round(target)));
 }

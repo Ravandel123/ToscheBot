@@ -1,57 +1,29 @@
-import { SlashCommandBuilder, MessageFlags, type ChatInputCommandInteraction, type SendableChannels } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
 import type { SlashCommand } from '../../../types/commands.js';
+import { config } from '../../../config.js';
 import { settings } from '../../../settings.js';
 import { accountService } from '../../../db/services/accountService.js';
-import { characterService } from '../../../db/services/characterService.js';
 import { smackdownService } from '../../../db/services/smackdownService.js';
-import { combatStatsFromCharacter } from '../../../game/combat/stats.js';
-import { simulateFight, type RoundEvent } from '../../../game/combat/engine.js';
 import { LADDER_LENGTH } from '../../../game/combat/spireLadder.js';
-import { COMBAT_MOVES, HIT_LOCATIONS, START_GIFS, FINISH_GIFS } from '../../../game/combat/flavor.js';
 import { canCharacterAct } from '../../../game/character/rules.js';
 import { displayName } from '../../../game/character/identity.js';
 import { DEFAULT_BOUT_MODE, boutMode, selectableBoutModes } from '../../../game/combat/bouts.js';
+import { CHALLENGE_COOLDOWN_SECONDS, pendingChallenges } from '../../../game/combat/pendingChallenges.js';
 import { buildChallengeButtons, buildChallengeCard } from '../../components/_duelView.js';
 import { buildTrialBrowser } from '../../components/_trialView.js';
-import { randomItem } from '../../../lib/random.js';
 import { resolveGuildChannel } from '../../../lib/discord.js';
-import { sleep } from '../../../lib/async.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
 import type { ToscheClient } from '../../../client.js';
 
-// Pacing of the narrated fight, so it reads like a brawl rather than a wall of text.
-const INTRO_DELAY_MS = 1500;
-const ROUND_DELAY_MS = 1300;
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
-function renderRound(round: RoundEvent, names: Record<string, string>): string {
-   const attacker = names[round.attackerId];
-   const defender = names[round.defenderId];
-   const move = randomItem(COMBAT_MOVES);
-   const location = randomItem(HIT_LOCATIONS);
-
-   if (round.hit)
-      return `**${attacker}** ${move} **${defender}**'s ${location} for **${round.damage}**! _(${defender}: ${round.defenderHpAfter} HP)_`;
-
-   return `**${attacker}** lunges at **${defender}**'s ${location} — but misses!`;
-}
-
 export default {
-   // Two tiers (D16): `sparring` is the for-fun, no-stakes brawl (any active
-   // character, fantasy HP, Elo only); `duel` is the SERIOUS bout — an approved
-   // character, real Health that is spent and persists, a knockout at 0, and the
-   // target must consent by button (combat.md R24 / Health+Soak engine).
+   // `duel` — an approved character, real Health that is spent and persists, a
+   // knockout at 0, and the target must consent by button. `trial` — the PvE
+   // ladder. (The for-fun brawl is the prefix command `h!sparring`.)
    data: new SlashCommandBuilder()
       .setName('smackdown')
       .setDescription('Brawls in the Smackdown Spire.')
-      .addSubcommand((sub) =>
-         sub
-            .setName('sparring')
-            .setDescription('A friendly, for-fun sparring match — nothing at stake but pride.')
-            .addUserOption((option) =>
-               option.setName('opponent').setDescription('Who to fight.').setRequired(true),
-            ),
-      )
       .addSubcommand((sub) =>
          sub
             .setName('duel')
@@ -73,110 +45,19 @@ export default {
       ),
    category: 'game',
    async execute(client, interaction) {
-      const sub = interaction.options.getSubcommand();
-      if (sub === 'duel') return challengeToDuel(interaction);
-      if (sub === 'trial') return openTrial(interaction);
+      if (interaction.options.getSubcommand() === 'trial')
+         return openTrial(interaction);
 
-      await runSparring(client, interaction);
+      await challengeToDuel(client, interaction);
    },
 } satisfies SlashCommand;
-
-// --- Sparring (for-fun, D16) ---------------------------------------------------
-
-async function runSparring(client: ToscheClient, interaction: ChatInputCommandInteraction): Promise<void> {
-   const challenger = interaction.user;
-   const opponent = interaction.options.getUser('opponent', true);
-
-   if (!interaction.guild) {
-      await interaction.reply({ content: 'Fights happen on the server, not in DMs.', ...ephemeral });
-      return;
-   }
-   if (opponent.bot) {
-      await interaction.reply({ content: 'You cannot spar against a machine.', ...ephemeral });
-      return;
-   }
-   if (opponent.id === challenger.id) {
-      await interaction.reply({ content: 'You cannot spar against yourself, soldier.', ...ephemeral });
-      return;
-   }
-
-   const spire = resolveGuildChannel(interaction.guild, settings.channels.smackdownSpire);
-   if (!spire?.isSendable()) {
-      await interaction.reply({ content: SPIRE_MISSING, ...ephemeral });
-      return;
-   }
-
-   // Sparring fights the players' *active characters* (D16: no approval needed).
-   const [c1, c2] = await Promise.all([
-      accountService.getActiveCharacter(challenger.id, challenger.displayName),
-      accountService.getActiveCharacter(opponent.id, opponent.displayName),
-   ]);
-
-   if (!c1 || !c2) {
-      await interaction.reply({ content: 'One of you has no active character.', ...ephemeral });
-      return;
-   }
-
-   // Acknowledge privately; the fight itself plays out in the Spire channel.
-   await interaction.reply({ content: `⚔️ To the Spire — <#${spire.id}>!`, ...ephemeral });
-
-   // Lock both *characters* for the whole match (first real runExclusive consumer).
-   await client.locks.runExclusive([c1._id, c2._id], async () => {
-      // The pre-lock reads were validation only. This fight may have queued
-      // behind another one, so re-read the authoritative docs under the lock.
-      const [fighter1, fighter2] = await Promise.all([
-         characterService.get(c1._id),
-         characterService.get(c2._id),
-      ]);
-
-      if (!fighter1 || !fighter2) {
-         await interaction.followUp({ content: 'One of the fighters vanished before the bell.', ...ephemeral });
-         return;
-      }
-
-      const f1 = { id: fighter1._id, stats: combatStatsFromCharacter(fighter1) };
-      const f2 = { id: fighter2._id, stats: combatStatsFromCharacter(fighter2) };
-      const names = { [f1.id]: f1.stats.name, [f2.id]: f2.stats.name };
-
-      // Sparring is a fantasy match: it computes a winner + Elo, it does NOT
-      // persist HP. The whole fight is decided in memory up front, then
-      // narrated round by round for suspense; only Elo is committed, at the end.
-      const result = simulateFight(f1, f2);
-
-      await narrateFight(spire, result.rounds, names);
-
-      const winnerId = result.winnerId;
-      const loserId = result.loserId;
-      const elo = await smackdownService.recordResult(
-         { characterId: winnerId, characterName: names[winnerId] },
-         { characterId: loserId, characterName: names[loserId] },
-      );
-
-      await spire.send(
-         `🏆 **${names[winnerId]}** wins!\n${randomItem(FINISH_GIFS)}\n\n` +
-         `**${names[winnerId]}** +${elo.change} → **${elo.winnerRating}** ELO\n` +
-         `**${names[loserId]}** −${elo.change} → **${elo.loserRating}** ELO`,
-      );
-   });
-}
-
-async function narrateFight(channel: SendableChannels, rounds: RoundEvent[], names: Record<string, string>): Promise<void> {
-   const [a, b] = Object.values(names);
-   await channel.send(`⚔️ **${a}** challenges **${b}** to a sparring match!\n${randomItem(START_GIFS)}`);
-   await sleep(INTRO_DELAY_MS);
-
-   for (const round of rounds) {
-      await channel.send(renderRound(round, names));
-      await sleep(ROUND_DELAY_MS);
-   }
-}
 
 // --- Duel (real stakes, consent-gated — D16/combat.md) -------------------------
 
 /** Validates the matchup, then posts the consent card to the Spire. The fight
  *  itself starts only when the challenged player clicks Accept — the `duel`
  *  component handler owns the resolution + HP persistence. */
-async function challengeToDuel(interaction: ChatInputCommandInteraction): Promise<void> {
+async function challengeToDuel(client: ToscheClient, interaction: ChatInputCommandInteraction): Promise<void> {
    const challengerUser = interaction.user;
    const opponentUser = interaction.options.getUser('opponent', true);
 
@@ -223,6 +104,21 @@ async function challengeToDuel(interaction: ChatInputCommandInteraction): Promis
       return;
    }
 
+   // Spam guard (D59): one unanswered challenge per target, and a pause between
+   // a challenger's own challenges. Checked last, so a refused attempt above
+   // never burns the cooldown. The owner skips the cooldown, as everywhere.
+   const waiting = pendingChallenges.waitingOn(opponent._id);
+   if (waiting) {
+      await interaction.reply({ content: `**${displayName(opponent)}** still has a challenge from **${waiting}** to answer. One gauntlet at a time.`, ...ephemeral });
+      return;
+   }
+
+   const wait = challengerUser.id === config.ownerId ? 0 : client.cooldowns.use('duel-challenge', challengerUser.id, CHALLENGE_COOLDOWN_SECONDS);
+   if (wait > 0) {
+      await interaction.reply({ content: `You only just threw down a gauntlet. Try again in ${Math.ceil(wait)}s.`, ...ephemeral });
+      return;
+   }
+
    // The chosen bout ruleset (loadout etc.) rides in the card + the buttons so the
    // challenged player consents to it; `boutMode` normalises an absent/stale pick.
    const mode = boutMode(interaction.options.getString('mode') ?? DEFAULT_BOUT_MODE);
@@ -233,6 +129,7 @@ async function challengeToDuel(interaction: ChatInputCommandInteraction): Promis
       components: [buildChallengeButtons(challenger._id, opponent._id, mode.id)],
       allowedMentions: { users: [opponentUser.id] },
    });
+   pendingChallenges.note(opponent._id, displayName(challenger));
    await interaction.reply({ content: `⚔️ Your challenge is laid down in <#${spire.id}>.`, ...ephemeral });
 }
 

@@ -11,7 +11,7 @@ import { characterService } from '../../db/services/characterService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { locationStateService } from '../../db/services/locationStateService.js';
 import { canCharacterAct, type ActBlockReason } from '../../game/character/rules.js';
-import { attributesWithEquipment } from '../../game/character/inventory.js';
+import { checkSubject } from '../../game/character/modifiers.js';
 import { displayName } from '../../game/character/identity.js';
 import { LOCATIONS, locationName, type LocationId } from '../../game/data/locations.js';
 import { statValue } from '../../game/data/locationStats.js';
@@ -23,7 +23,7 @@ import { initialChallengeState } from '../../game/activity/challenge.js';
 import { checkTarget } from '../../game/checks.js';
 import { postChronicle } from '../../game/chronicle.js';
 import { randomItem } from '../../lib/random.js';
-import { activityHandler } from './_activities/registry.js';
+import { activityHandler, busyNote } from './_activities/registry.js';
 import { freshHubView, revealFeature } from './_hubView.js';
 import type { ActivityEncounter, EncounterId } from '../../game/data/encounters.js';
 import type { ActivitySessionDoc } from '../../db/models/activitySession.js';
@@ -73,7 +73,7 @@ export async function performTravel(
       // Cross-restart busy check (D17): an active session means re-entry, not a move.
       const session = await activitySessionService.getActiveForParticipant(fresh._id);
       if (session) {
-         await editReplyStep(interaction, session, '⚠️ You are already in the middle of something — deal with it first.');
+         await editReplyStep(interaction, session, busyNote(session));
          return;
       }
 
@@ -166,7 +166,7 @@ async function startEncounterActivity(
    // Per-option d100 targets are computed HERE, from the live (equipment-modified)
    // character, and stored in the session so the stateless panel shows honest %
    // odds on every repaint without re-deriving stats (D26/D28).
-   const subject = { ...character, attributes: attributesWithEquipment(character) };
+   const subject = checkSubject(character);
    const optionTargets = Object.fromEntries(
       encounter.options.flatMap((option) => (option.check ? [[option.id, checkTarget(subject, option.check)] as const] : [])),
    );

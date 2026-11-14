@@ -1,5 +1,5 @@
 # The pre-deploy gate (CLAUDE.md "Deploy gate") enforced on every push instead
-# of on the developer's honor (AUDIT.md §2.9). Production runs TS directly via
+# of on the developer's honor. Production runs TS directly via
 # tsx — nothing type-checks at startup — so this is the only automated net.
 name: CI
 

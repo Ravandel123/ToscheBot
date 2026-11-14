@@ -32,6 +32,14 @@ describe('DIALOGUES graph integrity', () => {
       }
    });
 
+   it('gives every dialogue an in-character way to cut it short (D58)', () => {
+      for (const [id, dialogue] of dialogues) {
+         expect(dialogue.exit.label.length, `${id} exit label`).toBeGreaterThan(0);
+         expect(dialogue.exit.label.length, `${id} exit label is too long for a button`).toBeLessThanOrEqual(80);
+         expect(dialogue.exit.label, `${id} exit must be an action, not a menu word`).not.toMatch(/^(cancel|resign|quit|exit|leave)$/i);
+      }
+   });
+
    it('every outcome routes to an existing node or END', () => {
       for (const [id, dialogue] of dialogues)
          for (const [nodeId, node] of Object.entries(dialogue.nodes))

@@ -77,17 +77,13 @@ describe('locationStateService.discoverFeature', () => {
    it('adds a feature once and never duplicates it on a repeat', async () => {
       await locationStateService.getFresh('riverbank');
 
-      // A genuine array addition IS reliably reported as modified.
       const first = await locationStateService.discoverFeature('riverbank', 'old_jetty');
       expect(first).toBe(true);
 
-      await locationStateService.discoverFeature('riverbank', 'old_jetty');
+      // A repeat must report "not new" — the caller chronicles on true.
+      const repeat = await locationStateService.discoverFeature('riverbank', 'old_jetty');
+      expect(repeat).toBe(false);
 
-      // Storage stays idempotent by construction ($addToSet), whatever the flag says.
-      // NOTE: the repeat's "newly-found" boolean is deliberately NOT asserted here —
-      // this mongod reports modifiedCount:1 even for a no-op $addToSet, so unlike
-      // tryStartEvent's robust $ne filter-guard, discoverFeature's return value can't
-      // reliably tell first-visit from repeat. The array contents are the real contract.
       const stored = await LocationState.findById('riverbank').lean();
       expect(stored!.discoveredFeatureIds).toEqual(['old_jetty']);
    });

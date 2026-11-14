@@ -1,6 +1,7 @@
 import type { AttributeKey } from '../attributes.js';
 import type { EquipmentSlotId } from '../equipmentSlots.js';
 import type { ResourceKey } from '../resources.js';
+import type { EffectId } from '../effects.js';
 
 // The item TYPE SYSTEM (D28/D50): kinds, craftsmanship qualities, materials,
 // weapon properties/reach and the definition union. The catalog ENTRIES live
@@ -183,6 +184,8 @@ export interface ConsumableDefinition extends ItemDefinitionBase {
    kind: 'consumable';
    /** Resource deltas applied on use (one charge of the stack). */
    effects: Partial<Record<ResourceKey, number>>;
+   /** A timed effect (game/data/effects.ts) started on use. */
+   grantsEffect?: EffectId;
 }
 
 export interface CraftingMaterialDefinition extends ItemDefinitionBase {

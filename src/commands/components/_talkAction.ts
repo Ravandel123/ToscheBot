@@ -11,12 +11,13 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type Messag
 import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { characterService } from '../../db/services/characterService.js';
 import { canCharacterAct, type ActBlockReason } from '../../game/character/rules.js';
-import { attributesWithEquipment } from '../../game/character/inventory.js';
+import { checkSubject } from '../../game/character/modifiers.js';
 import { displayName } from '../../game/character/identity.js';
 import { computeDialogueTargets, initialDialogueState } from '../../game/activity/dialogue.js';
 import { DIALOGUES, dialogueIdFor } from '../../game/data/dialogues.js';
 import { npcDefinition } from '../../game/data/npcs.js';
 import { resolveLocationId } from '../../game/data/locations.js';
+import { busyNote } from './_activities/registry.js';
 import { freshHubView } from './_hubView.js';
 import { sessionStepView } from './_playPanel.js';
 import type { ActivitySessionDoc } from '../../db/models/activitySession.js';
@@ -86,7 +87,7 @@ export async function performTalk(client: ToscheClient, interaction: MessageComp
       // Cross-restart busy check (D17): an active session means re-entry, not a new talk.
       const session = await activitySessionService.getActiveForParticipant(fresh._id);
       if (session) {
-         await editReplyStep(interaction, session, '⚠️ You are already in the middle of something — deal with it first.');
+         await editReplyStep(interaction, session, busyNote(session));
          return;
       }
 
@@ -113,7 +114,7 @@ export async function performTalk(client: ToscheClient, interaction: MessageComp
       // modified) talker, and stored in the session so the stateless panel
       // shows honest % odds on every repaint (D26/D28).
       const dialogue = DIALOGUES[dialogueId];
-      const subject = { ...fresh, attributes: attributesWithEquipment(fresh) };
+      const subject = checkSubject(fresh);
       const state = initialDialogueState(dialogueId, npc._id, dialogue.start, fresh.traits ?? {}, computeDialogueTargets(subject, dialogue));
 
       const created = await activitySessionService.create('dialogue', [fresh._id], { ...state });

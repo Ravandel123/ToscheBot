@@ -18,6 +18,7 @@ import { resolveGuildChannel } from '../../lib/discord.js';
 import { readIdentityModal, buildIdentityModal, buildBodyModal, readBodyModal, buildRejectReasonModal } from './_characterModals.js';
 import { buildDecidedDecree, buildDecreeButtons, buildDecreeEmbed } from './_characterDecree.js';
 import { buildCharacterPanel, buildCharacterStepView } from './_characterPanel.js';
+import { buildCharacterSheetView } from '../slash/game/_characterSheet.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { RaceId } from '../../game/data/races.js';
 import type { ToscheClient } from '../../client.js';
@@ -26,7 +27,8 @@ import type { ToscheClient } from '../../client.js';
 //   panel-step / panel-continue / panel-overview → wizard navigation (D20);
 //   panel-race / panel-gender / panel-edit / panel-save / panel-submit + create
 //     → the individual creation steps (selects, text modal, submit);
-//   approve / reject / reject-reason → the owner's verdict on a petition.
+//   approve / reject / reject-reason → the owner's verdict on a petition;
+//   sheet → the Refresh button under a public `/character view` sheet.
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
@@ -51,6 +53,7 @@ export default {
          if (action === 'panel-attr-reset') return handleAttributeReset(interaction, rest[0], rest[1]);
          if (action === 'approve') return handleApprove(client, interaction, rest[0]);
          if (action === 'reject') return handleRejectButton(interaction, rest[0]);
+         if (action === 'sheet') return handleSheetRefresh(client, interaction, rest[0], rest[1]);
          return;
       }
 
@@ -373,6 +376,28 @@ async function handleRejectReason(client: ToscheClient, interaction: ModalSubmit
    await editDecreeMessage(interaction, messageId, decided, reason);
    await interaction.reply({ content: `Petition for **${character.identity.name}** rejected.`, ...ephemeral });
    await notifyPlayer(client, character, 'rejected', reason);
+}
+
+// --- Public sheet -------------------------------------------------------------
+
+/** How often one user may repaint a public sheet (anyone may click it). */
+const SHEET_REFRESH_COOLDOWN_SECONDS = 5;
+
+/** Repaints a public sheet from the database. Read-only, so it needs no lock
+ *  and no ownership check; the cooldown only stops a click-spammer. */
+async function handleSheetRefresh(client: ToscheClient, interaction: ButtonInteraction, characterId: string, units: string): Promise<void> {
+   if (client.cooldowns.use('c:sheet', interaction.user.id, SHEET_REFRESH_COOLDOWN_SECONDS) > 0) {
+      await interaction.reply({ content: 'The scribes are still copying the last one. A moment, yes-yes.', ...ephemeral });
+      return;
+   }
+
+   const character = await characterService.get(characterId);
+   if (!character) {
+      await interaction.update({ content: 'This character no longer exists.', embeds: [], components: [] });
+      return;
+   }
+
+   await interaction.update(buildCharacterSheetView(character, units === 'imperial' ? 'imperial' : 'metric'));
 }
 
 // --- Helpers ----------------------------------------------------------------

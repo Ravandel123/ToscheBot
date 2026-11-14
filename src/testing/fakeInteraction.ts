@@ -3,6 +3,7 @@ import type {
    ButtonInteraction,
    ModalSubmitInteraction,
 } from 'discord.js';
+import { CooldownManager } from '../core/cooldowns.js';
 import { CharacterLockManager } from '../core/locks.js';
 import type { ComponentInteraction } from '../types/interactions.js';
 import type { ToscheClient } from '../client.js';
@@ -130,8 +131,8 @@ export async function routeComponent(client: ToscheClient, interaction: Componen
    await handler.handle(client, interaction);
 }
 
-/** A minimal ToscheClient stand-in — a real lock manager (flows depend on it)
+/** A minimal ToscheClient stand-in — a real lock manager and cooldown manager (flows depend on them)
  *  plus whatever `overrides` a test needs (e.g. registered componentHandlers). */
 export function fakeClient(overrides: Partial<ToscheClient> = {}): ToscheClient {
-   return { locks: new CharacterLockManager(), ...overrides } as unknown as ToscheClient;
+   return { locks: new CharacterLockManager(), cooldowns: new CooldownManager(), ...overrides } as unknown as ToscheClient;
 }

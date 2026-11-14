@@ -25,6 +25,9 @@ export interface ActivityHandler {
     *  reply, re-entry ("you are mid-activity"), and stale-click repaints. Pure
     *  of side effects. */
    render(session: ActivitySessionDoc): ActivityView;
+   /** What the character is in the middle of, as a short phrase ("A fallen
+    *  tree, on the road to the Riverbank") — for busy notes and `h!session`. */
+   title(session: ActivitySessionDoc): string;
    /** Handles one component action for a session of this type. Must persist any
     *  step change through `activitySessionService.advance` (step-guarded) and
     *  respond to the interaction exactly once. `actor` is the participant

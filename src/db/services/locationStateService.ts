@@ -72,12 +72,14 @@ export const locationStateService = {
    /** Marks a feature discovered. True = newly found (announce it, chronicle it);
     *  false = somebody already knew. Idempotent by construction ($addToSet). */
    async discoverFeature(locationId: string, featureId: string): Promise<boolean> {
+      // Filter-guarded: `timestamps` bumps `updatedAt` on every update, so
+      // `modifiedCount` is 1 even for a no-op — only a match proves it was new.
       const result = await LocationState.updateOne(
-         { _id: locationId },
+         { _id: locationId, discoveredFeatureIds: { $ne: featureId } },
          { $addToSet: { discoveredFeatureIds: featureId } },
       );
 
-      return result.modifiedCount > 0;
+      return result.matchedCount > 0;
    },
 
    /** Nudges one dynamic stat, clamped to its catalog range — the write seam

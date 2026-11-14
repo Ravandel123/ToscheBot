@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import type { BackupDump } from './backup.js';
 
-// Mirror of backup.ts (AUDIT.md §2.3): turns a posted dump file back into the
+// Mirror of backup.ts: turns a posted dump file back into the
 // live database. Every collection in the dump is wiped and re-inserted;
 // collections that exist only in the database (created after the dump was
 // taken) are dropped, so a restore yields the snapshot, never a merge. Dump

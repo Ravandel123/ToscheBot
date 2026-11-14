@@ -207,3 +207,32 @@ describe('characterService approval lifecycle guards (D13)', () => {
       expect((await characterService.get(character._id))?.rejectionReason).toBeUndefined();
    });
 });
+
+describe('characterService.applyEffect', () => {
+   const NOW = new Date('2026-11-11T12:00:00Z');
+
+   it('stores the effect with its expiry and reports unknown ids', async () => {
+      const character = await freshCharacter();
+
+      expect(await characterService.applyEffect(character._id, 'dutch_courage', NOW)).toBe(true);
+      expect(await characterService.applyEffect(character._id, 'no_such_effect', NOW)).toBe(false);
+
+      const stored = await characterService.get(character._id);
+      expect(stored!.effects).toHaveLength(1);
+      expect(stored!.effects![0].effectId).toBe('dutch_courage');
+      expect(new Date(stored!.effects![0].expiresAt).getTime()).toBe(NOW.getTime() + 120 * 60_000);
+   });
+
+   it('restarts the clock on a repeat instead of stacking, and prunes expired entries', async () => {
+      const character = await freshCharacter();
+      await Character.updateOne({ _id: character._id }, { $set: { effects: [{ effectId: 'stale', expiresAt: new Date('2026-11-11T11:00:00Z') }] } });
+
+      await characterService.applyEffect(character._id, 'dutch_courage', NOW);
+      const later = new Date('2026-11-11T12:30:00Z');
+      await characterService.applyEffect(character._id, 'dutch_courage', later);
+
+      const stored = await characterService.get(character._id);
+      expect(stored!.effects!.map((effect) => effect.effectId)).toEqual(['dutch_courage']);
+      expect(new Date(stored!.effects![0].expiresAt).getTime()).toBe(later.getTime() + 120 * 60_000);
+   });
+});

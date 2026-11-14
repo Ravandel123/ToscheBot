@@ -4,8 +4,10 @@ Handoff doc for humans and AI assistants continuing this work in a fresh session
 **Keep it updated but keep it SLIM**: when a decision lands, add a 1–3-line row to the
 decision-log index below; put the game-design detail + why in the matching `Ruleset/` topic
 file, and infra/architecture rationale in `DECISIONS.md` (which also archives the full
-pre-2026-07-10 texts of D1–D42). The build queue lives in **`PLAN.md`**; the 2026-07-06
-code audit in **`AUDIT.md`**.
+texts of D1–D50). **`PLAN.md`** is the plan agreed with the owner — what is being built now,
+what comes next, what waits for a decision. Read it before starting work, and write new
+agreements into it. These three (this file, `PLAN.md`, `Ruleset/`) are everything a fresh
+session needs; `DECISIONS.md` is an archive to look things up in, not required reading.
 
 ## What this project is
 
@@ -24,13 +26,15 @@ Three faces:
 Planned future module (design for it, don't build yet): a separate pen-and-paper style RP
 campaign — its own `rp/` domain module and models, unrelated to the server RPG (D9).
 
-> **`Ruleset/`** (repo root) is the **single source of truth for the server-RPG** — design AND
-> implementation status. One file per topic (`character`, `skills`, `combat`, `world-travel`,
+> **`Ruleset/`** (repo root) is the **single source of truth for the server-RPG**, in two
+> layers. **Rules**: one file per topic (`character`, `skills`, `combat`, `world-travel`,
 > `items-equipment`, `economy`, `flavor-progression`, `factions`, `conversations`,
-> `professions`, `npcs`, `images`), each shaped **Reference → Ruleset → Implementation → Open
-> questions**. **Read the relevant topic file before touching anything RPG-mechanical**, and
-> keep it in sync with the code in the same change. (The older `RPG_SYSTEM.md` / `RPG/` were
-> folded in and deleted — old paths citing them are historical.)
+> `professions`, `npcs`, `images`), each shaped **Reference → Ruleset → Open questions →
+> Expansion ideas** — rules and reasons only, no code. **Implementation**:
+> `Ruleset/implementation/<topic>.md` — which files carry each rule and how far the code gets
+> it. **Read both files of a topic before touching anything RPG-mechanical**; a code change
+> updates the implementation file in the same change, a rule change updates the rule file.
+> (The older `RPG_SYSTEM.md` / `RPG/` were folded in — old paths citing them are historical.)
 
 ## Working agreement with the owner (Ravandel)
 
@@ -42,6 +46,22 @@ campaign — its own `rp/` domain module and models, unrelated to the server RPG
   correctness). When balance isn't obvious, **verify empirically** (D42 pattern): throwaway
   simulation over representative scenarios, read the distribution, tune, report the numbers.
   Tuning values stay 🟡 until the owner signs off.
+- **Build one system at a time** (owner, 2026-11-10): follow `PLAN.md` top to bottom, finish
+  a step so it is playable before starting the next, and **hide anything unfinished from
+  players** (no "coming soon" buttons, no untrainable skill trees). The game should be
+  complex inside and one button outside; prefer distinctive ideas over generic ones.
+- **Git belongs to the owner.** Only the owner commits, pushes, or changes git state in any
+  way (staging, branches, stash, reset, rebase, tags, history). Assistants edit files in the
+  working tree and may run read-only git commands (`status`, `diff`, `log`, `show`) — nothing
+  else, even when a task seems to call for it. Say what is ready to commit; the owner does it.
+- **Keep `przewodnik.md` current.** It is the owner's Polish, from-the-basics walkthrough of
+  the bot (gitignored, so it never shows up in a diff or in CI — easy to forget; it once
+  drifted four months behind). The assistant maintains it: in the **same change** that
+  alters anything it describes — folder layout, start-up or request flow, a concurrency or
+  persistence pattern, a command or npm script, an owner operation, which game systems
+  exist — update the matching section and its "Stan na" date. It explains how the bot is
+  built and why; it does not repeat game numbers (those live in `Ruleset/`). `GUIDE.md` is
+  the owner's own notes — never edit it.
 - `OldBot/` is reference-only legacy code. Never import from it; port ideas, not code.
 
 ## Tech stack & toolchain
@@ -59,7 +79,7 @@ campaign — its own `rp/` domain module and models, unrelated to the server RPG
   hand-written shim that installs tsx via its own `register()` export and imports
   `src/index.ts` (D29; raw `node:module` `register('tsx/esm')` throws — verified).
 - **One always-on process** — load-bearing: in-memory locks/queues/cooldowns are valid only
-  because nothing else touches the DB (see AUDIT §2.4 before ever running dev against prod).
+  because nothing else touches the DB (see "Known risks" before running dev against prod).
 - **Deploy gate**: run `npm run build` + `npm run lint` locally before upload; CI
   (`.github/workflows/ci.yml`) enforces build + lint + test on every push.
 
@@ -92,7 +112,8 @@ relative with `.js`), inline `import type`, guard-clause `curly: multi`, `no-els
 | `OWNER_ID` | Owner's Discord user id (`ownerOnly` gate) |
 | `MONGODB_URI` | Atlas connection string |
 | `OPENAI_API_KEY` | Optional — AI persona; absent ⇒ AI disabled, bot still runs |
-| `OPENAI_MODEL` | Optional — overrides default model (`gpt-5-nano`) |
+| `OPENAI_MODEL` | Optional — overrides the default model set in `config.ts` |
+| `AI_TRIGGER_NAMES` | Optional — comma-separated names the AI persona answers to, replacing `settings.ai.triggerNames` (the local test bot uses `tyril`) |
 
 ### npm scripts
 
@@ -107,6 +128,8 @@ relative with `.js`), inline `import type`, guard-clause `curly: multi`, `no-els
   confirmation** (interactive, or `SEED_CONFIRM_DB=<name>`); guard in `scripts/confirmDb.ts`.
 - `seed-npcs` — populates/refreshes the NPC roster from `game/data/npcs.ts` (D44); idempotent
   update-by-npcId, never resets mutated NPC state. Same guard style (`SEED_NPCS_CONFIRM_DB`).
+- `migrate` — runs the idempotent data migrations in `scripts/migrations.ts` (D56). Same
+  confirmation (`MIGRATE_CONFIRM_DB`). Back up first.
 - `restore` — disaster recovery from a `db-backup`/`h!backup` dump: wipes and re-inserts the
   snapshot (collections absent from the dump are dropped). Same confirmation
   (`RESTORE_CONFIRM_DB`). Dumps are relaxed EJSON; legacy plain-JSON dumps revived by shape.
@@ -127,12 +150,12 @@ detail in `Ruleset/`. Numbers are append-only; new entries stay 1–3 lines here
 | D9 | Future pen-and-paper RP = separate `rp/` domain module, own models, not sharing server-RPG profiles. |
 | D10 | Static content lives in code as typed catalogs; DB stores only instances/state referencing stable string ids — see "Content vs state". |
 | D11 | Production runs TS via tsx; `build` is a type-check-only local gate; no `dist/` in git. |
-| D12 | Account (per Discord user: settings, `activeCharacterId`) ↔ Character (uuid-keyed entity; NPC = `ownerId: null`); currencies + ELO live per character. |
+| D12 | Account (per Discord user: settings, `activeCharacterId`) ↔ Character (uuid-keyed entity; NPC = `ownerId: null`); currencies + fight records live per character. |
 | D13 | Approval lifecycle `draft → pending → approved/rejected`; unapproved characters can't take character-actions; petitions go to the owner channel, not DMs. |
 | D14 | (historic) "No stat/combat mechanics before the ruleset" — since superseded by D25/D26/D34/D35/D39–D42; balance **numbers** still stay 🟡 until owner sign-off. |
 | D15 | Action Points: no cap, hourly `$inc`; spending only via atomic clamped `spendActionPoints`. |
-| D16 | Smackdown two tiers: `sparring` = for-fun, any active character, pure random (its Elo to be removed someday); serious = `duel` (D35). |
-| D17 | Long interactive activities are durable: `ActivitySession` doc = per-step state AND the cross-restart busy lock; step-guarded atomic advances; TTL reap. AP charged at start; clean cancel refunds; timeout forfeits. |
+| D16 | (superseded by D51) Smackdown two tiers: for-fun `sparring` vs the serious `duel` (D35). |
+| D17 | Long interactive activities are durable: `ActivitySession` doc = per-step state AND the cross-restart busy lock; step-guarded atomic advances. (Its TTL reap and timeout-forfeit were removed by D58.) |
 | D18 | Locks keyed by `Character._id` (not user id); deferred queues drain BEFORE lock release. |
 | D19 | One currency (`deltradaCoins`) until the economy exists; regional per-race currencies reserved. |
 | D20 | Character creation = step-driven wizard over the draft doc; steps in a typed catalog; no stored cursor — progress derived from filled fields. |
@@ -158,14 +181,24 @@ detail in `Ruleset/`. Numbers are append-only; new entries stay 1–3 lines here
 | D40 | Learn-by-doing is LIVE: `creditUse` takes fractional uses; combat weight = foePower/yourPower (cap 2.0; 0 at ≤ 0.5 — anti-farm), non-combat = 2·(1 − target/100); sparring credits nothing; only rolled-and-could-fail uses count (locked in `Ruleset/skills.md`); rank-ups narrated. |
 | D41 | Fighting styles are family-specific catalog entries (modifiers + typed effects: hamper, riposte), each drawing attack AND defence from a skill node (self-gating, trainable via `trainingNodes`); the combat plan (`/character combat`) = per-family default style + ≤3 conditional switch rules (own/foe HP %, round ≥ N), first-match-wins, re-evaluated every exchange and narrated. |
 | D42 | Style family = weapon GRIP (`unarmed \| one_handed \| two_handed \| ranged` seam), style branches under their grip branch; initiative FLOWS: a landed blow may press a follow-up (`followUpChance`: net-SL-dominant + style tempo − per-press decay, sim-verified ~67/25/6% streaks for even fights, rare 10+ flurries only across big gaps). |
-| D43 | Gathering engine LIVE (R16, foraging first): a gather = SHORT action under the lock (AP → d100 vs a location `resourceNode` → SL-scaled yield + shared `qualityFromCheck` → one-roll identify sweep). Identification veil = optional instance fields (`identified/apparentItemId/descriptorId`, zero migration); failed IDs can plausibly mislabel (same family/shared look); Examine = uniform 1 AP, every outcome equally confident (no roll shown, truth sticky) so nothing leaks which labels are wrong. |
-| D44 | NPC roster v1 (static 6C half, PLAN S2): `game/data/npcs.ts` = 7 named NPCs; an NPC's `Character._id` = `npc-<npcId>` (customId-safe) and its static half (archetype, home) resolves from the catalog, never stored (D10); `characterService.createNpc` mints approved ownerless docs outside the wizard/approval flow; `npm run seed-npcs` = confirmDb-guarded idempotent update-by-npcId refreshing ONLY the static half — mutable NPC state (pack, coins 🟡, progression) is never reset. |
-| D45 | Dialogue v1 (PLAN S4): a conversation = a `dialogue` ActivitySession walking a code node/option graph (`game/data/dialogues.ts`, graph-test-validated); template-first — ONE `small_talk` archetype dialogue serves every NPC, authored trees per NPC via `NpcDefinition.dialogueId` (`marrek_tales` is the proof). Options gate on session flags + `minTraits`, may roll d100 checks (precomputed honest %, `DIALOGUE_CHECK_AP_COST = 1` 🟡, train speechcraft per D40) and award traits/SESSION-scoped flags (durable flags = Decision queue); start = the live `talk` hub action's NPC picker; the NPC is never a session participant (a chat can't lock the merchant busy); no chronicle. |
-| D46 | Image compositing seam LIVE (`game/images/composite.ts`, `@napi-rs/canvas`, images.md §Compositing): pure `composite(spec) → Buffer` (base + `image`/`marker` layers at (x,y)); verified working on Sparkedhost via owner-only `h!imagetest` (renders synthetic in-memory fixtures, needs no art). Asset-hosting split: anything the bot's OWN renderer draws ON (map bases, avatar-frame overlays, board/piece art) is **repo-committed** under `assets/images/` and loaded by local path (D10 catalog: id → path) — the render path must not depend on a network fetch succeeding; purely-linked non-composited art may stay external, preferring GitHub raw links over third-party hosts (imgur-style hotlinking rots); a user-supplied `avatarUrl` is the one deliberate remote `ImageSource` inside a composite. No art catalog or DB wiring yet — the seam only. |
-| D47 | Rendering toolkit for the future gambling salon (extends D46): `composite()` grew `text`/`rect` layers, rotation + center anchors, and blank-canvas bases (a scene needs zero art); repo bundles DejaVu Sans (`assets/fonts/`, auto-registered by `game/images/fonts.ts` — identical text on every host; a font-less container would render text blank); `cards.ts`/`chips.ts` DRAW playing cards (52 + back, cached) and poker chips programmatically (vector suits + bundled font); `IMAGE_ASSETS` catalog (`assets.ts`: id → `assets/images/` path + named anchor points, file-existence test-validated). Rendering only — deck/shuffle/game rules belong to the salon's own module (PLAN S7). |
-| D48 | Animated GIF rendering (`game/images/animate.ts`, extends D46/D47): `renderGif(frames, opts)` encodes a `CompositeSpec[]` into one looping GIF via `@napi-rs/canvas`'s built-in `GifEncoder` (per-frame `getImageData` → `addFrame`) — one encode, one upload, no rerender+`editReply` timer loop (which would fight Discord's edit rate limit and re-upload a full image every tick). `renderCardSpinGif` demos it: a card shrinks to an edge-on sliver and swaps face↔back exactly at the `cos(angle) < 0` crossing (a real card's own geometry, not a canned flip animation) — the salon's reusable "reveal" beat. `h!imagetest gif` renders it live. `composite.ts` internals split into `renderToCanvas` (shared draw pass) + `composite` (PNG on top), so PNG and GIF paths share one layer-drawing implementation. |
-| D49 | Shared language engine `src/grammar/` (absorbs `lexicon.ts`, `lib/grammar.ts` and `lib/text.ts` morphology): `vocabulary/` = theme-tagged word-class catalogs (verbs/beings/nouns/adjectives/adverbs; the old lexicon lists live on as themes), `inflect.ts` = English morphology (plural/3rd-person/gerund/past/articles), `compose.ts` = `expand` with chainable modifiers, `sentence.ts` = the situation engine (`themeGrammar` + `randomSentence`; `SituationTheme` = themes covered by EVERY class, compile-enforced; live: combat/labor/mystic/tavern/wilds). First consumer `h!rumor`; fun-only pools stay in `fun/`; no generic `common/` dump. |
-| D50 | Item catalog split (AUDIT §2.5 executed): `game/data/items/` = `types.ts` (kinds/qualities/materials/properties + the definition union) + one entry file per kind (`weapons`, `shields`, `armor`, `consumables`, `craftingMaterials`, `clutter`); `items.ts` stays the facade (re-exports + assembles `ITEMS`, foragables still spread in per D43) so every import keeps working. Adding an item = one line in its kind's file; same folder pattern for future big catalogs (fish, per-region encounters) when they grow. |
+| D43 | Gathering engine (foraging first): a gather = short action under the lock (AP → d100 vs a location `resourceNode` → yield scaled by Success Levels + `qualityFromCheck`). Identification veil = optional instance fields; a failed identify can plausibly mislabel; Examine costs a uniform 1 AP and never reveals which labels are wrong. |
+| D44 | NPC roster: `game/data/npcs.ts`; an NPC's `Character._id` = `npc-<npcId>`, its static half resolves from the catalog; `npm run seed-npcs` is an idempotent update-by-npcId that refreshes only the static half and never resets mutable NPC state. |
+| D45 | Dialogue: a conversation = a `dialogue` ActivitySession walking a code node/option graph (`game/data/dialogues.ts`); one `small_talk` template serves every NPC, authored trees per NPC via `dialogueId`. Options gate on session flags + traits and may roll checks (1 AP 🟡). The NPC is not a session participant. |
+| D46 | Image compositing (`game/images/composite.ts`, `@napi-rs/canvas`): pure `composite(spec) → Buffer`. Anything the bot's own renderer draws ON is repo-committed under `assets/images/` and loaded by local path; purely linked art may be external; a user `avatarUrl` is the one remote source inside a composite. |
+| D47 | Rendering toolkit: `text`/`rect` layers, rotation, blank-canvas bases; bundled DejaVu Sans (`assets/fonts/`) so text renders the same on every host; `cards.ts`/`chips.ts` draw cards and chips programmatically; `IMAGE_ASSETS` catalog. Rendering only — game rules live elsewhere. |
+| D48 | Animated GIFs (`game/images/animate.ts`): `renderGif(frames)` encodes one looping GIF — one upload, never a rerender-and-edit timer loop. PNG and GIF share `renderToCanvas`. |
+| D49 | Shared language engine `src/grammar/`: theme-tagged vocabulary catalogs, `inflect.ts` (English morphology), `compose.ts` (`expand` with chainable modifiers), `sentence.ts` (situation-themed one-liners). Fun-only pools stay in `fun/`. |
+| D50 | Item catalog is a folder: `game/data/items/` = `types.ts` + one entry file per kind; `items.ts` stays the facade. Adding an item = one line in its kind's file. |
+| D51 | One for-fun brawl: `h!sparring` (random stats, no character). `/smackdown sparring`, its d20 character formula and Elo are removed. `SmackdownRecord` = `duelWins`/`duelLosses`/`trialRung`; `/leaderboard` ranks duels and the ladder. Old `eloRating`/`wins`/`losses` fields may remain on stored docs, unread. |
+| D52 | A bout is saved BEFORE it is narrated: `boutService.commitDuel`/`commitTrial` write damage → learning → reward/record, then the 30–45 s narration runs. Reward coins are paid before the rung advances, so an interruption never leaves a cleared rung unpaid. |
+| D53 | Unfinished = hidden, not deleted: hub actions with a `comingSoon` line are filtered out of the hub view, skill nodes flagged `unused` out of the skill panel, resources flagged `hidden` off the sheet. Live hub actions run through `HUB_EXECUTORS` in the `play` component (catalog entry + one executor). |
+| D54 | Starter kit (`game/data/starterKit.ts`, contents 🟡): issued once on an approved character's first `/play`, under the lock, tracked by the optional `starterKitGranted` flag — so existing and seeded characters receive it too. |
+| D55 | Modifier layer (`game/character/modifiers.ts`): every roll builds its subject with `checkSubject(character)`, which applies all modifier sources — gear and timed effects today — as attribute shifts plus a flat `checkBonus`. A new kind of modifier = one more source there, never an edit per call site. Timed effects = catalog `game/data/effects.ts` + a bounded optional `effects[]` on the character (`{effectId, expiresAt}`; expired entries ignored on read, pruned on the next apply). First effect: Honeyed Mead → Dutch Courage 🟡. |
+| D56 | Data migrations: `npm run migrate` runs the idempotent, append-only list in `scripts/migrations.ts` against the raw collections (confirmDb-guarded, `MIGRATE_CONFIRM_DB`); no "applied" bookkeeping. Use only when optional fields cannot absorb a change. |
+| D57 | Hourly regen keeps a clock (`JobState.lastHour`, `jobStateService.claimHours`) and also runs at startup (`runOnStart`): hours missed while offline are paid in one pass (cap 168 h 🟡); a restart inside an hour or a double-fired cron pays nothing twice. |
+| D58 | Solo activity sessions never expire (no TTL, no `expiresAt`): the character stays busy until the player finishes, and waiting gains nothing. Every activity must author an in-character **exit** (`ActivityExit` on each encounter and dialogue — never a generic "Cancel") that is no better than its worst choice; taking it deletes the session first, so its consequences apply once. The owner clears a stuck session with `h!session`. Shared activities will need per-turn timers when the first one exists. |
+| D59 | One command to know: the `/play` hub carries shortcuts to the pack, skills and fighting style (`play:open:<panel>` repaints the hub message, same builders as the slash commands; each panel has "Back to /play" = `play:hub`). `/character combat` opens a one-question panel for the weapon in hand; the full editor is behind "Tactics…". The public sheet has a Refresh button (units ride in the customId). Duel challenges: 30 s per challenger 🟡, one unanswered challenge per target (in-memory `pendingChallenges`, 10 min 🟡). |
+| D60 | A shop is an NPC: the merchant's own pack is the stall and its own coins the till (`game/data/shops.ts` → NPC id). `tradeService` trades between two character docs under both locks; write order favours the player on a crash. Prices in `game/economy/trade.ts` 🟡: buy = value × quality × wear, sell = half of the value the SELLER believes (a mislabeled find sells by its label and reaches the stall as what it is; an unidentified one does not sell). Each game day the first visitor resets stock and till to the catalog (`jobStateService.claimDay`) — the faucet (till) and the sink (takings). This reset is what NPC behaviour will replace. |
 
 ## Target architecture
 
@@ -189,18 +222,21 @@ src/
   game/                 server-RPG domain logic, Discord-agnostic where possible
     checks.ts           d100 roll-under engine (skill nodes/attributes, SL, difficulty, affinity)
     character/          pure rules: creation steps, attributes, skills engine, inventory,
-                        resources (attribute-derived maxes), identity/limits
-    combat/             sparring d20 (throwaway) + real duel (duel/profile/styles/plan/
+                        resources (attribute-derived maxes), identity/limits, modifiers
+                        (the one source of attribute/check shifts — D55)
+    combat/             real duel (duel/profile/styles/plan/
                         training/bouts/spireLadder/leaderboards)
-    activity/           durable-activity pure step reducers (challenge, dialogue…)
+    activity/           durable-activity pure step reducers (challenge, dialogue…) and
+                        the ActivityExit shape (D58)
     professions/        gather engine (short-action resolver, quality-from-check) +
                         identification (D43)
+    economy/            merchant pricing rules (D60)
     world/              travel rules, time (game clock), conditions, events
     images/             layered-image rendering (D46/D47/D48): composite (pure seam), animate
                         (GIF encoding), assets (id→path catalog + anchors), fonts, cards/chips
     chronicle.ts        Discord adapter (marked): public game log
     data/               static content catalogs (locations, skills, races, encounters,
-                        hubActions, weather, traits, currencies…) — see D10; items/ =
+                        hubActions, shops, weather, traits, currencies…) — see D10; items/ =
                         per-kind entry files behind the items.ts facade (D50)
   grammar/              shared language engine (D49), consumed by fun AND game: inflect
                         (English morphology), compose (Tracery-style expand + chainable
@@ -217,7 +253,7 @@ src/
                         BotEvent (+ defineEvent), CronJob
   testing/              memoryDb (useTestDb), fakeInteraction harness
   scripts/              deploy-commands, clear-commands, seed(+data), seed-npcs(+npcSeed),
-                        restore, confirmDb
+                        migrate(+migrations), restore, confirmDb
 assets/images/          repo-committed art the bot's OWN renderer draws ON (map bases, avatar
                         frames, board/piece art — D46); loaded by local path, never by network
 assets/fonts/           bundled TTFs (DejaVu Sans + license), auto-registered by
@@ -282,10 +318,11 @@ Three layers by cost (`przewodnik.md` = owner-facing walkthrough); tests colocat
    mongoose connection, wipes collections between tests. For what a mock can't prove:
    pipeline clamps, `$max`/status-guarded transitions, cross-collection transfers, the busy
    switch guard. Never point tests at a shared cloud DB.
-   **mongod caveat**: in-memory mongod reports `modifiedCount: 1` even for a NO-OP
-   `$set`/`$addToSet` — derive "did it change?" from a **filter guard** (`matchedCount`),
-   never from `modifiedCount` (`locationStateService.discoverFeature` still does the latter —
-   known double-fire risk, fix on touch).
+   **`modifiedCount` caveat**: every schema sets `timestamps: true`, so mongoose bumps
+   `updatedAt` on each update and `modifiedCount` is 1 even for a NO-OP `$set`/`$addToSet` —
+   on Atlas too, not only in tests (verified 2026-11-10; this was first misread as an
+   in-memory-mongod quirk). Derive "did it change?" from a **filter guard** (`matchedCount`),
+   never from an unguarded `modifiedCount`.
 3. **Interaction-flow tests** (`*.flow.test.ts`) — click → handler → service → in-memory DB →
    repaint, via `src/testing/fakeInteraction.ts` (`fakeButton`/`fakeSelect`/`fakeModalSubmit`,
    `fakeClient`, `routeComponent`; `profile.flow.test.ts` is the reference). Real Discord API
@@ -313,7 +350,7 @@ player must not run two activities at once.
 
 Rules:
 
-1. **Short auto-resolved actions** (sparring, a gather roll, a trade): lock all participants,
+1. **Short auto-resolved actions** (a duel, a gather roll, a trade): lock all participants,
    keep transient state in memory, commit once at the end. On crash the action is simply
    lost (accepted — it was sub-second).
 2. **Single atomic clamped writes** need no lock (D6). Locks are for read-modify-write or
@@ -325,14 +362,19 @@ Rules:
 
 ### Durable long activities (D17/D22)
 
-- `ActivitySession` `{ type, participantIds, step, status, state, expiresAt }` is both the
-  saved per-step state and the cross-restart busy lock. `state` is an opaque blob owned by
-  the activity's own code.
+- `ActivitySession` `{ type, participantIds, step, status, state }` is both the saved
+  per-step state and the cross-restart busy lock. `state` is an opaque blob owned by the
+  activity's own code. It never expires (D58).
 - **Commit per step**: `activitySessionService.advance(id, expectedStep, newState)` — a
   step-guarded atomic update, idempotent against double-clicks and crash-replay (a stale
   click returns null ⇒ repaint the current step).
-- Components carry `sessionId` in customIds; a **TTL index** on `expiresAt` reaps idle
-  sessions (timeout = forfeit ⇒ no side effect needed; only a clean cancel refunds first).
+- Components carry `sessionId` in customIds. A session ends in exactly three ways: the
+  player finishes it, the player takes its **exit**, or the owner ends it with `h!session`.
+- **Every activity authors its exit** (`game/activity/exit.ts`): an in-character way out
+  with its own label, lines and consequences, never better than the activity's worst
+  choice. `activitySessionService.abandon` returns true only for the call that removed the
+  session — apply the exit's consequences only then. The handler also provides `title()`
+  so busy notes can name what the character is in the middle of.
 - Handlers live in the `_activities/` registry (`type → { render, onAction }`); the generic
   `activity` router checks liveness + that the clicker owns a participant. **Crash-safe
   completion** (see the `challenge` handler): win the final `advance` (step guard = completion
@@ -352,7 +394,7 @@ ONE bulk write computing per-character clamped results — no read-modify-write,
 
 - Core pair: **`Account`** (per Discord user) + **`Character`** (uuid-keyed; NPC =
   `ownerId: null`). Other collections: `ActivitySession` (D17), `LocationState` (D31),
-  `Item` (D33), `SmackdownRecord`.
+  `Item` (D33), `SmackdownRecord`, `JobState` (hour and day clocks, D57/D60).
 - `models/character.ts` is **derived from the content catalogs** (resources, attributes,
   skills, currencies) — adding e.g. a currency happens in exactly one place. Resources are
   `{ current, max }`; **max is stored, not derived on read**, but its value is
@@ -394,44 +436,54 @@ smackdown, jail, leaderboards — the game features to rebuild), `modules/schema
 (→ config), secrets in source (`bot.js:76` has a **burned** MongoDB credential — never commit
 secrets), commands doing DB access directly.
 
-## Status & roadmap (2026-07-10)
+## Known risks and non-goals
 
-**Where the build queue lives: `PLAN.md`** (session-sized briefs + the owner decision queue).
-Idea backlog and full decision history: `DECISIONS.md`.
+Carried over from the July 2026 code audit and the November 2026 review (both retired):
 
-**Built and green** (662 tests, build + lint pass): core runtime; the whole fun/utility/admin
-prefix layer; AI persona; moderation + espionage logs; character creation wizard + owner
-approval; attributes + point-buy (D25); d100 checks + travel challenges (D26); `/play` hub +
-living locations (D30/D31); inventory/equipment + stash (D28/D33); skill trees + LIVE
-learn-by-doing (D34/D40); real combat — duel, bout modes, Spire ladder, styles + combat
-plans, flowing momentum (D35–D37, D41–D42); seed/backup/restore + CI (D38, AUDIT §1/§2.3/§2.9);
-gathering engine + Foraging v1 with identification/mislabels (D43, PLAN S1 — the first real
-loot source and the first live hub action); NPC roster v1 (D44, PLAN S2 — 7 named NPCs via
-`npm run seed-npcs`, presence lists come alive); Dialogue v1 (D45, PLAN S4 — the `talk` hub
-action opens durable conversations: an archetype small-talk template + Marrek's authored tree);
-image rendering (D46–D48 — `composite()` verified live on Sparkedhost via `h!imagetest`, the
-gambling-salon toolkit (text/rect layers, bundled fonts, programmatic cards/chips), and looping
-GIF animation (`h!imagetest gif`); no game consumer wired up yet); shared grammar engine
-(D49 — themed vocabulary + inflection + situation sentences; `h!rumor` is the first consumer).
+- **One process only.** In-memory locks, queues and cooldowns are correct only while a
+  single bot process touches a database. Never run `dev` against the production
+  `MONGODB_URI` while the hosted copy runs.
+- **Accepted small races:** a submit double-click can post two approval decrees (the guarded
+  transition still wins); stash transfers favour a duplicate over a loss; a consumable's
+  decrement, cleanup and effect are separate writes under the lock; a trade's goods and
+  coins are separate writes under both locks, ordered so a crash favours the player (D60).
+- **Fine at this scale, revisit only if measured:** the leaderboard sort is unindexed;
+  `atLocation` returns everyone at a place; the cooldown map never evicts.
+- **Moderation scans message text only** — not embeds, filenames, stickers or polls.
+- **Do not add:** Mongo transactions, a service/queue split, an ORM layer or DI framework.
+  The single-process model is what makes the concurrency story provable; the project's
+  enemy is scope, not scale.
 
-**Missing (current focus — the peaceful core loop, see PLAN.md):** economy/shop (S3 —
-nothing earns or spends coins yet), fishing (S6), the NPC behavior cron (6C's second half —
-Decision queue #7); hub actions besides `forage` and `talk` are still placeholders; stamina
-has no consumer.
+## Status (2026-11-14)
 
-**Pending ops (owner):** one `npm run deploy` covers the queued slash changes (`/character
-combat`, `/smackdown` trial browser, `/stash`, `/leaderboard` categories); one
-`npm run seed-npcs` populates the NPC roster on the live DB. A live end-to-end smoke against
-Atlas has still not been run.
+**What is being built and what comes next: `PLAN.md`.**
+
+Build, lint and 732 tests are green. The bot is deployed; the work of 2026-11-11 to 11-14
+has not been tested on the live bot yet.
+Built: core runtime, the fun/utility/admin prefix layer, AI persona, moderation, character
+creation + approval, attributes and checks, skill trees with learn-by-doing, the `/play` hub
+and living locations, inventory/equipment/stash, the duel engine with styles, plans and the
+Spire ladder, foraging with identification, the NPC roster, dialogue, the image toolkit and
+the grammar engine, fight records, sessions that never expire with in-character exits, the
+hub shortcuts and the first shop (the plaza merchant). Not built: a consumer for Stamina
+(hidden until it has one), Action Point prices. The starter kit is built but switched off
+(`STARTER_KIT_ENABLED`). Unbuilt hub actions and unused skill trees stay in their catalogs
+but are hidden from players.
+
+**Pending owner ops:** `npm run deploy` (`/smackdown` lost `sparring`, `/leaderboard` has new
+categories, `/character combat` has a new description); `npm run migrate` once on the live DB
+(drops the old sparring record fields and the session TTL index); `npm run seed-npcs` if the
+live DB has no NPCs yet — the shop needs the merchant character to exist.
 
 **Surfaces:**
 
 - **Prefix `h!`** — ~46 fun/utility commands (`h!help` auto-lists) + admin: `clear`,
-  `directmessage`/`dm`, `messagechannel`/`mc`, `backup`, `imagetest` (D46 compositing smoke test).
+  `directmessage`/`dm`, `messagechannel`/`mc`, `backup`, `session` (list / end stuck
+  activities), `imagetest` (D46 compositing smoke test).
 - **Slash** — `/character` (create wizard/view/list/skills/combat/switch), `/profile`,
   `/inventory` (+ Examine on foraged finds), `/stash`, `/item grant` (ownerOnly), `/smackdown`
-  (`sparring` | `duel [mode]` | `trial`), `/leaderboard [category]`, `/play` (travel + the
-  live `forage` (D43) and `talk` (D45) actions).
+  (`duel [mode]` | `trial`), `/leaderboard [category]`, `/play` (travel, shortcuts to the
+  pack / skills / fighting style, and the live `forage`, `talk`, `arena` and `market` actions).
 - **Events** — `messageCreate` (moderation → `h!` routing → ambient AI), `interactionCreate`,
   `clientReady`, `messageDelete`/`messageUpdate` (espionage edit/delete log),
   `guildMemberAdd`/`guildMemberRemove`.
@@ -439,9 +491,4 @@ Atlas has still not been run.
   `h!backup` on demand; `npm run restore` re-imports).
 - **Component namespaces** — `character`, `comic`, `activity` (+ `_activities`: `challenge`,
   `dialogue`), `profile`, `inventory`, `stash`, `play`, `duel`, `charskills`, `trial`,
-  `combatplan`.
-
-**Phases:** 0–5 ✅ (manual turn-by-turn combat deliberately deferred — AUDIT §5). Phase 6 ✅
-except **6C's second half** (the static NPC roster shipped in D44; the behavior cron waits on
-PLAN Decision queue #7). Phase 7 = the `Ruleset/` design work — all tuning numbers 🟡 until
-the owner locks them. Phase 8 (`rp/` module) = future.
+  `combatplan`, `market`, `session`.

@@ -13,6 +13,7 @@ import {
 } from '../../game/character/stash.js';
 import { ITEM_KINDS, ITEM_KIND_IDS, type ItemKindId } from '../../game/data/items.js';
 import { DEFAULT_CONTAINER, isStorageContainerId, type StorageContainerId } from '../../game/data/containers.js';
+import { busyNote } from './_activities/registry.js';
 import { buildStashCard, buildStashHub, buildStashList, resolveStashDocs, type StashResolvedPage } from './_stashPanel.js';
 import type { InventoryView } from './_inventoryPanel.js';
 import type { CharacterDoc } from '../../db/models/character.js';
@@ -29,7 +30,7 @@ import type { ToscheClient } from '../../client.js';
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 const STALE_STASH_NOTE = '👻 That item is no longer in your stash.';
-const BUSY_NOTE = '⏳ You are in the middle of something — deal with it first.';
+const BUSY_NOTE = '⏳ Your character is busy right now — try again in a moment.';
 
 export default {
    namespace: 'stash',
@@ -118,8 +119,9 @@ async function handleWithdraw(client: ToscheClient, interaction: ButtonInteracti
       }
 
       // Gear is frozen mid-adventure (D28) — the stash is no exception.
-      if (await activitySessionService.getActiveForParticipant(characterId)) {
-         await interaction.editReply(await loadCard(fresh, state, instanceId, BUSY_NOTE));
+      const session = await activitySessionService.getActiveForParticipant(characterId);
+      if (session) {
+         await interaction.editReply(await loadCard(fresh, state, instanceId, `${busyNote(session)} \`/play\` takes you back to it.`));
          return;
       }
 

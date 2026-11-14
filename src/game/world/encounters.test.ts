@@ -65,6 +65,22 @@ describe('ENCOUNTERS catalog', () => {
    });
 });
 
+describe('activity exits (D58)', () => {
+   const activities = Object.entries(ENCOUNTERS).filter(([, def]) => def.kind === 'activity');
+
+   // The type makes `exit` mandatory; this guards what the type cannot: the
+   // label must fit a Discord button (80 chars) and must not be a bare cancel.
+   it('gives every challenge an in-character way out', () => {
+      for (const [id, def] of activities) {
+         if (def.kind !== 'activity')
+            continue;
+         expect(def.exit.label.length, `${id} exit label`).toBeGreaterThan(0);
+         expect(def.exit.label.length, `${id} exit label is too long for a button`).toBeLessThanOrEqual(80);
+         expect(def.exit.label, `${id} exit must be an action, not a menu word`).not.toMatch(/^(cancel|resign|quit|exit|leave)$/i);
+      }
+   });
+});
+
 describe('conditional encounters (D31)', () => {
    it('filters by context when one is provided, stays unfiltered without one', () => {
       expect(eligibleEncounters('riverbank', ctx({ timeOfDay: 'night' })).map((e) => e.id)).toContain('reed_glimmer');

@@ -1,8 +1,8 @@
 // Discord adapter (marked): the public character sheet — `/character view`
 // (the embed that used to be `/profile` pre-D27), now with attributes and any
 // earned deed traits. Underscore prefix → loader skips it.
-import { EmbedBuilder } from 'discord.js';
-import { RESOURCES } from '../../../game/data/resources.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type MessageActionRowComponentBuilder } from 'discord.js';
+import { RESOURCES, type ResourceDefinition } from '../../../game/data/resources.js';
 import { CURRENCIES } from '../../../game/data/currencies.js';
 import { RACES } from '../../../game/data/races.js';
 import { ATTRIBUTES, ATTRIBUTE_KEYS } from '../../../game/data/attributes.js';
@@ -10,16 +10,35 @@ import { TRAITS, TRAIT_KEYS } from '../../../game/data/traits.js';
 import { EQUIPMENT_SLOTS } from '../../../game/data/equipmentSlots.js';
 import { locationName } from '../../../game/data/locations.js';
 import { displayName, isHttpUrl, STATUS_LABEL } from '../../../game/character/identity.js';
-import { equipmentAttributeModifiers, equippedItems, itemDisplayName, totalEquippedArmor } from '../../../game/character/inventory.js';
+import { equippedItems, itemDisplayName, totalEquippedArmor } from '../../../game/character/inventory.js';
+import { activeEffects, attributeShifts, modifierSources } from '../../../game/character/modifiers.js';
 import { ageBandName, bodyOf, bodyShapeName, moveSpeed } from '../../../game/character/body.js';
 import { cmToImperial, kgToImperial } from '../../../lib/units.js';
 import type { UnitSystem } from '../../../db/models/account.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
 
+export interface CharacterSheetView {
+   embeds: EmbedBuilder[];
+   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+}
+
+/** The sheet plus its Refresh button. The sheet is a public message that goes
+ *  stale as the character plays, so anyone may repaint it from the database.
+ *  The unit system rides in the customId: a refresh keeps the sheet in the
+ *  units it was first shown in, whoever clicks. */
+export function buildCharacterSheetView(character: CharacterDoc, units: UnitSystem = 'metric'): CharacterSheetView {
+   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`character:sheet:${character._id}:${units}`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+   );
+
+   return { embeds: [buildCharacterSheet(character, units)], components: [row] };
+}
+
 /** The character sheet. `units` is the VIEWER's preference (R19) — the frame is
  *  stored metric and shown imperial only when the viewer asked for it. */
 export function buildCharacterSheet(character: CharacterDoc, units: UnitSystem = 'metric'): EmbedBuilder {
-   const resources = Object.entries(RESOURCES)
+   const resources = (Object.entries(RESOURCES) as [string, ResourceDefinition][])
+      .filter(([, def]) => !def.hidden)
       .map(([key, def]) => {
          const state = character.resources[key as keyof typeof RESOURCES];
          return `**${def.name}:** ${state.current}/${state.max}`;
@@ -30,9 +49,12 @@ export function buildCharacterSheet(character: CharacterDoc, units: UnitSystem =
       .map(([key, def]) => `${def.emoji} **${def.name}:** ${character.currencies[key as keyof typeof CURRENCIES]}`)
       .join('\n');
 
-   // Equipped gear shifts effective attributes (D28): show `effective (base±mod)`
-   // so a plated canid can see exactly what the steel costs him.
-   const modifiers = equipmentAttributeModifiers(character);
+   // Gear and timed effects shift effective attributes: show `effective
+   // (base±mod)` so the player can see exactly what the steel or the mead costs.
+   const modifiers = attributeShifts(modifierSources(character));
+   const effects = activeEffects(character)
+      .map(({ definition, expiresAt }) => `${definition.emoji} **${definition.name}** — ${definition.description} _(ends <t:${Math.floor(expiresAt.getTime() / 1000)}:R>)_`)
+      .join('\n');
    const attributes = ATTRIBUTE_KEYS
       .map((key) => {
          const base = character.attributes[key];
@@ -77,6 +99,7 @@ export function buildCharacterSheet(character: CharacterDoc, units: UnitSystem =
          { name: 'Body', value: bodyValue },
          { name: 'Attributes', value: attributes },
          ...(gear ? [{ name: `Equipment · 🛡️ Armor ${totalEquippedArmor(character)}`, value: gear }] : []),
+         ...(effects ? [{ name: 'Effects', value: effects }] : []),
          ...(traits ? [{ name: 'Traits', value: traits }] : []),
       );
 

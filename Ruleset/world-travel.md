@@ -4,6 +4,8 @@ See [README.md](README.md) for the legend.
 
 ---
 
+> **What is built:** [implementation/world-travel.md](implementation/world-travel.md). This file holds only the rules.
+
 ## Reference (decided data & math)
 
 **Action Points** — `{current, totalEarned}`, **no cap**, `+AP_REGEN_PER_HOUR = 1`/hr (🟡),
@@ -59,7 +61,7 @@ Locations form a graph; moving along an edge is the first thing that spends AP a
 have its **own things to do** — a design constraint, not yet fully realized: a tavern implies
 gambling/rest, a plaza implies market/gossip, a training ground implies duels, a riverbank
 implies its own fishing table. A location that's just "a button that renames a string" isn't
-worth having; the `/play` hub's local-action buttons (Implementation, below) are the intended
+worth having; the `/play` hub's local-action buttons (implementation/world-travel.md) are the intended
 surface for this, but almost all of them are still placeholders.
 
 ### Living locations ✅ direction D31
@@ -99,6 +101,36 @@ also **discover** a location feature. Since D40, every **rolled** option also tr
 path (learn-by-doing, weighted by how hard the roll was for that character — skills.md's
 Reference formula); checkless choices train nothing.
 
+### Unfinished activities — no clock, but always a way out ✅ built (D58)
+A multi-step activity (a challenge on the road, a conversation) does **not** time out. The
+character stays in it — and can do nothing else — until the player finishes it. Starting any
+other action simply brings the unfinished step back.
+
+Why no time limit: a deadline punishes the honest player whose connection dropped, and it
+rewards the one who would rather wait out a bad situation than face it. With no deadline,
+waiting gains nothing — Health does not even regenerate while the character is busy (Action
+Points do).
+
+Because nothing ends an activity for the player, **every step must offer a way out**, and
+three rules bind it:
+
+- **It is in character, and each activity writes its own.** Never "Cancel" or "Resign". At a
+  fallen tree the character kicks the trunk and trudges back; a climber lets go and drops;
+  in a conversation the character insults the other side and the talk is cut off; in a
+  fight it is a surrender.
+- **It is never better than the worst choice.** Walking on past a drowning stranger costs a
+  point of Cowardice and gets you where you were going; backing away from the bank costs the
+  same point and the journey too.
+- **Its consequences land once, at that moment** — like every other consequence in an
+  activity, which is saved at the step it happens and never held until the end.
+
+Later, when an exit can cost Health: reaching 0 Health will carry penalties, never permanent
+death (pillar 3). When an activity has several players (a card table, a manual duel), each
+turn will need a short timer and a default move, because there someone else is waiting.
+
+The owner can end a stuck activity by hand (`h!session`); that frees the character with no
+consequence.
+
 ### The chronicle ✅ D24
 Gameplay itself should stay **ephemeral** (only the acting player sees their own journey step
 by step), but outcomes worth an audience — arrivals, cleared/failed encounters, future duels —
@@ -124,106 +156,6 @@ the other files perform on:
   bias profession + encounter tables (a storm churns rarer fish, hides forage).
 - **AP costs** — travel is a placeholder 0; foraging/fishing/crafting/talking-with-a-check are the
   first real AP sinks to price (still 🟡).
-
-### Action Points — `characterService.spendActionPoints` ✅ rule / 🟡 rate
-`actionPoints: {current, totalEarned}`, no cap. `regenAll`/`regenAllBusy`/`regen` (the hourly
-`resource-regen` job) `$inc` both fields — and AP accrues **even while a character is busy** in
-an active `ActivitySession` (unlike the vitals, which pause — flavor-progression.md doesn't
-cover this, it's a resource-regen rule: see root `CLAUDE.md`'s D23). Spend is atomic
-(`current >= cost` filter-guarded, so it can never go negative under concurrency).
-`AP_REGEN_PER_HOUR = 1` and `TRAVEL_AP_COST = 0` are both 🟡 placeholders — the spend
-*plumbing* is real, the *prices* aren't decided.
-
-### Locations — `game/data/locations.ts` ✅ graph / 🟡 content
-`spire` (start) ↔ `plaza` ↔ `tavern`, `plaza` ↔ `riverbank`. `connectedTo` is **undirected and
-test-enforced** (`travel.test.ts`: every edge exists on both ends, no self-loops, no dangling
-target — a bad edit fails `npm test`). A location may declare `climate` (weather-weight
-overrides), `features` (discoverable points of interest, hidden until found), and `baseStats`
-(danger/prosperity starting values) — all optional and test-validated. A stale stored
-`locationId` (e.g. after a content rename) resolves to the starting location rather than
-crashing.
-
-### Living state — `db/models/locationState.ts` + `locationStateService` ✅ D31
-One doc per location, created **lazily on first read** (`getFresh`) — no seeding step needed.
-`{ weather: {kind, since, until}, events: [{eventId, startedAt, endsAt}],
-discoveredFeatureIds: string[], stats: Record<string, number>, visits: number }`. Weather
-re-rolls via a **filter-guarded** update once `until` lapses (only one concurrent request wins
-the re-roll); events are swept (removed) on read past `endsAt` and started via a guarded
-`tryStartEvent` (same one-winner-among-concurrent-arrivals shape); `discoveredFeatureIds` is
-server-wide (`$addToSet`, chronicled once); `stats` is a plain object keyed by
-`LOCATION_STATS` (`danger`, `prosperity`) so **adding a stat needs no migration**; `adjustStat`
-is the clamped write seam (⬜ nothing drives it yet — no event/outcome writes a stat delta in
-play today).
-
-**Presence is deliberately not stored anywhere** — `characterService.atLocation` is an indexed
-query over `Character.locationId` (approved characters, active or benched, plus every NPC;
-drafts aren't in the world). One source of truth, nothing to drift under concurrent moves.
-
-### The game clock & conditions — `game/world/{time,conditions}.ts` ✅ D31
-`timeOfDay()` maps the real clock (a fixed `GAME_UTC_OFFSET_HOURS`) to `morning/day/evening/
-night`. `LocationCondition = { timeOfDay?, weather?, duringEvent?, requiresDiscovery?,
-minTraits? }`, evaluated by `evaluateCondition(condition, worldContext(state, character))`,
-returning a short player-facing reason on failure ("only during the evening or night"). Used
-by hub-action availability (+ `hidden` for undiscovered secrets), encounter `conditions`, and
-event start conditions. `minTraits` is the first thing in the whole codebase that reads deed
-traits (flavor-progression.md) — e.g. a plaza NPC only greets a character with `empathy ≥ 1`.
-
-### Weather & location events — `game/data/{weather,locationEvents}.ts` ✅ shape / 🟡 content
-Weather kinds: `clear, overcast, rain, storm, fog`, each with a name/emoji/hub line/duration/
-default roll weight. Location events ship three: `market_day` (plaza, daylight), `bards_night`
-(tavern, evening/night — unlocks a `listen` hub action), `garrison_drill` (spire, daylight).
-Both are pure flavor + condition-gating today; neither has a mechanical effect on checks yet.
-
-### Travel flow — `commands/components/_playPanel.ts` + `_hubView.ts` ✅ D21/D30/D31
-Travel is a **`/play` hub action** (the standalone `/travel` command was folded in — D30), not
-a separate command. The hub shows the location's weather/time/danger·prosperity line, running
-events, and **who is standing there** (players + NPCs); its "Travel to…" select lists connected
-locations. Picking one, under the character's lock: re-check busy (an active session
-**re-enters** its current step instead of erroring) → `canCharacterAct(character,
-TRAVEL_AP_COST)` → edge check (`game/world/travel.ts`) → atomic AP spend → read the
-destination's live `LocationState` → roll a conditional encounter (chance biased by the
-destination's danger stat) → either arrive (`setLocation` + `recordVisit` + possible feature
-discovery/event start + re-render the hub) or hand off to an interrupting `challenge` activity
-session (below). Local-action buttons on the hub are filtered by `availability` at render *and*
-re-validated at click time (a panel can go stale: the character may have moved, night may have
-fallen).
-
-### Travel encounters — `game/data/encounters.ts` ✅ model / 🟡 content
-Rolled per move: `TRAVEL_ENCOUNTER_CHANCE_PERCENT + destination danger`, weighted pick among
-encounters eligible for that destination (`locations: [...ids] | 'anywhere'`, optionally gated
-by the shared `conditions` language). Two kinds:
-- **`flavor`** — a random line appended to the arrival message + chronicle; the move completes
-  normally (`patrol_gossip`, `dropped_ribbon`, and the conditional `soaked_traveler` /
-  `grateful_beggar`).
-- **`activity`** — interrupts the move with a durable **`challenge`** `ActivitySession`
-  (root `CLAUDE.md`'s D17/D22 durability infrastructure — session-per-step, crash-safe,
-  restart-proof buttons) exposing several `options`, each either a d100 `CheckDefinition`
-  (combat.md) with `success`/`failure` outcomes, or a check-free choice. An outcome
-  (`ChallengeOutcome`) is `result` (`proceed` completes the journey / `turn-back` ends it at
-  the origin / `retry` costs a **setback**, forcing a retreat once `maxSetbacks` is hit) +
-  flavor lines + optional trait deltas + an optional feature discovery. `oneShot` options
-  retire after one failure. Current content: `fallen_tree` (climb Agility / heave Strength /
-  search Perception, one-shot) and `drowning_stranger` (riverbank: swim Agility+Swimming —
-  lutren ×1.5 — for +courage/+empathy; find a branch via Perception; or walk on, free, for
-  +cowardice; the night-only variant `reed_glimmer` discovers the riverbank's hidden jetty).
-  Per-option check targets are computed once, at session creation, and **stored in the session
-  state** — so a repainted panel's shown odds and the actually-rolled odds can never disagree.
-  The generic `activity` component router + the `_activities/` handler registry (root
-  `CLAUDE.md` D22) dispatch `challenge` sessions; `game/activity/challenge.ts` holds the pure,
-  tested step-reducer. Every ending (arrival, forced retreat, a clean "Turn back") re-renders
-  the `/play` hub at wherever the character ends up.
-
-### The chronicle — `game/chronicle.ts` ✅ D24
-`postChronicle(client, line)` posts short, never-pinging lines to `settings.channels.chronicle`
-(best-effort — a missing channel logs a warning and never fails the action). Used today by
-travel arrivals and encounter/challenge outcomes.
-
-### Hub local actions — `game/data/hubActions.ts` ✅ scaffold / 🟨 first real action
-**`forage` is LIVE (S1)** at the riverbank and the Tanglewood — the first placeholder flipped
-to a real handler (`play` router → `_forageAction.ts`; professions.md R16). The catalog marks
-liveness by OMITTING `comingSoon` (a live action's locations are test-locked to its resource
-nodes). Every other button still shows its in-character "coming soon" line (tavern gambling,
-plaza market, fishing…), each one a catalog flip + one router case away.
 
 ---
 

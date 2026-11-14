@@ -15,6 +15,7 @@ import {
 } from 'discord.js';
 import { ATTRIBUTES, type AttributeKey } from '../../game/data/attributes.js';
 import { RESOURCES } from '../../game/data/resources.js';
+import { effectDefinition } from '../../game/data/effects.js';
 import { EQUIPMENT_SLOTS, EQUIPMENT_SLOT_IDS } from '../../game/data/equipmentSlots.js';
 import {
    ITEM_KINDS,
@@ -55,7 +56,9 @@ import {
 } from '../../game/character/inventory.js';
 import { displayName } from '../../game/character/identity.js';
 import { roundTo } from '../../lib/number.js';
+import { truncate } from '../../lib/text.js';
 import type { CharacterDoc } from '../../db/models/character.js';
+import { backToPlayRow } from './_backToPlay.js';
 
 const PANEL_COLOR = 0x8B5E34; // saddle leather
 
@@ -102,6 +105,7 @@ export function buildInventoryHub(character: CharacterDoc, note?: string): Inven
    const worn = equippedRow(character);
    if (worn)
       components.push(worn);
+   components.push(backToPlayRow());
 
    return { embeds: [embed], components };
 }
@@ -451,8 +455,11 @@ export function lineSummary(item: ResolvedItem): string {
    if (def.kind === 'shield' || def.kind === 'armor')
       return `AV ${def.armor} · ${formatKg(def.weightKg)}`;
    if (def.kind === 'consumable') {
-      const effects = Object.entries(def.effects).map(([key, amount]) => `${amount > 0 ? '+' : ''}${amount} ${RESOURCES[key as keyof typeof RESOURCES].name}`).join(', ');
-      return `${effects || 'no effect'} · ${formatKg(def.weightKg)}`;
+      const effects = Object.entries(def.effects).map(([key, amount]) => `${amount > 0 ? '+' : ''}${amount} ${RESOURCES[key as keyof typeof RESOURCES].name}`);
+      const timed = def.grantsEffect ? effectDefinition(def.grantsEffect) : undefined;
+      if (timed)
+         effects.push(`${timed.emoji} ${timed.name}`);
+      return `${effects.join(', ') || 'no effect'} · ${formatKg(def.weightKg)}`;
    }
 
    // Weight is physical — the REAL definition's, so a list row can never
@@ -514,8 +521,4 @@ function modifierSummary(character: CharacterDoc): string {
 
 function formatKg(kg: number, unit = true): string {
    return `${roundTo(kg, 1)}${unit ? ' kg' : ''}`;
-}
-
-function truncate(text: string, max: number): string {
-   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }

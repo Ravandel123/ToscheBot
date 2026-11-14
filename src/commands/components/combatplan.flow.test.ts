@@ -156,3 +156,32 @@ describe('combatplan handler — guards', () => {
       expect(captured.updates).toHaveLength(0);
    });
 });
+
+describe('combatplan handler — the simple panel (D59)', () => {
+   it('sets the style from the one-question panel and stays on it', async () => {
+      const characterId = await withActiveCharacter();
+      const { interaction, captured } = fakeSelect('combatplan:quick:unarmed', ['striker'], USER);
+
+      await combatPlanHandler.handle(fakeClient(), interaction);
+
+      expect((await storedPlan(characterId, 'unarmed'))?.style).toBe('striker');
+      const repaint = JSON.stringify(captured.updates.at(-1));
+      expect(repaint).toContain('how do you fight?');
+      expect(repaint).toContain('combatplan:show'); // the Tactics… button
+      expect(repaint).not.toContain('combatplan:newrule');
+   });
+
+   it('switches between the simple panel and the full tactics editor', async () => {
+      await withActiveCharacter();
+
+      const tactics = fakeButton('combatplan:show', USER);
+      await combatPlanHandler.handle(fakeClient(), tactics.interaction);
+      const full = JSON.stringify(tactics.captured.updates.at(-1));
+      expect(full).toContain('combatplan:newrule:unarmed');
+      expect(full).toContain('combatplan:simple');
+
+      const simple = fakeButton('combatplan:simple', USER);
+      await combatPlanHandler.handle(fakeClient(), simple.interaction);
+      expect(JSON.stringify(simple.captured.updates.at(-1))).toContain('combatplan:quick:unarmed');
+   });
+});

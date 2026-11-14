@@ -2,12 +2,13 @@ import { MessageFlags, type ButtonInteraction, type SendableChannels } from 'dis
 import type { ComponentHandler } from '../../types/interactions.js';
 import { characterService } from '../../db/services/characterService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
+import { boutService } from '../../db/services/boutService.js';
 import { canCharacterAct } from '../../game/character/rules.js';
 import { displayName } from '../../game/character/identity.js';
 import { boutMode, type BoutMode } from '../../game/combat/bouts.js';
 import { combatProfile } from '../../game/combat/profile.js';
-import { resolveDuel, type CombatProfile, type DuelResult } from '../../game/combat/duel.js';
-import { trainingNodes, trainingWeight } from '../../game/combat/training.js';
+import { resolveDuel, type DuelResult } from '../../game/combat/duel.js';
+import { pendingChallenges } from '../../game/combat/pendingChallenges.js';
 import { postChronicle } from '../../game/chronicle.js';
 import { sleep } from '../../lib/async.js';
 import {
@@ -34,13 +35,9 @@ import type { ToscheClient } from '../../client.js';
 // starts it — nobody loses Health while offline. Stateless like every component
 // (ids ride in the customId), so the buttons survive a restart.
 //
-// SEAM for expansion: turn-by-turn manual control (combat.md R24 option 2) reuses
-// this same profile/engine and would layer a durable ActivitySession + per-round
-// buttons on top; wagers, a duel win/loss record, and Trial/PvE (NPC opponents)
-// are the other documented next steps.
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
-// Pacing of the narrated bout (mirrors sparring, a touch tighter).
+// Pacing of the narrated bout.
 const INTRO_DELAY_MS = 1500;
 const ROUND_DELAY_MS = 1200;
 
@@ -80,10 +77,11 @@ async function handleAccept(client: ToscheClient, interaction: ButtonInteraction
       return;
    }
    startingCards.add(interaction.message.id);
+   // Answered, whatever happens next — the target may be challenged again.
+   pendingChallenges.clear(opponentId);
 
    try {
-      // A held lock means a fight is already running (an unrelated sparring
-      // match, or a duel accepted a moment ago) — bail before queueing a second
+      // A held lock means a fight is already running — bail before queueing a second
       // one behind it.
       if (client.locks.isLocked(challengerId) || client.locks.isLocked(opponentId)) {
          await interaction.reply({ content: 'One of you is already in a fight — let it finish first.', ...ephemeral });
@@ -131,15 +129,16 @@ async function handleDecline(interaction: ButtonInteraction, challengerId: strin
       return;
    }
 
+   pendingChallenges.clear(opponentId);
+
    const challenger = await characterService.get(challengerId);
    await interaction.update(buildDeclinedCard(challenger ? displayName(challenger) : 'The challenger', displayName(opponent)));
 }
 
 /**
  * Runs the whole bout under both characters' lock (so regen/other writes can't
- * interleave — D5), re-reads the authoritative docs, resolves, narrates, then
- * persists each fighter's damage. Exported for a future manual-mode resolver to
- * reuse.
+ * interleave — D5), re-reads the authoritative docs, resolves, saves the
+ * outcome, then narrates it.
  */
 async function runDuel(client: ToscheClient, channel: SendableChannels, challengerId: string, opponentId: string, modeId: string): Promise<void> {
    const mode = boutMode(modeId);
@@ -170,22 +169,17 @@ async function runDuel(client: ToscheClient, channel: SendableChannels, challeng
       const names = { [p1.characterId]: p1.name, [p2.characterId]: p2.name };
       const maxHealth = { [p1.characterId]: p1.maxHealth, [p2.characterId]: p2.maxHealth };
 
+      // Decide and SAVE the bout first (damage, learning, the win/loss record),
+      // then tell it — a restart mid-narration must not undo a fought duel.
       const result = resolveDuel(p1, p2);
+      const levelUps = await boutService.commitDuel(p1, p2, result);
+
       await narrateDuel(channel, result, names, maxHealth, mode);
-
-      // Persist REAL damage to both (delta = end − start, ≤ 0). Atomic clamped
-      // deltas (D6) compose with the deferred regen that lands after we release.
-      await Promise.all([
-         applyDamage(p1.characterId, p1.health, result.finalHealth[p1.characterId]),
-         applyDamage(p2.characterId, p2.health, result.finalHealth[p2.characterId]),
-      ]);
-
-      // Learn-by-doing (D40/D41): both fighters trained the paths they actually
-      // fought in (each used style's branch, the weapon branch when armed), win
-      // or lose, weighted by how dangerous the OTHER one was — a pushover
-      // credits nothing. Still under both locks, so the map write is safe.
-      await creditBout(channel, p1, p2, result);
-      await creditBout(channel, p2, p1, result);
+      for (const fighter of [p1, p2]) {
+         const gained = levelUps[fighter.characterId];
+         if (gained.length > 0)
+            await announce(channel, buildTrainingLine(fighter.name, gained));
+      }
 
       await postChronicle(client, chronicleLine(result, names));
    });
@@ -210,20 +204,6 @@ async function narrateDuel(channel: SendableChannels, result: DuelResult, names:
    }
 
    await announce(channel, buildOutcomeLine(result, names, maxHealth));
-}
-
-async function applyDamage(characterId: string, startHealth: number, endHealth: number): Promise<void> {
-   const delta = endHealth - startHealth;
-   if (delta !== 0)
-      await characterService.applyResourceDeltas(characterId, { health: delta });
-}
-
-/** Credits one fighter's skill use for the bout and announces any rank-ups. */
-async function creditBout(channel: SendableChannels, self: CombatProfile, foe: CombatProfile, result: DuelResult): Promise<void> {
-   const nodes = trainingNodes(self, result.stylesUsed[self.characterId] ?? []);
-   const levelUps = await characterService.creditSkillUse(self.characterId, nodes, trainingWeight(self, foe));
-   if (levelUps.length > 0)
-      await announce(channel, buildTrainingLine(self.name, levelUps));
 }
 
 /** A reason this character cannot duel right now, or null. Approval + Health via

@@ -82,12 +82,16 @@ export interface SkillNode {
    /** Points reachable by ordinary practice. Omitted ⇒ SKILL_NODE_CAP. */
    cap?: number;
    description?: string;
+   /** Nothing in the game checks or trains this node (or anything under it)
+    *  yet — kept in the catalog, hidden from the skill panel. Remove the flag
+    *  when the first consumer lands. */
+   unused?: boolean;
 }
 
 export const SKILL_NODES = {
    // === Smithing — the crafting worked example (low attribute weight; the sum
    // is what matters, and it can run high → crafting quality) ================
-   smithing: { name: 'Smithing', parent: null, attributes: { intelligence: 0.2, dexterity: 0.1 }, description: 'Working metal at the forge — the foundation of every smith.' },
+   smithing: { name: 'Smithing', parent: null, unused: true, attributes: { intelligence: 0.2, dexterity: 0.1 }, description: 'Working metal at the forge — the foundation of every smith.' },
    weaponsmithing: { name: 'Weaponsmithing', parent: 'smithing', description: 'Forging arms rather than tools or plate.' },
    bladesmithing: { name: 'Bladesmithing', parent: 'weaponsmithing', description: 'Swords, daggers and knives.' },
    axesmithing: { name: 'Axesmithing', parent: 'weaponsmithing', description: 'Axes and cleaving heads.' },
@@ -100,7 +104,7 @@ export const SKILL_NODES = {
 
    // === Metallurgy — the cross-tree MATERIAL path a recipe also draws on (a
    // longsword sums the smithing path AND iron_metallurgy) ===================
-   metallurgy: { name: 'Metallurgy', parent: null, attributes: { intelligence: 0.2 }, description: 'Knowing ores, alloys and how metal behaves in the fire.' },
+   metallurgy: { name: 'Metallurgy', parent: null, unused: true, attributes: { intelligence: 0.2 }, description: 'Knowing ores, alloys and how metal behaves in the fire.' },
    iron_metallurgy: { name: 'Iron & Steel', parent: 'metallurgy', description: 'Smelting and working iron and steel.' },
    bronze_metallurgy: { name: 'Bronze', parent: 'metallurgy', description: 'The polcan monopoly — alloying tin and copper.' },
 
@@ -109,8 +113,8 @@ export const SKILL_NODES = {
    speechcraft: { name: 'Speechcraft', parent: null, attributes: { charisma: 0.5 }, growth: 'branch', description: 'Bending others with words.' },
    persuade: { name: 'Persuade', parent: 'speechcraft', description: 'Reason, charm and appeal — pure charisma.' },
    // The owner's example: menace is half presence, half muscle.
-   intimidate: { name: 'Intimidate', parent: 'speechcraft', attributes: { charisma: 0.25, strength: 0.25 }, description: 'Menace — 50% charisma, 50% raw strength.' },
-   deceit: { name: 'Deceit', parent: 'speechcraft', attributes: { charisma: 0.25, intelligence: 0.25 }, description: 'A convincing lie needs charm and a quick mind.' },
+   intimidate: { name: 'Intimidate', parent: 'speechcraft', unused: true, attributes: { charisma: 0.25, strength: 0.25 }, description: 'Menace — 50% charisma, 50% raw strength.' },
+   deceit: { name: 'Deceit', parent: 'speechcraft', unused: true, attributes: { charisma: 0.25, intelligence: 0.25 }, description: 'A convincing lie needs charm and a quick mind.' },
 
    // === Physical — Athletics (keeps the swim check working; attribute-heavy so
    // a non-opposed test vs a fixed difficulty stays fair) ====================
@@ -154,7 +158,7 @@ export const SKILL_NODES = {
    cleaving: { name: 'Cleaving', parent: 'two_handed', growth: 'branch', description: 'Great committed blows — weight and momentum over caution.' },
    halfswording: { name: 'Halfswording', parent: 'two_handed', growth: 'branch', description: 'Gripping blade or haft to bind, hook and wrestle the foe\'s weapon.' },
    iron_ward: { name: 'Iron Ward', parent: 'two_handed', growth: 'branch', description: 'The braced two-handed guard — let the storm break, then answer.' },
-   ranged: { name: 'Ranged', parent: null, attributes: { dexterity: 0.5 }, description: 'Bows, slings and thrown weapons.' },
+   ranged: { name: 'Ranged', parent: null, unused: true, attributes: { dexterity: 0.5 }, description: 'Bows, slings and thrown weapons.' },
    // The brawling branches double as the unarmed STYLES' nodes (D41): unarmed,
    // the technique IS the approach, so a style draws its attack and defence
    // straight from its branch (Striker→striking, Grappler→grappling…).
@@ -225,6 +229,12 @@ export function pathToRoot(id: SkillNodeId): SkillNodeId[] {
 /** Tree depth: a root is 0, its children 1, … (used for the default growth tier). */
 export function nodeDepth(id: SkillNodeId): number {
    return pathToRoot(id).length - 1;
+}
+
+/** Whether the skill panel shows a node: false when it, or any ancestor, is
+ *  flagged `unused`. */
+export function isSkillVisible(id: SkillNodeId): boolean {
+   return pathToRoot(id).every((nodeId) => !skillNode(nodeId).unused);
 }
 
 /** The growth profile that governs a node — explicit, else defaulted by depth. */

@@ -9,3 +9,8 @@ export const underline = (text: string): string => `__${text}__`;
 export function capitalize(text: string): string {
    return text.length === 0 ? text : text[0].toUpperCase() + text.slice(1);
 }
+
+/** Cuts text to Discord's field limits (select labels, descriptions…) with an ellipsis. */
+export function truncate(text: string, max: number): string {
+   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}

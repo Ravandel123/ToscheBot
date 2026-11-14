@@ -11,7 +11,7 @@ import { characterService } from '../../db/services/characterService.js';
 import { inventoryService } from '../../db/services/inventoryService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { canCharacterAct, type ActBlockReason } from '../../game/character/rules.js';
-import { attributesWithEquipment } from '../../game/character/inventory.js';
+import { checkSubject } from '../../game/character/modifiers.js';
 import { displayName } from '../../game/character/identity.js';
 import { locationName } from '../../game/data/locations.js';
 import { skillNode } from '../../game/data/skills.js';
@@ -25,6 +25,7 @@ import {
    type GrantOrder,
 } from '../../game/professions/gather.js';
 import { postChronicle } from '../../game/chronicle.js';
+import { busyNote } from './_activities/registry.js';
 import { freshHubView } from './_hubView.js';
 import { sessionStepView } from './_playPanel.js';
 import type { SkillLevelUp } from '../../game/character/skills.js';
@@ -53,7 +54,7 @@ export async function performForage(client: ToscheClient, interaction: MessageCo
 
       const session = await activitySessionService.getActiveForParticipant(fresh._id);
       if (session) {
-         const view = sessionStepView(session, '⚠️ You are already in the middle of something — deal with it first.');
+         const view = sessionStepView(session, busyNote(session));
          await interaction.editReply(view ?? { content: `You are busy with: ${session.type}.`, embeds: [], components: [] });
          return;
       }
@@ -76,8 +77,7 @@ export async function performForage(client: ToscheClient, interaction: MessageCo
       }
 
       // The roll reads equipment-modified attributes, like every other check (D28).
-      const subject = { ...fresh, attributes: attributesWithEquipment(fresh) };
-      const resolution = resolveGather(subject, located.node);
+      const resolution = resolveGather(checkSubject(fresh), located.node);
 
       // Grant the haul (encumbrance-checked per order); a full pack loses the
       // remainder honestly rather than overflowing it.

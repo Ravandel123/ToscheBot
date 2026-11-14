@@ -227,8 +227,9 @@ export type AddItemsCheck =
    | { ok: false; reason: 'inventory-full' | 'too-heavy' };
 
 /** Whether `quantity` of an item fits (stack limit + carry capacity).
- *  `mystery` items (granted unidentified/mislabeled) never merge into a stack. */
-export function canAddItems(character: EquipSubject, itemId: string, definition: ItemDefinition, quality: ItemQualityId, quantity: number, mystery = false): AddItemsCheck {
+ *  `mystery` items (granted unidentified/mislabeled) never merge into a stack.
+ *  `ignoreWeight` waives the carry limit — a merchant's stall is not on anyone's back. */
+export function canAddItems(character: EquipSubject, itemId: string, definition: ItemDefinition, quality: ItemQualityId, quantity: number, mystery = false, ignoreWeight = false): AddItemsCheck {
    const stackWith = mystery ? null : findStack(character, itemId, quality);
    const stackable = ITEM_KINDS[definition.kind].stackable;
    const newEntries = stackWith ? 0 : (stackable ? 1 : quantity);
@@ -236,7 +237,7 @@ export function canAddItems(character: EquipSubject, itemId: string, definition:
    if (inventoryOf(character).length + newEntries > INVENTORY_STACK_LIMIT)
       return { ok: false, reason: 'inventory-full' };
 
-   if (carriedWeightKg(character) + definition.weightKg * quantity > carryCapacityKg(character))
+   if (!ignoreWeight && carriedWeightKg(character) + definition.weightKg * quantity > carryCapacityKg(character))
       return { ok: false, reason: 'too-heavy' };
 
    return { ok: true, stackWith };
@@ -323,8 +324,9 @@ export function equipmentAttributeModifiers(character: InventoryState): Partial<
    return modifiers;
 }
 
-/** Effective attributes WITH equipped gear applied (floored at 1) — what d100
- *  checks should roll against: a lutren in full plate swims like a brick. */
+/** Attributes with ONLY equipped gear applied (floored at 1). Rolls must not use
+ *  this directly — build the subject with `checkSubject` (modifiers.ts), which
+ *  also applies timed effects. */
 export function attributesWithEquipment(character: EquipSubject): Record<AttributeKey, number> {
    const modifiers = equipmentAttributeModifiers(character);
 

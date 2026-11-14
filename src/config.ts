@@ -26,5 +26,8 @@ export const config: BotConfig = {
    prefix: 'h!',
    // Optional: set OPENAI_API_KEY in .env to enable the AI persona.
    openaiApiKey: process.env.OPENAI_API_KEY || undefined,
-   openaiModel: process.env.OPENAI_MODEL || 'gpt-5-nano',
+   openaiModel: process.env.OPENAI_MODEL || 'gpt-6-luna',
+   // Optional: comma-separated names the AI persona answers to, replacing the
+   // defaults in settings.ts (the local test bot sets `tyril`).
+   aiTriggerNames: process.env.AI_TRIGGER_NAMES?.split(',').map((name) => name.trim().toLowerCase()).filter(Boolean),
 };

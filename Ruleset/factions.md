@@ -11,6 +11,8 @@ core racial-tension conflict (README's "core wound").
 
 ---
 
+> **What is built:** [implementation/factions.md](implementation/factions.md). This file holds only the rules.
+
 ## Reference (decided data & math)
 
 **Storage** — `Character.reputation: Partial<Record<FactionId, number>>`, **sparse** (absent =
@@ -91,24 +93,6 @@ Keep this optional; not v1.
   cheap or a guard is cross; the bot narrates it. Never a spreadsheet.
 - **Deep** — track the numbers, farm a faction toward a gate, exploit relation-spillover,
   chase a rank/title, run the racial-tension arcs.
-
----
-
-## Implementation
-
-⬜ **Nothing is built.** Reputation is the first genuinely *new* per-character field this set of
-changes adds beyond deed traits. First build:
-1. `game/data/factions.ts` — the catalog (ids append-only, D10; test-validated: every
-   `relations` target exists, baselines reference real races).
-2. `Character.reputation` sparse map + `characterService.applyReputationDeltas` (atomic clamped
-   delta, with **relation-spillover** computed from the catalog — one write applies the primary
-   delta and the weighted secondary deltas).
-3. `game/factions.ts` — pure helpers: `reputationOf(character, factionId)` (stored value or
-   racial baseline), `tierOf(value)`, `spilloverDeltas(factionId, delta)`.
-4. Consumers, in likely order: conversations.md `minRep` gates + rep-awarding options →
-   `/character view` display → shop pricing (economy.md) → NPC reactions (npcs.md).
-
-Reuses the exact atomic-clamped-delta pattern already used for currencies and traits.
 
 ---
 

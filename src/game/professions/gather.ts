@@ -12,7 +12,7 @@ import type { MysteryFields } from '../character/inventory.js';
 // gathering profession — spend AP, roll the profession check vs the node,
 // yield instances where QUANTITY scales with Success Levels and per-instance
 // QUALITY comes from the check's surplus, then sweep the haul with one
-// identify roll. Fishing (S2) reuses everything here except the identify
+// identify roll. Fishing (later) reuses everything here except the identify
 // sweep (a carp is a carp). A gather is a SHORT action (D5 rule 1) resolved
 // in memory under the character lock — never an ActivitySession.
 // 🟡 Every number is a balance placeholder (sim-checked, owner-unsigned).

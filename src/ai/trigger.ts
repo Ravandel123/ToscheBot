@@ -1,5 +1,6 @@
 import type { Message } from 'discord.js';
 import type { ToscheClient } from '../client.js';
+import { config } from '../config.js';
 import { settings } from '../settings.js';
 import { chance } from '../lib/random.js';
 import { replyChunked } from '../lib/discord.js';
@@ -7,7 +8,7 @@ import { log } from '../lib/log.js';
 import { PERSONA_PROMPT } from './persona.js';
 import type { AiMessage } from './aiService.js';
 
-const triggerNames = settings.ai.triggerNames as readonly string[];
+const triggerNames: readonly string[] = config.aiTriggerNames?.length ? config.aiTriggerNames : settings.ai.triggerNames;
 const aiChannels = settings.ai.channels as readonly string[];
 const silentChannels = settings.ai.silentChannels as readonly string[];
 

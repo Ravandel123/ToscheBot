@@ -1,75 +1,53 @@
 import { describe, expect, it } from 'vitest';
 import { smackdownService } from './smackdownService.js';
 import { SmackdownRecord } from '../models/smackdownRecord.js';
-import { DEFAULT_ELO, eloChange } from '../../game/combat/elo.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// Only a real Mongo proves the pieces a hand-mock can't: the upsert defaults,
-// the symmetric $inc on both records, the DYNAMIC sortField leaderboard, and —
-// the important one — the `$max`-guarded trialRung that must never regress on a
-// replay/double (D37).
+// Only a real Mongo proves the pieces a hand-mock can't: the upsert defaults
+// (a field may not sit in both $setOnInsert and $inc/$max), the tallies on both
+// records, the dynamic leaderboard field, and the `$max`-guarded trialRung that
+// must never regress on a replay.
 useTestDb();
 
 describe('smackdownService.getOrCreate', () => {
-   it('inserts with the default Elo and zeroed tallies', async () => {
+   it('inserts with zeroed tallies', async () => {
       const record = await smackdownService.getOrCreate('char-1', 'Fenwick');
 
-      expect(record.eloRating).toBe(DEFAULT_ELO);
-      expect(record.wins).toBe(0);
-      expect(record.losses).toBe(0);
-      expect(record.trialRung).toBe(0);
-      expect(record.characterName).toBe('Fenwick');
+      expect(record).toMatchObject({ characterName: 'Fenwick', duelWins: 0, duelLosses: 0, trialRung: 0 });
    });
 
-   it('refreshes the denormalized name without resetting an existing rating', async () => {
+   it('refreshes the denormalized name without resetting existing tallies', async () => {
       await smackdownService.getOrCreate('char-1', 'Fenwick');
-      await SmackdownRecord.updateOne({ _id: 'char-1' }, { $set: { eloRating: 1234, wins: 7 } });
+      await SmackdownRecord.updateOne({ _id: 'char-1' }, { $set: { duelWins: 7 } });
 
       const record = await smackdownService.getOrCreate('char-1', 'Fenwick the Renamed');
 
-      // $setOnInsert only fires on insert, so the second call keeps the rating.
-      expect(record.eloRating).toBe(1234);
-      expect(record.wins).toBe(7);
+      expect(record.duelWins).toBe(7);
       expect(record.characterName).toBe('Fenwick the Renamed');
    });
 });
 
-describe('smackdownService.recordResult', () => {
-   it('moves Elo symmetrically and tallies the win/loss on both records', async () => {
-      const outcome = await smackdownService.recordResult(
+describe('smackdownService.recordDuel', () => {
+   it('creates both records with complete defaults and tallies the result', async () => {
+      await smackdownService.recordDuel(
          { characterId: 'winner', characterName: 'Winner' },
          { characterId: 'loser', characterName: 'Loser' },
       );
 
-      // Equal starting ratings → the K/2 swing, applied +/- to each side.
-      const change = eloChange(DEFAULT_ELO, DEFAULT_ELO, 1);
-      expect(outcome).toEqual({
-         change,
-         winnerRating: DEFAULT_ELO + change,
-         loserRating: DEFAULT_ELO - change,
-      });
-
-      const winner = await SmackdownRecord.findById('winner').lean();
-      const loser = await SmackdownRecord.findById('loser').lean();
-      expect(winner).toMatchObject({ eloRating: DEFAULT_ELO + change, wins: 1, losses: 0 });
-      expect(loser).toMatchObject({ eloRating: DEFAULT_ELO - change, wins: 0, losses: 1 });
+      expect(await SmackdownRecord.findById('winner').lean()).toMatchObject({ duelWins: 1, duelLosses: 0, trialRung: 0 });
+      expect(await SmackdownRecord.findById('loser').lean()).toMatchObject({ duelWins: 0, duelLosses: 1, trialRung: 0 });
    });
 
-   it('accumulates across successive bouts', async () => {
-      await smackdownService.recordResult(
-         { characterId: 'a', characterName: 'A' },
-         { characterId: 'b', characterName: 'B' },
-      );
-      await smackdownService.recordResult(
-         { characterId: 'a', characterName: 'A' },
-         { characterId: 'b', characterName: 'B' },
-      );
+   it('accumulates across bouts and leaves ladder progress alone', async () => {
+      await smackdownService.advanceTrial('a', 'A', 4);
+      for (let i = 0; i < 2; i++)
+         await smackdownService.recordDuel(
+            { characterId: 'a', characterName: 'A' },
+            { characterId: 'b', characterName: 'B' },
+         );
 
-      const a = await SmackdownRecord.findById('a').lean();
-      expect(a?.wins).toBe(2);
-      expect(a?.losses).toBe(0);
-      // Winning again against a now lower-rated B yields a smaller second gain.
-      expect(a!.eloRating).toBeGreaterThan(DEFAULT_ELO);
+      expect(await SmackdownRecord.findById('a').lean()).toMatchObject({ duelWins: 2, duelLosses: 0, trialRung: 4 });
+      expect(await SmackdownRecord.findById('b').lean()).toMatchObject({ duelWins: 0, duelLosses: 2 });
    });
 });
 
@@ -77,16 +55,13 @@ describe('smackdownService.advanceTrial', () => {
    it('upserts a record and sets the cleared rung', async () => {
       await smackdownService.advanceTrial('climber', 'Climber', 3);
 
-      const record = await SmackdownRecord.findById('climber').lean();
-      expect(record).toMatchObject({ trialRung: 3, eloRating: DEFAULT_ELO, wins: 0, losses: 0 });
+      expect(await SmackdownRecord.findById('climber').lean()).toMatchObject({ trialRung: 3, duelWins: 0, duelLosses: 0 });
    });
 
    it('is monotonic — a lower rung (replay/double) never regresses progress', async () => {
       await smackdownService.advanceTrial('climber', 'Climber', 3);
       await smackdownService.advanceTrial('climber', 'Climber', 1);
-
-      const record = await SmackdownRecord.findById('climber').lean();
-      expect(record?.trialRung).toBe(3);
+      expect((await SmackdownRecord.findById('climber').lean())?.trialRung).toBe(3);
 
       await smackdownService.advanceTrial('climber', 'Climber', 5);
       expect((await SmackdownRecord.findById('climber').lean())?.trialRung).toBe(5);
@@ -94,19 +69,17 @@ describe('smackdownService.advanceTrial', () => {
 });
 
 describe('smackdownService.getLeaderboard', () => {
-   it('ranks by the requested field, descending, honoring the limit', async () => {
+   it('ranks by the requested field, honors the limit, and omits empty rows', async () => {
       await SmackdownRecord.create([
-         { _id: 'low', characterName: 'Low', eloRating: 900, wins: 9 },
-         { _id: 'mid', characterName: 'Mid', eloRating: 1100, wins: 1 },
-         { _id: 'high', characterName: 'High', eloRating: 1300, wins: 5 },
+         { _id: 'duelist', characterName: 'Duelist', duelWins: 9, trialRung: 1 },
+         { _id: 'climber', characterName: 'Climber', duelWins: 0, trialRung: 8 },
+         { _id: 'both', characterName: 'Both', duelWins: 5, trialRung: 3 },
       ]);
 
-      const byElo = await smackdownService.getLeaderboard('eloRating', 10);
-      expect(byElo.map((r) => r._id)).toEqual(['high', 'mid', 'low']);
+      const byDuels = await smackdownService.getLeaderboard('duelWins', 10);
+      expect(byDuels.map((r) => r._id)).toEqual(['duelist', 'both']);
 
-      // The dynamic sortField is the whole point: the SAME data ranks differently
-      // for the "Most Victories" board (D36).
-      const byWins = await smackdownService.getLeaderboard('wins', 2);
-      expect(byWins.map((r) => r._id)).toEqual(['low', 'high']);
+      const byRung = await smackdownService.getLeaderboard('trialRung', 2);
+      expect(byRung.map((r) => r._id)).toEqual(['climber', 'both']);
    });
 });

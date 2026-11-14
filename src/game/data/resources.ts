@@ -14,11 +14,13 @@ export interface ResourceDefinition {
     *  durable activity (D23). Vitals pause — you don't heal mid-climb/mid-duel;
     *  Action Points are separate and ALWAYS accrue. */
    regenWhileBusy: boolean;
+   /** Stored and regenerated, but not shown to players — nothing spends it yet. */
+   hidden?: boolean;
 }
 
 export const RESOURCES = {
    health: { name: 'Health', defaultMax: 20, regenPerHour: 2, regenWhileBusy: false },
-   stamina: { name: 'Stamina', defaultMax: 10, regenPerHour: 5, regenWhileBusy: false },
+   stamina: { name: 'Stamina', defaultMax: 10, regenPerHour: 5, regenWhileBusy: false, hidden: true },
 } as const satisfies Record<string, ResourceDefinition>;
 
 export type ResourceKey = keyof typeof RESOURCES;

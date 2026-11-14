@@ -9,16 +9,24 @@ import {
 } from 'discord.js';
 import { displayName } from '../../game/character/identity.js';
 import { skillSum } from '../../game/character/skills.js';
+import { equippedWeapon, wieldedFamily } from '../../game/combat/profile.js';
 import { fightingStyle, stylesForFamily, type FightingStyleId, type StyleFamily } from '../../game/combat/styles.js';
 import { describeTrigger, sanitizeFamilyPlan, MAX_PLAN_RULES, type FamilyPlan, type PlanTriggerKind } from '../../game/combat/plan.js';
+import { truncate } from '../../lib/text.js';
 import type { CharacterDoc } from '../../db/models/character.js';
+import { backToPlayButton } from './_backToPlay.js';
 
-// Colocated Discord builders for the `/character combat` panel (D41) — the
-// combat-plan editor: default fighting style per family + conditional switch
-// rules ("below 50% Health go Stonewall"). Stateless and personal like the
-// `/profile` panel (ephemeral, clicker = owner, no character ids in customIds —
-// every action re-resolves the active character); the two-step rule builder
-// carries its half-built rule in the customId, the panel pattern everywhere.
+// Colocated Discord builders for the `/character combat` panel (D41), in two
+// levels (D59 — a tester found the full editor overwhelming):
+//   * the SIMPLE panel — one question, "how do you fight?", for the weapon
+//     currently in hand. This is what the command and the hub open;
+//   * the TACTICS panel — the full editor: a default style per family plus
+//     conditional switch rules ("below 50% Health go Stonewall").
+// Both edit the same stored plan; the engine does not know which was used.
+// Stateless and personal like the `/profile` panel (ephemeral, clicker = owner,
+// no character ids in customIds — every action re-resolves the active
+// character); the two-step rule builder carries its half-built rule in the
+// customId, the panel pattern everywhere.
 
 const PANEL_COLOR = 0x8B2B2B; // matches the duel views — this feeds the same fights
 
@@ -58,11 +66,51 @@ export function familyPlanOf(character: CharacterDoc, family: PlanFamily): Famil
    return sanitizeFamilyPlan(character.combatPlan?.[family], family);
 }
 
-/** The main panel: current plan per family + the controls to change it. */
+/** The simple panel: the one style choice that matters for the weapon in hand. */
+export function buildFightingStylePanel(character: CharacterDoc): PanelView {
+   const family = wieldedFamily(character);
+
+   // A ranged weapon has no styles yet — fall back to the full editor's families.
+   if (!isPlanFamily(family))
+      return buildCombatPlanPanel(character);
+
+   const plan = familyPlanOf(character, family);
+   const weapon = equippedWeapon(character);
+   const holding = weapon
+      ? `You are holding **${weapon.name}** (${FAMILY_LABEL[family].split(' ')[1].toLowerCase()}).`
+      : 'You are fighting **bare-handed**.';
+   const rules = plan.rules.length > 0
+      ? `\n🧠 ${plan.rules.length} tactic rule${plan.rules.length === 1 ? '' : 's'} can switch your style mid-fight.`
+      : '';
+
+   const embed = new EmbedBuilder()
+      .setColor(PANEL_COLOR)
+      .setTitle(`⚔️ ${displayName(character)} — how do you fight?`)
+      .setDescription(
+         `${holding}\n` +
+         `${plan.style ? `Your style: ${styleLine(character, plan.style)}` : 'Your style: none — you fight plain.'}${rules}\n\n` +
+         'Pick a style below. Fighting in it trains it, and the better you know it, the better you strike and defend.',
+      )
+      .setFooter({ text: 'Change weapons and this panel asks about the new grip. Tactics holds the rest.' });
+
+   const select = new StringSelectMenuBuilder()
+      .setCustomId(`combatplan:quick:${family}`)
+      .setPlaceholder('How do you fight?')
+      .addOptions(styleOptions(character, family, plan.style, true));
+
+   const buttons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      new ButtonBuilder().setCustomId('combatplan:show').setLabel('Tactics…').setEmoji('🧠').setStyle(ButtonStyle.Secondary),
+      backToPlayButton(),
+   );
+
+   return { embeds: [embed], components: [selectRow(select), buttons] };
+}
+
+/** The tactics panel: the plan for every family + the controls to change it. */
 export function buildCombatPlanPanel(character: CharacterDoc): PanelView {
    const embed = new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle(`⚔️ ${displayName(character)} — combat plan`)
+      .setTitle(`🧠 ${displayName(character)} — tactics`)
       .setDescription(
          'Standing orders for every real fight (duels, the Spire ladder). Pick a default ' +
          `**fighting style** per family and up to ${MAX_PLAN_RULES} **switch rules** — ` +
@@ -99,6 +147,8 @@ export function buildCombatPlanPanel(character: CharacterDoc): PanelView {
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(familyPlanOf(character, family).rules.length === 0),
       ),
+      new ButtonBuilder().setCustomId('combatplan:simple').setLabel('Simple view').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      backToPlayButton(),
    );
 
    return { embeds: [embed], components: [...styleRows, addRuleRow, clearRow] };
@@ -227,8 +277,4 @@ function cancelRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
    return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder().setCustomId('combatplan:show').setLabel('Back').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
    );
-}
-
-function truncate(text: string, max: number): string {
-   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }

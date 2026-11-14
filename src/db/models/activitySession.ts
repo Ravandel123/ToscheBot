@@ -1,9 +1,11 @@
 import { Schema, model, type Model } from 'mongoose';
 
-// A durable, long, interactive activity (turn-based duel, multi-room exploration…).
+// A durable, long, interactive activity (a travel challenge, a conversation…).
 // The document is BOTH the saved per-step state (so the activity survives a bot
 // restart) AND the cross-restart "this character is busy" lock. Short, auto-resolved
-// actions (sparring) do NOT use this — they commit atomically (D5 rule 1). See D17.
+// actions (a duel, a gather roll) do NOT use this — they commit atomically (D5
+// rule 1). See D17. A session never expires on its own (D58): it ends when the
+// player finishes it, takes its exit, or the owner clears it (`h!session`).
 
 export type ActivityType = 'duel' | 'exploration' | 'challenge' | 'dialogue'; // extend as activities are built
 export type ActivityStatus = 'active' | 'completed' | 'abandoned';
@@ -17,7 +19,6 @@ export interface ActivitySessionDoc {
    // Opaque per-activity state (HP mid-duel, rooms visited…). The activity's own
    // code owns the shape; the durability layer treats it as a blob (D17).
    state: Record<string, unknown>;
-   expiresAt: Date; // inactivity deadline; refreshed each step
    createdAt: Date;
    updatedAt: Date;
 }
@@ -29,9 +30,6 @@ const activitySessionSchema = new Schema({
    step: { type: Number, required: true, default: 0 },
    status: { type: String, required: true, default: 'active' },
    state: { type: Schema.Types.Mixed, default: {} },
-   // TTL index: Mongo deletes the doc once `expiresAt` passes — automatic cleanup
-   // of abandoned/idle sessions (timeout ⇒ forfeit, no side effect needed; D17).
-   expiresAt: { type: Date, required: true, expires: 0 },
 }, { timestamps: true, minimize: false });
 
 export const ActivitySession = model('ActivitySession', activitySessionSchema) as unknown as Model<ActivitySessionDoc>;

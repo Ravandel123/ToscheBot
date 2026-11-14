@@ -5,13 +5,13 @@ import type { RaceId } from './races.js';
 // Resource nodes (R16, professions.md): WHAT can be gathered at a place. A
 // location's `resourceNodes` (locations.ts) list ids from this catalog — the
 // static half of the shared gather loop (spend AP → profession check → item
-// instances). One catalog serves every gathering profession: fishing (S2)
+// instances). One catalog serves every gathering profession: fishing (later)
 // adds `profession: 'fishing'` entries with fish tables, no new mechanism.
 // The generic resolver lives in game/professions/gather.ts; ids are stable
 // slugs, test-validated against locations like graph edges (D10/D21).
 // 🟡 Difficulties, affinities and table weights are balance placeholders.
 
-/** Gathering professions a node can belong to ('fishing' joins in S2). */
+/** Gathering professions a node can belong to ('fishing' joins later). */
 export type GatherProfession = 'foraging';
 
 export interface ResourceNodeDefinition {

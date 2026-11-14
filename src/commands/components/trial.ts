@@ -5,9 +5,9 @@ import { accountService } from '../../db/services/accountService.js';
 import { characterService } from '../../db/services/characterService.js';
 import { smackdownService } from '../../db/services/smackdownService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
+import { boutService } from '../../db/services/boutService.js';
 import { resolveDuel } from '../../game/combat/duel.js';
 import { combatProfile } from '../../game/combat/profile.js';
-import { trainingNodes, trainingWeight } from '../../game/combat/training.js';
 import { LADDER_LENGTH, championProfile, trialTarget, type SpireChampion, type TrialTarget } from '../../game/combat/spireLadder.js';
 import { canCharacterAct } from '../../game/character/rules.js';
 import { displayName } from '../../game/character/identity.js';
@@ -117,8 +117,7 @@ async function fightChampion(client: ToscheClient, interaction: ButtonInteractio
 }
 
 /** The bout under the character's lock: re-read authoritatively, re-resolve the
- *  rung, resolve + narrate the fight, then persist the player's Health and (on a
- *  fresh climb win) advance the rung + pay the reward. */
+ *  rung, resolve the fight, save its outcome, then narrate it. */
 async function runTrialFight(client: ToscheClient, spire: SendableChannels, characterId: string, championId: string): Promise<void> {
    await client.locks.runExclusive([characterId], async () => {
       const fighter = await characterService.get(characterId);
@@ -149,7 +148,15 @@ async function runTrialFight(client: ToscheClient, spire: SendableChannels, char
       const foe = championProfile(champ);
       const names = { [player.characterId]: player.name, [foe.characterId]: foe.name };
 
+      // Decide and SAVE the bout first (Health, learning, and on a fresh climb
+      // win the reward + rung), then tell it — a restart mid-narration must not
+      // undo a fought bout.
       const result = resolveDuel(player, foe);
+      const { won, levelUps, rewardCoins } = await boutService.commitTrial(
+         player, foe, result, isRematch ? null : { rung, coins: champ.reward.coins },
+      );
+      const playerHp = result.finalHealth[player.characterId];
+      const ladderCleared = won && !isRematch && rung + 1 >= LADDER_LENGTH;
 
       await announce(spire, buildTrialOpening(player.name, champ, isRematch));
       await sleep(INTRO_DELAY_MS);
@@ -166,32 +173,8 @@ async function runTrialFight(client: ToscheClient, spire: SendableChannels, char
          await sleep(ROUND_DELAY_MS);
       }
 
-      // Persist ONLY the player's Health (the champion is not a real character).
-      const playerHp = result.finalHealth[player.characterId];
-      const delta = playerHp - player.health;
-      if (delta !== 0)
-         await characterService.applyResourceDeltas(fighter._id, { health: delta });
-
-      // Learn-by-doing (D40/D41): the bout trains the paths the player actually
-      // fought in (each used style's branch, the weapon branch when armed), win
-      // or lose, weighted by the champion's strength — so a rematch against an
-      // outgrown rung fades to nothing (the anti-farm) while the next climb
-      // teaches plenty. Still under the character lock.
-      const levelUps = await characterService.creditSkillUse(fighter._id, trainingNodes(player, result.stylesUsed[player.characterId] ?? []), trainingWeight(player, foe));
       if (levelUps.length > 0)
          await announce(spire, buildTrainingLine(player.name, levelUps));
-
-      const won = result.winnerId === player.characterId;
-      let rewardCoins = 0;
-      let ladderCleared = false;
-
-      // Reward + rung advance ONLY on a fresh climb win — a rematch pays nothing.
-      if (won && !isRematch) {
-         rewardCoins = champ.reward.coins;
-         await smackdownService.advanceTrial(fighter._id, displayName(fighter), rung + 1);
-         await characterService.applyCurrencyDeltas(fighter._id, { deltradaCoins: rewardCoins });
-         ladderCleared = rung + 1 >= LADDER_LENGTH;
-      }
 
       await announce(spire, buildTrialResult({
          won, champion: champ, playerName: player.name, playerHp, playerMaxHp: player.maxHealth,

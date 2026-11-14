@@ -12,11 +12,15 @@ export function validateJobs(jobs: CronJob[]): void {
 
 export function startJobs(client: ToscheClient, jobs: CronJob[]): void {
    for (const job of jobs) {
-      schedule(job.schedule, () => {
+      const run = (): void => {
          job.run(client).catch((error: unknown) => {
             log.error(`Cron job '${job.name}' failed:`, error);
          });
-      });
+      };
+
+      schedule(job.schedule, run);
+      if (job.runOnStart)
+         run();
 
       log.info(`Scheduled job '${job.name}' (${job.schedule}).`);
    }
