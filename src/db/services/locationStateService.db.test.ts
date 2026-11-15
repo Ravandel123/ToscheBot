@@ -3,7 +3,7 @@ import { locationStateService } from './locationStateService.js';
 import { LocationState } from '../models/locationState.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// The D31 dynamic-location state is all real-Mongo behaviour a mock can't stand
+// The dynamic-location state is all real-Mongo behaviour a mock can't stand
 // in for: the lazy upsert defaults, the filter-guarded weather re-roll and event
 // sweep on read, the dedup guards ($ne / $addToSet), and the aggregation-pipeline
 // stat clamp. Exercise them against an actual in-memory mongod.

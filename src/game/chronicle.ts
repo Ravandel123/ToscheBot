@@ -4,7 +4,7 @@ import { settings } from '../settings.js';
 import { resolveGuildChannel } from '../lib/discord.js';
 import { log } from '../lib/log.js';
 
-// Discord adapter (marked): the public game log (D24). Gameplay replies are
+// Discord adapter (marked): the public game log. Gameplay replies are
 // ephemeral (only the actor sees their journey/steps); anything NOTEWORTHY a
 // character does is posted here as a short in-character line, so the whole
 // server can follow what is happening in the game. Best-effort by design:

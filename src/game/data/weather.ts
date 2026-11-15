@@ -1,7 +1,7 @@
 import { randomInt, weightedItem } from '../../lib/random.js';
 import { LOCATIONS, resolveLocationId, type LocationDefinition } from './locations.js';
 
-// Weather catalog (D10/D31): the KINDS live here; each location's current spell
+// Weather catalog: the KINDS live here; each location's current spell
 // lives in LocationState (rolled lazily when the previous one lapses). A
 // location biases the odds via its `climate` weight overrides (locations.ts).
 // 🟡 Weights/durations are placeholder flavor — no mechanics read weather yet
@@ -58,7 +58,7 @@ export const WEATHER = {
 
 export type WeatherId = keyof typeof WEATHER;
 
-/** Resolves a stored weather kind, falling back to clear skies (D10 rule 3). */
+/** Resolves a stored weather kind, falling back to clear skies. */
 export function resolveWeatherId(id: string): WeatherId {
    return id in WEATHER ? (id as WeatherId) : 'clear';
 }

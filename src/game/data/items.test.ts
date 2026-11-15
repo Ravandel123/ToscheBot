@@ -7,7 +7,7 @@ const entries = Object.entries(ITEMS) as [ItemId, ItemDefinition][];
 // The catalog is data, but the inventory code relies on its invariants —
 // a dangling slot id or an inverted damage range would surface as a broken
 // panel at runtime, so the deploy gate (npm test) enforces them here instead
-// (same stance as the location-graph tests, D21).
+// (same stance as the location-graph tests).
 describe('item catalog', () => {
    it('every equippable has valid slots and positive durability', () => {
       for (const [id, def] of entries) {

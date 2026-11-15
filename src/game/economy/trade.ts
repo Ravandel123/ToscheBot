@@ -1,4 +1,4 @@
-// Pure pricing rules for trading with a merchant (D60) — no DB, no Discord.
+// Pure pricing rules for trading with a merchant — no DB, no Discord.
 // Prices are per unit, in deltradaCoins. 🟡 The numbers are placeholders;
 // haggling and reputation prices (economy.md) will plug in here later.
 import { itemValue, maxDurability, qualityOf, type ResolvedItem } from '../character/inventory.js';

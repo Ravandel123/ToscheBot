@@ -74,7 +74,7 @@ describe('requiredStepsComplete', () => {
       expect(requiredStepsComplete(character({ gender: 'male' }, { strength: 10 }))).toBe(false);
    });
 
-   // canSubmit moved from isIdentityComplete to the catalog (D20); with the
+   // canSubmit moved from isIdentityComplete to the catalog; with the
    // gender + point-buy steps held constant (complete) the identity half must
    // still agree with isIdentityComplete so the two can't silently drift apart.
    it('agrees with isIdentityComplete on the required identity minimum', () => {

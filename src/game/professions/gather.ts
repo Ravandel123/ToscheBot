@@ -8,12 +8,12 @@ import { identifyCheck, pickDescriptor, rollMislabel } from './identify.js';
 import type { ItemQualityId } from '../data/items.js';
 import type { MysteryFields } from '../character/inventory.js';
 
-// The generic gather resolver (R16, professions.md): one pure engine for every
+// The generic gather resolver (professions.md): one pure engine for every
 // gathering profession — spend AP, roll the profession check vs the node,
 // yield instances where QUANTITY scales with Success Levels and per-instance
 // QUALITY comes from the check's surplus, then sweep the haul with one
 // identify roll. Fishing (later) reuses everything here except the identify
-// sweep (a carp is a carp). A gather is a SHORT action (D5 rule 1) resolved
+// sweep (a carp is a carp). A gather is a SHORT action resolved
 // in memory under the character lock — never an ActivitySession.
 // 🟡 Every number is a balance placeholder (sim-checked, owner-unsigned).
 
@@ -35,7 +35,7 @@ export function gatherQuantity(successLevels: number): number {
  * Per-instance quality from a check's surplus (the shared surplus→quality
  * model, skills.md — smithing reuses this when crafting lands): each unit
  * jitters −2..+1 around the Success Levels (skewed down — excellence needs
- * luck AND skill), banded into today's 4 tiers. Sim-verified (S1): fresh ≈
+ * luck AND skill), banded into today's 4 tiers. Sim-verified: fresh ≈
  * 15% poor / 75% common / 10% fine; masterwork ≈ 0% below ~50 effective, ~3%
  * at 76, ~15% at the 95 cap — the top tier stays special. Rolls internally —
  * call once PER UNIT so one sweep can mix tiers. 🟡 bands.
@@ -83,9 +83,9 @@ export interface GatherResolution {
    check: CheckResult;
    /** One entry per yielded unit; empty on a failed check. */
    yields: GatherYield[];
-   /** D40 weight for the gather path — the check rolled, win or lose. */
+   /** Training weight for the gather path — the check rolled, win or lose. */
    gatherTrainingWeight: number;
-   /** D40 weight for the identify path (one sweep over the haul); null when
+   /** Training weight for the identify path (one sweep over the haul); null when
     *  nothing was yielded (no identify was attempted). */
    identifyTrainingWeight: number | null;
 }
@@ -176,7 +176,7 @@ export function yieldDisplayName(order: Pick<GrantOrder, 'itemId' | 'quality' | 
    return prefix ? `${prefix} ${name}` : name;
 }
 
-/** The finds worth a chronicle line (D24): recognized on the spot AND either a
+/** The finds worth a chronicle line: recognized on the spot AND either a
  *  noteworthy species or a pristine specimen. An unidentified rarity stays
  *  quiet — nobody, including the finder, knows what was found yet. */
 export function noteworthyYields(yields: readonly GatherYield[]): GatherYield[] {

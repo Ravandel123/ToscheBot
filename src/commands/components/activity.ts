@@ -1,18 +1,17 @@
-import { MessageFlags } from 'discord.js';
 import type { ComponentHandler, ComponentInteraction } from '../../types/interactions.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { characterService } from '../../db/services/characterService.js';
 import { activityHandler } from './_activities/registry.js';
 import { log } from '../../lib/log.js';
+import { ephemeral } from '../../lib/discord.js';
 
-// The generic router for every durable activity (D22). CustomIds are
+// The generic router for every durable activity. CustomIds are
 // `activity:<action>:<sessionId>[:...args]` — stateless like the character
 // panel and the comic browser, so activity buttons keep working across
 // restarts: the session (with its per-step state) is re-read from the DB and
 // dispatched to the handler that owns its type. The router does the shared
 // work (session exists? still active? is the clicker a participant?); the
 // handler owns the step logic.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
    namespace: 'activity',
@@ -36,7 +35,7 @@ export default {
 
       const handler = activityHandler(session.type);
       if (!handler) {
-         // A session of a retired/renamed type — end it gracefully (D10 rule 3).
+         // A session of a retired/renamed type — end it gracefully.
          log.warn(`No activity handler for session type '${session.type}' (session ${session._id}).`);
          await endedReply(interaction);
          return;

@@ -13,7 +13,7 @@ import { SHOPS } from '../../game/data/shops.js';
 import { fakeButton, fakeClient, fakeSelect } from '../../testing/fakeInteraction.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// Layer-2 flow tests for the stall (D60): hub click → stall → item card →
+// Layer-2 flow tests for the stall: hub click → stall → item card →
 // trade → repaint, against the in-memory DB. Only the Date is faked — the
 // stall keeps daylight hours on the game clock (UTC+2).
 useTestDb();

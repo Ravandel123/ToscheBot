@@ -1,7 +1,6 @@
-// Discord adapter (marked): the public character sheet — `/character view`
-// (the embed that used to be `/profile` pre-D27), now with attributes and any
-// earned deed traits. Underscore prefix → loader skips it.
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type MessageActionRowComponentBuilder } from 'discord.js';
+// Discord adapter (marked): the public character sheet — `/character view`:
+// identity, vitals, attributes and any earned deed traits. Underscore prefix → loader skips it.
+import { ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { RESOURCES, type ResourceDefinition } from '../../../game/data/resources.js';
 import { CURRENCIES } from '../../../game/data/currencies.js';
 import { RACES } from '../../../game/data/races.js';
@@ -14,27 +13,23 @@ import { equippedItems, itemDisplayName, totalEquippedArmor } from '../../../gam
 import { activeEffects, attributeShifts, modifierSources } from '../../../game/character/modifiers.js';
 import { ageBandName, bodyOf, bodyShapeName, moveSpeed } from '../../../game/character/body.js';
 import { cmToImperial, kgToImperial } from '../../../lib/units.js';
+import { actionRow, type PanelView } from '../../../lib/discord.js';
 import type { UnitSystem } from '../../../db/models/account.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
-
-export interface CharacterSheetView {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
 
 /** The sheet plus its Refresh button. The sheet is a public message that goes
  *  stale as the character plays, so anyone may repaint it from the database.
  *  The unit system rides in the customId: a refresh keeps the sheet in the
  *  units it was first shown in, whoever clicks. */
-export function buildCharacterSheetView(character: CharacterDoc, units: UnitSystem = 'metric'): CharacterSheetView {
-   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+export function buildCharacterSheetView(character: CharacterDoc, units: UnitSystem = 'metric'): PanelView {
+   const row = actionRow(
       new ButtonBuilder().setCustomId(`character:sheet:${character._id}:${units}`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
    );
 
    return { embeds: [buildCharacterSheet(character, units)], components: [row] };
 }
 
-/** The character sheet. `units` is the VIEWER's preference (R19) — the frame is
+/** The character sheet. `units` is the VIEWER's preference — the frame is
  *  stored metric and shown imperial only when the viewer asked for it. */
 export function buildCharacterSheet(character: CharacterDoc, units: UnitSystem = 'metric'): EmbedBuilder {
    const resources = (Object.entries(RESOURCES) as [string, ResourceDefinition][])
@@ -79,7 +74,7 @@ export function buildCharacterSheet(character: CharacterDoc, units: UnitSystem =
 
    const race = character.identity.race ? RACES[character.identity.race].name : 'Unknown';
 
-   // Frame (R20): stored metric, shown per the viewer's unit preference. Shape
+   // Frame: stored metric, shown per the viewer's unit preference. Shape
    // and move speed are derived (never stored).
    const body = bodyOf(character);
    const height = units === 'imperial' ? cmToImperial(body.heightCm) : `${body.heightCm} cm`;

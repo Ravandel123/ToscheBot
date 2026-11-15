@@ -1,7 +1,7 @@
-// Equipment slots — where worn/wielded gear sits on a character (D28). The
+// Equipment slots — where worn/wielded gear sits on a character. The
 // character doc's `equipment` map is a schema-flexible object keyed by these
 // ids, so ADDING a slot is one entry here (+ catalog items that use it), with
-// no migration. Ids are stable slugs (D10): append, never rename — they are
+// no migration. Ids are stable slugs: append, never rename — they are
 // stored in DB docs and ride in customIds.
 
 export interface EquipmentSlotDefinition {

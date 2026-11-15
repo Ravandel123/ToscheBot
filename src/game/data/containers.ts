@@ -1,10 +1,10 @@
-// Storage containers (D33) — static content in code (D10): the places a
+// Storage containers — static content in code: the places a
 // character can stash owned-but-not-carried items, away from the encumbered
 // pack. The DB stores only Item instances referencing a container by this
 // stable slug; the container's name/emoji/description resolve from here.
 //
 // ADDING A CONTAINER = one entry here (+ wherever it becomes reachable). Ids are
-// append-only (D10): they live in Item docs and ride in customIds. Access is not
+// append-only: they live in Item docs and ride in customIds. Access is not
 // location-gated yet (prototype) — every container is reachable via `/stash`;
 // tying a container to a place/hub action is a future step.
 
@@ -34,7 +34,7 @@ export function isStorageContainerId(id: string): id is StorageContainerId {
    return id in STORAGE_CONTAINERS;
 }
 
-/** Resolves a stored container id, tolerating unknown ones (D10 rule 3). */
+/** Resolves a stored container id, tolerating unknown ones. */
 export function containerDefinition(id: string): StorageContainerDefinition | null {
    return isStorageContainerId(id) ? STORAGE_CONTAINERS[id] : null;
 }

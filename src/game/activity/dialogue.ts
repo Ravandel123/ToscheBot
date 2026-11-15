@@ -1,4 +1,4 @@
-// Pure step logic for the 'dialogue' activity (R14/D45) — no Discord, no DB.
+// Pure step logic for the 'dialogue' activity — no Discord, no DB.
 // A conversation is a graph walk over game/data/dialogues.ts: each pick
 // resolves one option (sometimes a d100 roll-under check), applies its
 // session-scoped effects and moves to the outcome's node — or ends the talk.
@@ -25,7 +25,7 @@ import { TRAITS, type TraitKey } from '../data/traits.js';
 export const DIALOGUE_CHECK_AP_COST = 1;
 
 export interface DialogueState {
-   /** → DialogueId; resolved gracefully at read time (D10 rule 3). */
+   /** → DialogueId; resolved gracefully at read time. */
    dialogueId: string;
    /** Who is being talked to — for rendering, never a participant (see above). */
    npcCharacterId: string;
@@ -119,7 +119,7 @@ export function dialogueOptionKey(nodeId: string, optionId: string): string {
 }
 
 /** Every rolled option's d100 target across the WHOLE graph, computed from the
- *  live (equipment-modified) talker when the session opens (the D26 honest-%
+ *  live (equipment-modified) talker when the session opens (the honest-%
  *  discipline). Graphs are small, so precomputing all nodes is cheap. */
 export function computeDialogueTargets(subject: CheckSubject, dialogue: DialogueDefinition): Record<string, number> {
    return Object.fromEntries(
@@ -130,7 +130,7 @@ export function computeDialogueTargets(subject: CheckSubject, dialogue: Dialogue
    );
 }
 
-/** The dialogue behind a state, if the catalog still has it (D10 rule 3). */
+/** The dialogue behind a state, if the catalog still has it. */
 export function dialogueOf(state: DialogueState): DialogueDefinition | null {
    return DIALOGUES[state.dialogueId as keyof typeof DIALOGUES] ?? null;
 }

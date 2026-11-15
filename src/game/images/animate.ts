@@ -2,7 +2,7 @@ import { createCanvas, GifDisposal, GifEncoder, loadImage } from '@napi-rs/canva
 import { renderCard, renderCardBack, type PlayingCard } from './cards.js';
 import { renderToCanvas, type CompositeSpec } from './composite.js';
 
-// Looping GIF rendering (extends D46/D47's still-image compositing): for a
+// Looping GIF rendering (extends the still-image compositing): for a
 // real animation (a spin, a reveal), encode it ONCE as a GIF rather than
 // rerendering + editing a message on a timer — no rate-limit risk, no
 // re-upload per frame, and Discord plays it natively. `@napi-rs/canvas`

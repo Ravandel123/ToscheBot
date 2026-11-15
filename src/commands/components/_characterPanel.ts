@@ -1,19 +1,12 @@
 // Discord adapter (marked): the interactive character-creation wizard panel.
-// One ephemeral message rendered FROM the creation-step catalog (D20):
+// One ephemeral message rendered FROM the creation-step catalog:
 //   overview → checklist of steps + a step picker + Continue/Submit buttons;
 //   step view → ONE select-kind step's control + Back (modal steps open a modal
 //   directly, so they need no view of their own).
 // Stateless: the character id (and step id) ride in every customId and the
 // state is the DB draft itself, so the wizard survives restarts and can be
 // resumed any time with `/character create`. Underscore prefix → loader skips it.
-import {
-   ActionRowBuilder,
-   ButtonBuilder,
-   ButtonStyle,
-   EmbedBuilder,
-   StringSelectMenuBuilder,
-   type MessageActionRowComponentBuilder,
-} from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { RACES } from '../../game/data/races.js';
 import { ATTRIBUTES, ATTRIBUTE_KEYS, type AttributeKey } from '../../game/data/attributes.js';
 import { canEdit } from '../../game/character/rules.js';
@@ -27,27 +20,23 @@ import {
    pointsSpent,
 } from '../../game/character/attributes.js';
 import { GENDER_CHOICES, STATUS_LABEL, isHttpUrl } from '../../game/character/identity.js';
+import { actionRow, type ComponentRow, type PanelView } from '../../lib/discord.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
 const PANEL_COLOR = 0xB8860B; // dark goldenrod — matches the decree
-
-export interface CharacterPanel {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
 
 // Select-kind steps need a row builder here; modal-kind steps are handled by
 // `_characterModals.ts`. Adding a select step = catalog entry + one line here.
 // `focus` is per-step extra view state riding in customIds (the attribute step
 // uses it for which attribute the ± buttons adjust).
-const SELECT_STEP_ROWS: Record<string, (character: CharacterDoc, focus?: string) => ActionRowBuilder<MessageActionRowComponentBuilder>[]> = {
+const SELECT_STEP_ROWS: Record<string, (character: CharacterDoc, focus?: string) => ComponentRow[]> = {
    race: (character) => [raceRow(character)],
    gender: (character) => [genderRow(character)],
    attributes: (character, focus) => attributeRows(character, resolveAttributeKey(focus)),
 };
 
 /** Builds the wizard overview for a character. Editable (draft/rejected) → full controls; otherwise a read-only state card. */
-export function buildCharacterPanel(character: CharacterDoc): CharacterPanel {
+export function buildCharacterPanel(character: CharacterDoc): PanelView {
    const embed = identityEmbed(character);
 
    if (!canEdit(character)) {
@@ -75,7 +64,7 @@ export function buildCharacterPanel(character: CharacterDoc): CharacterPanel {
 }
 
 /** Builds the focused view of one select-kind step (its dropdown + Back). */
-export function buildCharacterStepView(character: CharacterDoc, step: CreationStep, focus?: string): CharacterPanel {
+export function buildCharacterStepView(character: CharacterDoc, step: CreationStep, focus?: string): PanelView {
    const description = [
       `${stepMark(step, character)} Step: **${step.title}** — pick below, then go back to the overview.`,
       ...(step.id === 'attributes' ? [attributeBreakdown(character, resolveAttributeKey(focus))] : []),
@@ -85,7 +74,7 @@ export function buildCharacterStepView(character: CharacterDoc, step: CreationSt
    const stepRows = SELECT_STEP_ROWS[step.id];
    const components = [
       ...(stepRows ? stepRows(character, focus) : []),
-      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+      actionRow(
          new ButtonBuilder().setCustomId(`character:panel-overview:${character._id}`).setLabel('Back to overview').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
       ),
    ];
@@ -119,7 +108,7 @@ function stepMark(step: CreationStep, character: CharacterDoc): string {
    return step.isComplete(character) ? '✅' : '⬜';
 }
 
-function stepPickerRow(character: CharacterDoc): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function stepPickerRow(character: CharacterDoc): ComponentRow {
    const menu = new StringSelectMenuBuilder()
       .setCustomId(`character:panel-step:${character._id}`)
       .setPlaceholder('Choose a step to fill in / change…')
@@ -132,19 +121,19 @@ function stepPickerRow(character: CharacterDoc): ActionRowBuilder<MessageActionR
          })),
       );
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
-function overviewButtonRow(character: CharacterDoc, complete: boolean): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function overviewButtonRow(character: CharacterDoc, complete: boolean): ComponentRow {
    const next = firstIncompleteStep(character);
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   return actionRow(
       new ButtonBuilder().setCustomId(`character:panel-continue:${character._id}`).setLabel(next ? `Continue: ${next.title}` : 'All steps done').setEmoji('▶️').setStyle(ButtonStyle.Primary).setDisabled(!next),
       new ButtonBuilder().setCustomId(`character:panel-submit:${character._id}`).setLabel('Submit for approval').setEmoji('📜').setStyle(ButtonStyle.Success).setDisabled(!complete),
    );
 }
 
-function raceRow(character: CharacterDoc): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function raceRow(character: CharacterDoc): ComponentRow {
    const menu = new StringSelectMenuBuilder()
       .setCustomId(`character:panel-race:${character._id}`)
       .setPlaceholder(character.identity.race ? `Race: ${RACES[character.identity.race].name}` : 'Choose a race')
@@ -157,20 +146,20 @@ function raceRow(character: CharacterDoc): ActionRowBuilder<MessageActionRowComp
          })),
       );
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
-function genderRow(character: CharacterDoc): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function genderRow(character: CharacterDoc): ComponentRow {
    const current = GENDER_CHOICES.find((g) => g.value === character.identity.gender);
    const menu = new StringSelectMenuBuilder()
       .setCustomId(`character:panel-gender:${character._id}`)
       .setPlaceholder(current ? `Gender: ${current.label}` : 'Choose a gender')
       .addOptions(GENDER_CHOICES.map((g) => ({ label: g.label, value: g.value, default: g.value === character.identity.gender })));
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
-// --- Attribute point-buy step (D25) ------------------------------------------
+// --- Attribute point-buy step ------------------------------------------
 
 /** The attribute the ± buttons currently adjust; falls back to the first one. */
 export function resolveAttributeKey(focus: string | undefined): AttributeKey {
@@ -198,7 +187,7 @@ function attributeBreakdown(character: CharacterDoc, focus: AttributeKey): strin
    ].filter(Boolean).join('\n');
 }
 
-function attributeRows(character: CharacterDoc, focus: AttributeKey): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
+function attributeRows(character: CharacterDoc, focus: AttributeKey): ComponentRow[] {
    const allocation = allocationFrom(character.attributeAllocation);
    const base = baseAttributes(character.identity.race);
    const remaining = pointsRemaining(allocation);
@@ -214,7 +203,7 @@ function attributeRows(character: CharacterDoc, focus: AttributeKey): ActionRowB
       })));
 
    const canAdd = remaining > 0 && allocation[focus] < MAX_POINTS_PER_ATTRIBUTE;
-   const buttons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const buttons = actionRow(
       new ButtonBuilder().setCustomId(`character:panel-attr:${character._id}:${focus}:-5`).setLabel('−5').setStyle(ButtonStyle.Secondary).setDisabled(allocation[focus] === 0),
       new ButtonBuilder().setCustomId(`character:panel-attr:${character._id}:${focus}:-1`).setLabel('−1').setStyle(ButtonStyle.Secondary).setDisabled(allocation[focus] === 0),
       new ButtonBuilder().setCustomId(`character:panel-attr:${character._id}:${focus}:1`).setLabel('+1').setStyle(ButtonStyle.Primary).setDisabled(!canAdd),
@@ -223,7 +212,7 @@ function attributeRows(character: CharacterDoc, focus: AttributeKey): ActionRowB
    );
 
    return [
-      new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(picker),
+      actionRow(picker),
       buttons,
    ];
 }

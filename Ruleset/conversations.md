@@ -4,7 +4,7 @@ See [README.md](README.md) for the legend and the shared file shape.
 
 A **conversation** is a scripted, multi-step exchange with an NPC (npcs.md). It is *not* a
 separate engine: per R14 a conversation is a **durable dialogue `ActivitySession`** (root
-`CLAUDE.md`'s D17/D22), so it reuses everything the travel `challenge` already proves —
+`DECISIONS.md` D17/D22), so it reuses everything the travel `challenge` already proves —
 per-step commit, crash-safe resume, stateless restart-proof buttons, and "dismiss the message
 mid-dialogue and it's saved" for free.
 

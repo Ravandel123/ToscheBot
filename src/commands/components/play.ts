@@ -1,6 +1,7 @@
-import { MessageFlags, type ButtonInteraction } from 'discord.js';
+import type { ButtonInteraction } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { accountService } from '../../db/services/accountService.js';
+import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { locationStateService } from '../../db/services/locationStateService.js';
 import { smackdownService } from '../../db/services/smackdownService.js';
 import { displayName } from '../../game/character/identity.js';
@@ -8,6 +9,8 @@ import { LADDER_LENGTH } from '../../game/combat/spireLadder.js';
 import { actionsAt, hubAction } from '../../game/data/hubActions.js';
 import { resolveLocationId, type LocationId } from '../../game/data/locations.js';
 import { evaluateCondition, worldContext } from '../../game/world/conditions.js';
+import { activityStepView } from './_activities/registry.js';
+import { deferIfFree, NO_ACTIVE_CHARACTER } from './_characterAction.js';
 import { performForage } from './_forageAction.js';
 import { openMarket } from './_marketAction.js';
 import { performTalk, showTalkPicker } from './_talkAction.js';
@@ -17,24 +20,24 @@ import { buildFightingStylePanel } from './_combatPlanView.js';
 import { buildSkillOverview } from './_skillPanel.js';
 import { performTravel } from './_playPanel.js';
 import { buildTrialBrowser } from './_trialView.js';
+import { ephemeral, type PanelView } from '../../lib/discord.js';
 import type { ToscheClient } from '../../client.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
 // Handles the `/play` game hub (namespace `play`). The hub is ephemeral and
 // personal, so the clicker is always the active-character owner (like the
-// account panel). Two actions today:
-//   * `play:travel`  — a destination select; mutates state (spend AP, move,
-//     maybe start a challenge), so it follows the D28 mutation choreography:
-//     fast-fail if in-memory locked → deferUpdate → runExclusive (in
-//     performTravel) → repaint;
+// account panel). Actions:
+//   * `play:travel` — a destination select; a mutation (spend AP, move, maybe
+//     start a challenge), run under the character lock by performTravel;
 //   * `play:act:<id>` — a location action, run by its HUB_EXECUTORS entry.
-//     Location and availability (D31) are re-checked at CLICK time — a hub
-//     message can outlive a move, a nightfall or an event's end (stale panels);
+//     Location and availability are re-checked at CLICK time — a hub message
+//     can outlive a move, a nightfall or an event's end;
+//   * `play:talkto:<npc>` — the talk picker's pick, opens a conversation;
 //   * `play:open:<panel>` — a shortcut: repaints the hub into one of the
 //     character's own panels (pack, skills, fighting style), exactly what the
-//     matching slash command would show (D59); the panel's "Back to /play"
-//     (`play:hub`) repaints it back.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
+//     matching slash command would show;
+//   * `play:hub` — back to the hub ("Back to /play", "Never mind", "Leave the
+//     stall"), or to the unfinished activity, as `/play` itself would.
 
 interface HubActionCall {
    client: ToscheClient;
@@ -47,16 +50,9 @@ interface HubActionCall {
 // dropping its `comingSoon` line in the hub-action catalog. Each executor must
 // respond to the interaction exactly once.
 const HUB_EXECUTORS: Partial<Record<string, (call: HubActionCall) => Promise<void>>> = {
-   // A mutation: fast-fail if locked, ack before the lock (the wait can pass
-   // the ~3 s window), execute, repaint.
    async forage({ client, interaction, character }) {
-      if (client.locks.isLocked(character._id)) {
-         await interaction.reply({ content: 'Your character is mid-activity — finish it first.', ...ephemeral });
-         return;
-      }
-
-      await interaction.deferUpdate();
-      await performForage(client, interaction, character);
+      if (await deferIfFree(client, interaction, character._id))
+         await performForage(client, interaction, character);
    },
 
    // Repaints the hub into the merchant's stall. Opening is a read, except
@@ -65,7 +61,7 @@ const HUB_EXECUTORS: Partial<Record<string, (call: HubActionCall) => Promise<voi
    // `market` component.
    async market({ client, interaction, character }) {
       await interaction.deferUpdate();
-      await openMarket(client, interaction, character);
+      await openMarket(client, interaction, character._id);
    },
 
    // Read-only: repaints the hub into the NPC picker (no lock — the real
@@ -85,7 +81,7 @@ const HUB_EXECUTORS: Partial<Record<string, (call: HubActionCall) => Promise<voi
 
 // The hub's shortcut buttons → the panel each opens (the same builders the
 // slash commands use, so the two can never drift apart).
-const HUB_PANELS: Partial<Record<string, (character: CharacterDoc) => object>> = {
+const HUB_PANELS: Partial<Record<string, (character: CharacterDoc) => PanelView>> = {
    inventory: (character) => buildInventoryHub(character),
    skills: buildSkillOverview,
    style: buildFightingStylePanel,
@@ -98,20 +94,13 @@ export default {
 
       const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
       if (!character) {
-         await interaction.reply({ content: 'You have no active character. Draft one with `/character create`.', ...ephemeral });
+         await interaction.reply({ content: NO_ACTIVE_CHARACTER, ...ephemeral });
          return;
       }
 
       if (action === 'travel' && interaction.isStringSelectMenu()) {
-         if (client.locks.isLocked(character._id)) {
-            await interaction.reply({ content: 'Your character is mid-activity — finish it first.', ...ephemeral });
-            return;
-         }
-
-         // Ack before the lock: the character may be queued behind a long fight,
-         // and an interaction only waits ~3 s for its first response.
-         await interaction.deferUpdate();
-         await performTravel(client, interaction, character, interaction.values[0]);
+         if (await deferIfFree(client, interaction, character._id))
+            await performTravel(client, interaction, character, interaction.values[0]);
          return;
       }
 
@@ -157,23 +146,17 @@ export default {
          return;
       }
 
-      // The picker's pick: opens the dialogue session (S4/D45). The mutation
-      // choreography (D28): fast-fail if locked, ack, execute under the lock.
       if (action === 'talkto' && interaction.isButton()) {
-         if (client.locks.isLocked(character._id)) {
-            await interaction.reply({ content: 'Your character is mid-activity — finish it first.', ...ephemeral });
-            return;
-         }
-
-         await interaction.deferUpdate();
-         await performTalk(client, interaction, character, args[0] ?? '');
+         if (await deferIfFree(client, interaction, character._id))
+            await performTalk(client, interaction, character, args[0] ?? '');
          return;
       }
 
-      // Back to the hub (read-only repaint): the talk picker's "Never mind",
-      // the stall's "Leave", and every panel's "Back to /play".
+      // Read-only repaint, landing where `/play` would: the unfinished
+      // activity if there is one, otherwise the hub.
       if (action === 'hub' && interaction.isButton()) {
-         await interaction.update(await freshHubView(character));
+         const session = await activitySessionService.getActiveForParticipant(character._id);
+         await interaction.update(session ? activityStepView(session) : await freshHubView(character));
          return;
       }
 

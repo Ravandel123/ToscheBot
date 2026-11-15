@@ -1,4 +1,4 @@
-// Discord adapter (marked): the stash panel (D33) — hub (container + category
+// Discord adapter (marked): the stash panel — hub (container + category
 // tabs) → category list (server-side sorted/paged) → item card (Withdraw). It
 // deliberately REUSES the `/inventory` item renderers (`detailEmbed`,
 // `lineSummary`) so a stashed item shows an identical card; only the data source
@@ -6,14 +6,7 @@
 // Stateless like every panel: the character id, container, browse state
 // (container.kind.sort.page) and inspected handle ride in the customIds, and
 // every view renders from a fresh service read. Underscore prefix → loader skips it.
-import {
-   ActionRowBuilder,
-   ButtonBuilder,
-   ButtonStyle,
-   EmbedBuilder,
-   StringSelectMenuBuilder,
-   type MessageActionRowComponentBuilder,
-} from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { ITEM_KINDS, ITEM_KIND_IDS, DEFAULT_ITEM_QUALITY, isItemQualityId, type ItemKindId } from '../../game/data/items.js';
 import { STORAGE_CONTAINERS, type StorageContainerId } from '../../game/data/containers.js';
 import {
@@ -25,14 +18,13 @@ import {
 } from '../../game/character/stash.js';
 import { itemDisplayName, type ItemInstance, type ResolvedItem } from '../../game/character/inventory.js';
 import { displayName } from '../../game/character/identity.js';
-import { truncate } from '../../lib/text.js';
-import { detailEmbed, lineSummary, type InventoryView } from './_inventoryPanel.js';
+import { quantitySuffix, truncate } from '../../lib/text.js';
+import { detailEmbed, lineSummary } from './_inventoryPanel.js';
+import { actionRow, type ComponentRow, type PanelView } from '../../lib/discord.js';
 import type { ItemDoc } from '../../db/models/item.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
 const PANEL_COLOR = 0x6B4F2A; // darker chest oak, a shade off the pack leather
-
-type Row = ActionRowBuilder<MessageActionRowComponentBuilder>;
 
 /** A resolved, ready-to-render page of one stash category (built by the handler
  *  from the service's paged docs — the panel never queries). */
@@ -43,7 +35,7 @@ export interface StashResolvedPage {
    totalCount: number;
 }
 
-/** Maps stored stash docs to display items, dropping unknown ids (D10 rule 3). */
+/** Maps stored stash docs to display items, dropping unknown ids. */
 export function resolveStashDocs(docs: ItemDoc[]): ResolvedItem[] {
    return docs.flatMap((doc) => {
       const resolved = resolveStashInstance(stashInstance(doc));
@@ -65,7 +57,7 @@ function stashInstance(doc: ItemDoc): ItemInstance {
 // --- Hub -----------------------------------------------------------------------
 
 /** The landing view: the container, what it holds by category, and the tabs. */
-export function buildStashHub(character: CharacterDoc, container: StorageContainerId, counts: Record<ItemKindId, number>, note?: string): InventoryView {
+export function buildStashHub(character: CharacterDoc, container: StorageContainerId, counts: Record<ItemKindId, number>, note?: string): PanelView {
    const def = STORAGE_CONTAINERS[container];
    const total = ITEM_KIND_IDS.reduce((sum, kind) => sum + counts[kind], 0);
    const filled = ITEM_KIND_IDS.filter((kind) => counts[kind] > 0);
@@ -86,7 +78,7 @@ export function buildStashHub(character: CharacterDoc, container: StorageContain
    return { embeds: [embed], components };
 }
 
-function categoryRow(character: CharacterDoc, container: StorageContainerId, counts: Record<ItemKindId, number>, filled: ItemKindId[]): Row {
+function categoryRow(character: CharacterDoc, container: StorageContainerId, counts: Record<ItemKindId, number>, filled: ItemKindId[]): ComponentRow {
    const menu = new StringSelectMenuBuilder()
       .setCustomId(`stash:cat:${character._id}:${container}`)
       .setPlaceholder('Withdraw from a category…')
@@ -96,18 +88,18 @@ function categoryRow(character: CharacterDoc, container: StorageContainerId, cou
          emoji: ITEM_KINDS[kind].emoji,
       })));
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
 // --- Category list ------------------------------------------------------------------
 
-export function buildStashList(character: CharacterDoc, state: StashBrowseState, page: StashResolvedPage, note?: string): InventoryView {
+export function buildStashList(character: CharacterDoc, state: StashBrowseState, page: StashResolvedPage, note?: string): PanelView {
    const shown: StashBrowseState = { ...state, page: page.page };
    const kind = ITEM_KINDS[state.kind];
    const container = STORAGE_CONTAINERS[state.container];
 
    const lines = page.items.map((item) => {
-      const quantity = item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : '';
+      const quantity = quantitySuffix(item.instance.quantity);
       return `${kind.emoji} **${itemDisplayName(item)}**${quantity} — ${lineSummary(item)}`;
    });
 
@@ -117,7 +109,7 @@ export function buildStashList(character: CharacterDoc, state: StashBrowseState,
       .setDescription([note, lines.join('\n') || '*Nothing of this sort is stored here.*'].filter(Boolean).join('\n\n'))
       .setFooter({ text: `Page ${page.page + 1}/${page.pageCount} · ${page.totalCount} ${page.totalCount === 1 ? 'entry' : 'entries'} · ${STASH_SORTS[state.sort].name}` });
 
-   const components: Row[] = [];
+   const components: ComponentRow[] = [];
    const picker = itemPickRow(character, shown, page.items);
    if (picker)
       components.push(picker);
@@ -126,7 +118,7 @@ export function buildStashList(character: CharacterDoc, state: StashBrowseState,
    return { embeds: [embed], components };
 }
 
-function itemPickRow(character: CharacterDoc, state: StashBrowseState, items: ResolvedItem[]): Row | null {
+function itemPickRow(character: CharacterDoc, state: StashBrowseState, items: ResolvedItem[]): ComponentRow | null {
    if (items.length === 0)
       return null;
 
@@ -134,15 +126,15 @@ function itemPickRow(character: CharacterDoc, state: StashBrowseState, items: Re
       .setCustomId(`stash:pick:${character._id}:${packStashState(state)}`)
       .setPlaceholder('Inspect an item…')
       .addOptions(items.map((item) => ({
-         label: truncate(`${itemDisplayName(item)}${item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : ''}`, 100),
+         label: truncate(`${itemDisplayName(item)}${quantitySuffix(item.instance.quantity)}`, 100),
          value: item.instance.instanceId,
          description: truncate(lineSummary(item), 100),
       })));
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
-function sortRow(character: CharacterDoc, state: StashBrowseState): Row {
+function sortRow(character: CharacterDoc, state: StashBrowseState): ComponentRow {
    const menu = new StringSelectMenuBuilder()
       .setCustomId(`stash:sort:${character._id}:${packStashState(state)}`)
       .setPlaceholder(`Sort: ${STASH_SORTS[state.sort].name}`)
@@ -152,13 +144,13 @@ function sortRow(character: CharacterDoc, state: StashBrowseState): Row {
          default: sort === state.sort,
       })));
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
-function navRow(character: CharacterDoc, state: StashBrowseState, pageCount: number): Row {
+function navRow(character: CharacterDoc, state: StashBrowseState, pageCount: number): ComponentRow {
    const target = (page: number) => `stash:list:${character._id}:${packStashState({ ...state, page })}`;
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   return actionRow(
       new ButtonBuilder().setCustomId(target(state.page - 1)).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(state.page === 0),
       new ButtonBuilder().setCustomId(`stash:home:${character._id}:${state.container}`).setLabel('Stash').setEmoji('🗄️').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(target(state.page + 1)).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(state.page >= pageCount - 1),
@@ -168,11 +160,11 @@ function navRow(character: CharacterDoc, state: StashBrowseState, pageCount: num
 // --- Item card --------------------------------------------------------------------------
 
 /** The stat card (same renderer as `/inventory`) + a Withdraw action. */
-export function buildStashCard(character: CharacterDoc, state: StashBrowseState, item: ResolvedItem, note?: string): InventoryView {
+export function buildStashCard(character: CharacterDoc, state: StashBrowseState, item: ResolvedItem, note?: string): PanelView {
    const embed = detailEmbed(character, item, note);
    const suffix = `${character._id}:${item.instance.instanceId}:${packStashState(state)}`;
 
-   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const row = actionRow(
       new ButtonBuilder().setCustomId(`stash:withdraw:${suffix}`).setLabel('Withdraw').setEmoji('📤').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`stash:list:${character._id}:${packStashState(state)}`).setLabel('Back').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
    );

@@ -4,12 +4,12 @@ import type { FamilyPlan } from './plan.js';
 // The Smackdown Spire PvE ladder (owner-requested #PvE): a fixed gauntlet of
 // champions who exist ONLY in the Spire — each tougher than the last. A player
 // fights the next unbeaten rung; a win advances them and pays a one-time reward,
-// a loss costs real Health (like a duel — D35). Champions are hand-authored
-// CombatProfiles (D10 content-in-code), NOT world NPCs and NOT DB characters —
+// a loss costs real Health (like a duel). Champions are hand-authored
+// CombatProfiles (content in code), NOT world NPCs and NOT DB characters —
 // the engine (`resolveDuel`) takes two CombatProfiles, so a champion is just a
 // stat block with no owner and no consent needed.
 //
-// Several champions carry a fighting style / combat plan (D41) — their blurbs
+// Several champions carry a fighting style / combat plan — their blurbs
 // already telegraphed one (Osk grapples, Dourmane counters), and watching a
 // champion switch under pressure teaches players the plan system exists. A
 // champion has no per-style targets: its authored attack/defence ARE its style's
@@ -28,10 +28,10 @@ export type ChampionStats = Pick<
 > & { plan?: FamilyPlan };
 
 export interface ChampionReward {
-   /** Deltrada Coins paid the first time this rung is cleared (D19 single currency). */
+   /** Deltrada Coins paid the first time this rung is cleared (the single currency). */
    coins: number;
    // SEAM: a title, a unique item, or a Spire-reputation bump belong here once
-   // those systems exist (titles are an idea-backlog item; items = D28/D33).
+   // those systems exist (titles are an idea-backlog item).
 }
 
 export interface SpireChampion {
@@ -137,7 +137,7 @@ export function championAtRung(rung: number): SpireChampion | null {
    return SPIRE_LADDER[rung] ?? null;
 }
 
-/** The 0-based rung of a champion by id, or -1 if unknown (D10 rule 3). */
+/** The 0-based rung of a champion by id, or -1 if unknown. */
 export function championRungById(id: string): number {
    return SPIRE_LADDER.findIndex((champion) => champion.id === id);
 }
@@ -156,7 +156,7 @@ export type TrialTarget =
 
 /** Resolves the trial target from an optional requested champion id + progress.
  *  Pure — decided the same way pre-lock (for the message) and under the lock
- *  (authoritative). An unknown id degrades to the plain climb (D10 rule 3). */
+ *  (authoritative). An unknown id degrades to the plain climb. */
 export function trialTarget(requestedId: string | null, clearedRung: number): TrialTarget {
    if (!requestedId)
       return climbOrCleared(clearedRung);
@@ -182,7 +182,7 @@ function climbOrCleared(clearedRung: number): TrialTarget {
 /** Builds an engine-ready CombatProfile for a champion — always at full Health,
  *  with a synthetic id that can never collide with a real Character uuid.
  *  `attackNode` is nominal (champions brawl, and never persist skill credit);
- *  no per-style targets — the authored stats are the style's bases (D41). */
+ *  no per-style targets — the authored stats are the style's bases. */
 export function championProfile(champion: SpireChampion): CombatProfile {
    return {
       characterId: `spire:${champion.id}`,

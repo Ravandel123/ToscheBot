@@ -7,7 +7,7 @@ import { defaultBody, parseBody } from '../game/character/body.js';
 import { ATTRIBUTE_KEYS } from '../game/data/attributes.js';
 import type { SeedCharacter } from './seed-data.js';
 
-// The seed's pure core (D38), split out from the CLI so it never imports
+// The seed's pure core, split out from the CLI so it never imports
 // `config` and is therefore testable against an in-memory DB. `seed-characters.ts`
 // is the thin runnable wrapper (env → connect → runSeed → disconnect).
 

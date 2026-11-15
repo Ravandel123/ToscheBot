@@ -10,7 +10,7 @@ import { FORAGE_AP_COST } from '../../game/professions/gather.js';
 import { fakeButton, fakeClient } from '../../testing/fakeInteraction.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// Layer-2 flow tests for S1: the whole forage loop (hub click → AP spend →
+// Layer-2 flow tests for foraging: the whole forage loop (hub click → AP spend →
 // gather → grant → skill credit → hub repaint) and the Examine re-check on the
 // inventory card, against the in-memory DB. Randomness is mocked so outcomes
 // are deterministic; real Discord behaviour stays a manual smoke test.
@@ -47,7 +47,7 @@ describe('play:act:forage (the first live gather, S1)', () => {
       expect(captured.updates).toHaveLength(1); // the hub, repainted in place
       expect(character.actionPoints.current).toBe(5 - FORAGE_AP_COST);
       expect(inventoryOf(character).length).toBeGreaterThan(0);
-      // Learn-by-doing (D40): the rolled gather banked progress on the path.
+      // Learn-by-doing: the rolled gather banked progress on the path.
       expect(character.progression.skills.foraging?.progress ?? 0).toBeGreaterThan(0);
    });
 

@@ -1,4 +1,4 @@
-import { EmbedBuilder, MessageFlags, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
+import { EmbedBuilder, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import type { SlashCommand } from '../../../types/commands.js';
 import { accountService, type SwitchResult } from '../../../db/services/accountService.js';
 import { characterService } from '../../../db/services/characterService.js';
@@ -11,6 +11,8 @@ import { buildFightingStylePanel } from '../../components/_combatPlanView.js';
 import { buildSkillOverview } from '../../components/_skillPanel.js';
 import { buildCharacterSheetView } from './_characterSheet.js';
 import { truncate } from '../../../lib/text.js';
+import { ephemeral } from '../../../lib/discord.js';
+import { NO_ACTIVE_CHARACTER } from '../../components/_characterAction.js';
 import type { ToscheClient } from '../../../client.js';
 
 const SWITCH_FAILURE: Record<Exclude<SwitchResult, { ok: true }>['reason'], string> = {
@@ -18,8 +20,6 @@ const SWITCH_FAILURE: Record<Exclude<SwitchResult, { ok: true }>['reason'], stri
    'current-busy': 'Your current character is mid-activity — finish it before switching.',
    'target-busy': "That character is mid-activity — you can't switch to it right now.",
 };
-
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
    data: new SlashCommandBuilder()
@@ -97,7 +97,7 @@ async function createOrEditCharacter(interaction: ChatInputCommandInteraction): 
    await interaction.showModal(buildIdentityModal({ customId: 'character:create', title: 'Create a character' }));
 }
 
-/** The public character sheet (pre-D27 `/profile`). Viewing yourself onboards
+/** The public character sheet. Viewing yourself onboards
  *  you; viewing someone else is a pure read (no documents created for them). */
 async function viewCharacter(interaction: ChatInputCommandInteraction): Promise<void> {
    const target = interaction.options.getUser('user') ?? interaction.user;
@@ -116,7 +116,7 @@ async function viewCharacter(interaction: ChatInputCommandInteraction): Promise<
       return;
    }
 
-   // The frame is shown in the VIEWER's unit preference (R19), not the target's.
+   // The frame is shown in the VIEWER's unit preference, not the target's.
    const { units } = await accountService.getSettings(interaction.user.id);
    await interaction.reply(buildCharacterSheetView(character, units));
 }
@@ -143,27 +143,27 @@ async function listCharacters(interaction: ChatInputCommandInteraction): Promise
    await interaction.reply({ embeds: [embed], ...ephemeral });
 }
 
-/** The deep-layer skill-tree viewer for your active character (D34). Ephemeral +
+/** The deep-layer skill-tree viewer for your active character. Ephemeral +
  *  personal; navigation lives in the `charskills` component handler. */
 async function viewSkills(interaction: ChatInputCommandInteraction): Promise<void> {
    const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
 
    if (!character) {
-      await interaction.reply({ content: 'You have no active character. Draft one with `/character create`.', ...ephemeral });
+      await interaction.reply({ content: NO_ACTIVE_CHARACTER, ...ephemeral });
       return;
    }
 
    await interaction.reply({ ...buildSkillOverview(character), ...ephemeral });
 }
 
-/** The fighting-style panel for your active character (D41/D59): the simple
+/** The fighting-style panel for your active character: the simple
  *  one-choice view, with the full tactics editor one button away. Ephemeral +
  *  personal; the controls live in the `combatplan` component handler. */
 async function viewCombatPlan(interaction: ChatInputCommandInteraction): Promise<void> {
    const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
 
    if (!character) {
-      await interaction.reply({ content: 'You have no active character. Draft one with `/character create`.', ...ephemeral });
+      await interaction.reply({ content: NO_ACTIVE_CHARACTER, ...ephemeral });
       return;
    }
 

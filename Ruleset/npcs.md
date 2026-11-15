@@ -65,7 +65,7 @@ cron lands, drift must win and that block in `npcSeed.ts` must be deleted.
 
 ### The behavior CRON — one action an hour ✅ direction (numbers 🟡)
 An hourly `npc-tick` job (sibling of `resource-regen`, and **bulk-first / lock-aware** exactly
-like it — root `CLAUDE.md`'s D7/D23): for each NPC, maybe pick one action from its behavior
+like it — `DECISIONS.md` D7/D23): for each NPC, maybe pick one action from its behavior
 profile and apply it as an atomic write. Because NPCs use the same lock manager, a player fighting
 or trading with an NPC and the CRON moving that NPC can't corrupt each other (the tick defers or
 skips a locked NPC, D18/D23). Keep each tick's work small and idempotent (a restart mid-sweep must

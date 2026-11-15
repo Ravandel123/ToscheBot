@@ -14,7 +14,7 @@ import { runMigrations } from '../../scripts/migrations.js';
 import { fakeButton, fakeClient, fakeSelect } from '../../testing/fakeInteraction.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// D58: a solo session never expires, every step offers an in-character exit
+// a solo session never expires, every step offers an in-character exit
 // that applies its consequences exactly once, and the owner can clear a stuck
 // session from `h!session`.
 vi.mock('../../config.js', () => ({ config: { ownerId: 'the-owner' } }));

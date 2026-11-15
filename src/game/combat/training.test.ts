@@ -75,7 +75,7 @@ describe('trainingNodes', () => {
    });
 
    it('trains the style branch you actually fought in, not the base one', () => {
-      // A whole bout in Grappler banks nothing into Striking (D41).
+      // A whole bout in Grappler banks nothing into Striking.
       expect(trainingNodes(profile(), ['grappler'])).toEqual(['grappling']);
    });
 

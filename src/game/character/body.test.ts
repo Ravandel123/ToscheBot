@@ -71,7 +71,7 @@ describe('bodyOf', () => {
       expect(filled.age).toBe(DEFAULT_AGE); // filled
    });
 
-   it('returns the full race default when body is absent (pre-R20 doc)', () => {
+   it('returns the full race default when body is absent (an older doc)', () => {
       expect(bodyOf({ identity: { race: 'tamian' } })).toEqual(defaultBody('tamian'));
    });
 });

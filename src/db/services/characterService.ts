@@ -29,7 +29,7 @@ export type NewCharacterIdentity = EditableIdentity & { name: string; race?: Rac
 // catalog (game/data/npcs.ts), none from a player.
 export type NpcIdentity = Pick<CharacterIdentity, 'name' | 'epithet' | 'gender' | 'bio'> & { race: RaceId };
 
-// Same atomic aggregation-pipeline pattern as before (D6): every write clamps
+// Same atomic aggregation-pipeline pattern as before: every write clamps
 // server-side in one round trip. Mongoose 9 only accepts a pipeline array when
 // the call opts in — every consumer must pass PIPELINE in its options.
 function setStage(fields: Record<string, unknown>): PipelineStage[] {
@@ -74,12 +74,12 @@ export const characterService = {
       return created.toObject();
    },
 
-   /** Mints an APPROVED, ownerless Character for an NPC (D12/D44) under a
+   /** Mints an APPROVED, ownerless Character for an NPC under a
     *  caller-supplied stable id (`npc-<npcId>` — the NPC seed's idempotency
     *  key; never a uuid, and ':'-free since character ids ride in customIds).
-    *  NPCs are content, not petitions: they skip the wizard and the whole D13
+    *  NPCs are content, not petitions: they skip the wizard and the whole
     *  approval lifecycle. Static roster data (archetype, home) is NOT stored —
-    *  it resolves from game/data/npcs.ts at read time (D10). */
+    *  it resolves from game/data/npcs.ts at read time. */
    async createNpc(characterId: string, identity: NpcIdentity, locationId: string): Promise<CharacterDoc> {
       const created = await Character.create({
          _id: characterId,
@@ -139,13 +139,13 @@ export const characterService = {
       );
    },
 
-   /** Persists the character's physical frame (R20; validated/clamped by the
+   /** Persists the character's physical frame (validated/clamped by the
     *  caller via game/character/body.ts). Callers gate with `canEdit` first. */
    async setBody(characterId: string, body: CharacterBody): Promise<void> {
       await Character.updateOne({ _id: characterId }, { $set: { body } });
    },
 
-   /** Persists one family's standing combat orders (D41; validated by the
+   /** Persists one family's standing combat orders (validated by the
     *  caller via game/combat/plan.ts — sanitizeFamilyPlan). One atomic $set of
     *  the whole family subtree; other families' plans are untouched. */
    async setCombatPlan(characterId: string, family: StyleFamily, plan: FamilyPlan): Promise<void> {
@@ -170,7 +170,7 @@ export const characterService = {
    },
 
    /**
-    * Credits ONE meaningful use of the given skills (learn-by-doing, D34/D40) at
+    * Credits ONE meaningful use of the given skills (learn-by-doing) at
     * a training weight: `uses` (default 1, fractional, ≤0 = no-op) is added to
     * every node on their paths, converting banked progress to points at each
     * node's own rate. Read-modify-write over the sparse map — the CALLER must
@@ -226,7 +226,7 @@ export const characterService = {
          { _id: characterId, approvalStatus: { $in: ['draft', 'rejected'] } },
          { $set: { approvalStatus: 'pending' }, $unset: { rejectionReason: '' } },
       );
-      return result.modifiedCount > 0;
+      return result.matchedCount > 0;
    },
 
    /** pending → approved (the Imperator's verdict). Clears any prior rejection reason. */
@@ -235,7 +235,7 @@ export const characterService = {
          { _id: characterId, approvalStatus: 'pending' },
          { $set: { approvalStatus: 'approved' }, $unset: { rejectionReason: '' } },
       );
-      return result.modifiedCount > 0;
+      return result.matchedCount > 0;
    },
 
    /** pending → rejected, recording why (shown back to the player; editable + resubmittable). */
@@ -244,7 +244,7 @@ export const characterService = {
          { _id: characterId, approvalStatus: 'pending' },
          { $set: { approvalStatus: 'rejected', rejectionReason: reason } },
       );
-      return result.modifiedCount > 0;
+      return result.matchedCount > 0;
    },
 
    /** Adjusts resources, clamping each to [0, max] atomically. */
@@ -298,14 +298,14 @@ export const characterService = {
          { $inc: { 'actionPoints.current': -cost } },
       );
 
-      return result.modifiedCount > 0;
+      return result.matchedCount > 0;
    },
 
    async setLocation(characterId: string, locationId: string): Promise<void> {
       await Character.updateOne({ _id: characterId }, { $set: { locationId } });
    },
 
-   /** Who is standing at a location (presence, D31): approved player characters
+   /** Who is standing at a location (presence): approved player characters
     *  (active or benched — they exist in the world either way) plus every NPC.
     *  Drafts/pending are not in the world yet. Read-only, rides the locationId
     *  index; presence is DERIVED, never stored on the location (no drift). */
@@ -318,7 +318,7 @@ export const characterService = {
 
    /** Bulk hourly regen for all characters except `excludeIds` (locked or
     *  mid-activity). Resources nudge toward max (placeholder flat amounts); AP
-    *  just accumulates (no cap, D15). Returns the number of characters modified. */
+    *  just accumulates (no cap). Returns the number of characters modified. */
    async regenAll(excludeIds: string[] = [], hours = 1): Promise<number> {
       const fields = regenFields('full', hours);
       const filter = excludeIds.length > 0 ? { _id: { $nin: excludeIds } } : {};
@@ -326,7 +326,7 @@ export const characterService = {
       return result.modifiedCount;
    },
 
-   /** Bulk hourly regen for characters busy in a durable activity (D23): AP
+   /** Bulk hourly regen for characters busy in a durable activity: AP
     *  always accrues, but vitals not flagged `regenWhileBusy` pause (skipped,
     *  not deferred — you don't heal mid-climb). Safe without a lock: every
     *  field it touches is only ever written via atomic deltas. */
@@ -339,7 +339,7 @@ export const characterService = {
    },
 
    /** Single-character regen — the deferred op for a character locked at regen
-    *  time (D7). Decides full-vs-busy at EXECUTION time: the op lands after the
+    *  time. Decides full-vs-busy at EXECUTION time: the op lands after the
     *  in-memory lock releases, but a durable session may still be running. */
    async regen(characterId: string, hours = 1): Promise<void> {
       const session = await activitySessionService.getActiveForParticipant(characterId);
@@ -351,7 +351,7 @@ export type RegenScope = 'full' | 'busy';
 
 // One regen tick as a clamped $set map; shared by bulk + single paths so they
 // can't drift. AP has no max, so it just grows — and it grows in BOTH scopes
-// (D15/D23); the 'busy' scope skips resources that pause mid-activity.
+//; the 'busy' scope skips resources that pause mid-activity.
 // `hours` pays several ticks at once (catch-up after downtime) — the clamp to
 // max makes that identical to running the tick that many times.
 // Exported for tests only (pure).
@@ -375,7 +375,7 @@ export function regenFields(scope: RegenScope, hours = 1): Record<string, unknow
    return fields;
 }
 
-// PLACEHOLDER (D14): flat regen. The RPG ruleset may later derive this per
+// PLACEHOLDER: flat regen. The RPG ruleset may later derive this per
 // character (e.g. from toughness) — doable in the same pipeline from the doc's
 // own fields, so the bulk write stays one round trip.
 const AP_REGEN_PER_HOUR = 1;

@@ -1,6 +1,6 @@
 import { Schema, model, type Model } from 'mongoose';
 
-// Dynamic, per-location world state (D31). The static catalog (game/data/
+// Dynamic, per-location world state. The static catalog (game/data/
 // locations.ts) says what a place IS; this collection says what is HAPPENING
 // there right now: current weather spell, running events, discovered secrets,
 // mood stats, footfall. Docs are keyed by the location id and created lazily

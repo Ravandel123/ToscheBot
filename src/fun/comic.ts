@@ -1,4 +1,4 @@
-// Beyond the Western Deep — comic catalog (static content, D10). Ported from the
+// Beyond the Western Deep — comic catalog (static content). Ported from the
 // old bot's dataBWD.js. `pages` are the official CDN image URLs; `regularUrl` +
 // `exceptions` reconstruct each page's canonical URL on westerndeep.net so the
 // embed links back to the artists' site. To add a page/chapter, edit this file.
@@ -589,7 +589,7 @@ function isChapterId(id: string): id is ComicChapterId {
    return Object.prototype.hasOwnProperty.call(COMIC, id);
 }
 
-/** Resolves a stored/typed id to a real chapter, falling back to the first one (D10 rule 3). */
+/** Resolves a stored/typed id to a real chapter, falling back to the first one. */
 export function resolveChapterId(id: string): ComicChapterId {
    return isChapterId(id) ? id : COMIC_CHAPTER_IDS[0];
 }

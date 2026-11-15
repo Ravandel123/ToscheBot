@@ -3,10 +3,10 @@ import type { ActivityExit } from '../activity/exit.js';
 import type { CheckDefinition } from '../checks.js';
 import type { TraitKey } from './traits.js';
 
-// The dialogue catalog (R14/D45, conversations.md): a conversation is a graph
+// The dialogue catalog (conversations.md): a conversation is a graph
 // of NODES — one NPC line + the player's OPTIONS — run as a durable 'dialogue'
-// ActivitySession by the D22 registry (game/activity/dialogue.ts owns the pure
-// step logic). Content-in-code (D10): ids are stable slugs riding in session
+// ActivitySession by the activity registry (game/activity/dialogue.ts owns the pure
+// step logic). Content-in-code: ids are stable slugs riding in session
 // state and `activity:opt:<sessionId>:<optionId>` customIds; the catalog test
 // validates the graph (every `next` resolves, every node reachable, no dupes).
 //
@@ -23,7 +23,7 @@ export interface DialogueEffects {
    /** Deed-trait deltas the pick inflicts/earns (a cruel line → +cruelty). */
    traits?: Partial<Record<TraitKey, number>>;
    /** SESSION-scoped flags this outcome sets — they die with the conversation.
-    *  Durable quest flags need an owner decision first (PLAN Decision queue). */
+    *  Durable quest flags need an owner decision first. */
    flags?: readonly string[];
 }
 
@@ -55,11 +55,11 @@ export interface DialogueOption {
    emoji: string;
    requires?: DialogueGate;
    /** With a gate: true = invisible until met (a secret line); false/absent =
-    *  shown locked with the gate's reason (the deep-layer contrast, R14). */
+    *  shown locked with the gate's reason (the deep-layer contrast). */
    hidden?: boolean;
    /** The d100 test this line rolls (Persuade, Intimidate…); omitted = it just
     *  lands (`success` applies). A rolled option costs DIALOGUE_CHECK_AP_COST
-    *  and trains its node's path (D40) — success and failure alike. */
+    *  and trains its node's path — success and failure alike. */
    check?: CheckDefinition;
    /** The option retires after being picked once (asked and answered). */
    oneShot?: boolean;
@@ -77,7 +77,7 @@ export interface DialogueNode {
 export interface DialogueDefinition {
    /** Entry node id. */
    start: string;
-   /** Cutting the talk short, in character (D58) — offered on every node next
+   /** Cutting the talk short, in character — offered on every node next
     *  to the polite goodbyes. {npc}/{epithet} fill like node lines. */
    exit: ActivityExit;
    nodes: Record<string, DialogueNode>;
@@ -213,7 +213,7 @@ export const DIALOGUES = {
       },
    },
 
-   // === The ONE authored named-NPC tree (S4's proof piece): Marrek, the Old
+   // === The ONE authored named-NPC tree (the proof piece): Marrek, the Old
    // Campaigner — gates, checks, trait awards and a hidden line in ~8 nodes ====
    marrek_tales: {
       start: 'corner',
@@ -352,14 +352,14 @@ export const ARCHETYPE_DIALOGUES: Record<NpcArchetype, DialogueId> = {
    wanderer: 'small_talk',
 };
 
-/** Type guard for an id read off session state (D10 rule 3). */
+/** Type guard for an id read off session state. */
 export function isDialogueId(id: string): id is DialogueId {
    return id in DIALOGUES;
 }
 
 /** The dialogue an NPC hosts: its authored tree if assigned, else its
  *  archetype's small talk; null for non-NPCs and retired roster entries —
- *  callers treat null as "nothing to say" (D10 rule 3). */
+ *  callers treat null as "nothing to say". */
 export function dialogueIdFor(npcCharacterId: string): DialogueId | null {
    const npc = npcDefinition(npcCharacterId);
    if (!npc)

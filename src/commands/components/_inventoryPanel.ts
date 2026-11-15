@@ -1,18 +1,11 @@
-// Discord adapter (marked): the inventory panel (D28) — hub (equipment +
+// Discord adapter (marked): the inventory panel — hub (equipment +
 // categories) → category list (sorted, paged) → item detail (stat card +
 // actions). Stateless like every panel: the character id, the inspected
 // instance id and the packed browse state (category.sort.page) ride in the
 // customIds, and every view renders from a FRESH doc read — so two open panels
 // can never show a phantom item as actionable for long, and buttons survive
 // restarts. Underscore prefix → loader skips it.
-import {
-   ActionRowBuilder,
-   ButtonBuilder,
-   ButtonStyle,
-   EmbedBuilder,
-   StringSelectMenuBuilder,
-   type MessageActionRowComponentBuilder,
-} from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { ATTRIBUTES, type AttributeKey } from '../../game/data/attributes.js';
 import { RESOURCES } from '../../game/data/resources.js';
 import { effectDefinition } from '../../game/data/effects.js';
@@ -56,24 +49,18 @@ import {
 } from '../../game/character/inventory.js';
 import { displayName } from '../../game/character/identity.js';
 import { roundTo } from '../../lib/number.js';
-import { truncate } from '../../lib/text.js';
+import { quantitySuffix, truncate } from '../../lib/text.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import { backToPlayRow } from './_backToPlay.js';
+import { actionRow, type ComponentRow, type PanelView } from '../../lib/discord.js';
 
 const PANEL_COLOR = 0x8B5E34; // saddle leather
-
-export interface InventoryView {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
-
-type Row = ActionRowBuilder<MessageActionRowComponentBuilder>;
 
 // --- Hub -----------------------------------------------------------------------
 
 /** The landing view: worn gear, load, and category tabs. `note` is an optional
  *  result line ('✅ Dropped…') prepended after an action repaints the panel. */
-export function buildInventoryHub(character: CharacterDoc, note?: string): InventoryView {
+export function buildInventoryHub(character: CharacterDoc, note?: string): PanelView {
    const equipment = equipmentOf(character);
 
    const slotLines = EQUIPMENT_SLOT_IDS.map((slot) => {
@@ -101,7 +88,7 @@ export function buildInventoryHub(character: CharacterDoc, note?: string): Inven
    if (note)
       embed.setDescription(note);
 
-   const components: Row[] = [categoryRow(character)];
+   const components: ComponentRow[] = [categoryRow(character)];
    const worn = equippedRow(character);
    if (worn)
       components.push(worn);
@@ -110,7 +97,7 @@ export function buildInventoryHub(character: CharacterDoc, note?: string): Inven
    return { embeds: [embed], components };
 }
 
-function categoryRow(character: CharacterDoc): Row {
+function categoryRow(character: CharacterDoc): ComponentRow {
    const counts = kindCounts(character);
    const menu = new StringSelectMenuBuilder()
       .setCustomId(`inventory:cat:${character._id}`)
@@ -121,10 +108,10 @@ function categoryRow(character: CharacterDoc): Row {
          emoji: ITEM_KINDS[kind].emoji,
       })));
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
-function equippedRow(character: CharacterDoc): Row | null {
+function equippedRow(character: CharacterDoc): ComponentRow | null {
    const worn = equippedItems(character);
    if (worn.length === 0)
       return null;
@@ -139,12 +126,12 @@ function equippedRow(character: CharacterDoc): Row | null {
          emoji: ITEM_KINDS[item.definition.kind].emoji,
       })));
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
 // --- Category list ------------------------------------------------------------------
 
-export function buildInventoryList(character: CharacterDoc, state: BrowseState, note?: string): InventoryView {
+export function buildInventoryList(character: CharacterDoc, state: BrowseState, note?: string): PanelView {
    const page = browseItems(character, state);
    const shown: BrowseState = { ...state, page: page.page };
    const kind = ITEM_KINDS[state.kind];
@@ -152,7 +139,7 @@ export function buildInventoryList(character: CharacterDoc, state: BrowseState, 
    const lines = page.items.map((item) => {
       const slot = slotOfInstance(character, item.instance.instanceId);
       const equipped = slot ? ` · *equipped — ${EQUIPMENT_SLOTS[slot].name.toLowerCase()}*` : '';
-      const quantity = item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : '';
+      const quantity = quantitySuffix(item.instance.quantity);
       return `${kind.emoji} **${itemDisplayName(item)}**${quantity} — ${lineSummary(item)}${equipped}`;
    });
 
@@ -162,7 +149,7 @@ export function buildInventoryList(character: CharacterDoc, state: BrowseState, 
       .setDescription([note, lines.join('\n') || '*Nothing here. The road provides — sometimes.*'].filter(Boolean).join('\n\n'))
       .setFooter({ text: `Page ${page.page + 1}/${page.pageCount} · ${page.totalCount} ${page.totalCount === 1 ? 'entry' : 'entries'} · ${INVENTORY_SORTS[state.sort].name} · ${loadLine(character)}` });
 
-   const components: Row[] = [];
+   const components: ComponentRow[] = [];
    const picker = itemPickRow(character, shown, page.items);
    if (picker)
       components.push(picker);
@@ -171,7 +158,7 @@ export function buildInventoryList(character: CharacterDoc, state: BrowseState, 
    return { embeds: [embed], components };
 }
 
-function itemPickRow(character: CharacterDoc, state: BrowseState, items: ResolvedItem[]): Row | null {
+function itemPickRow(character: CharacterDoc, state: BrowseState, items: ResolvedItem[]): ComponentRow | null {
    if (items.length === 0)
       return null;
 
@@ -181,16 +168,16 @@ function itemPickRow(character: CharacterDoc, state: BrowseState, items: Resolve
       .addOptions(items.map((item) => {
          const slot = slotOfInstance(character, item.instance.instanceId);
          return {
-            label: truncate(`${itemDisplayName(item)}${item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : ''}`, 100),
+            label: truncate(`${itemDisplayName(item)}${quantitySuffix(item.instance.quantity)}`, 100),
             value: item.instance.instanceId,
             description: truncate(`${slot ? `📌 ${EQUIPMENT_SLOTS[slot].name} · ` : ''}${lineSummary(item)}`, 100),
          };
       }));
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
-function sortRow(character: CharacterDoc, state: BrowseState): Row {
+function sortRow(character: CharacterDoc, state: BrowseState): ComponentRow {
    const menu = new StringSelectMenuBuilder()
       .setCustomId(`inventory:sort:${character._id}:${packBrowseState(state)}`)
       .setPlaceholder(`Sort: ${INVENTORY_SORTS[state.sort].name}`)
@@ -200,13 +187,13 @@ function sortRow(character: CharacterDoc, state: BrowseState): Row {
          default: sort === state.sort,
       })));
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }
 
-function navRow(character: CharacterDoc, state: BrowseState, pageCount: number): Row {
+function navRow(character: CharacterDoc, state: BrowseState, pageCount: number): ComponentRow {
    const target = (page: number) => `inventory:list:${character._id}:${packBrowseState({ ...state, page })}`;
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   return actionRow(
       new ButtonBuilder().setCustomId(target(state.page - 1)).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(state.page === 0),
       new ButtonBuilder().setCustomId(`inventory:home:${character._id}`).setLabel('Inventory').setEmoji('🎒').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(target(state.page + 1)).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(state.page >= pageCount - 1),
@@ -218,7 +205,7 @@ function navRow(character: CharacterDoc, state: BrowseState, pageCount: number):
 /** The stat card + contextual actions for one owned item. Returns null when
  *  the instance no longer exists (dropped from another window) — the caller
  *  falls back to the list with an explanation. */
-export function buildItemDetail(character: CharacterDoc, instanceId: string, state: BrowseState, note?: string): InventoryView | null {
+export function buildItemDetail(character: CharacterDoc, instanceId: string, state: BrowseState, note?: string): PanelView | null {
    const item = findItem(character, instanceId);
    if (!item)
       return null;
@@ -230,16 +217,16 @@ export function buildItemDetail(character: CharacterDoc, instanceId: string, sta
 }
 
 /** The 'are you sure' repaint of the detail view for a drop. */
-export function buildDropConfirm(character: CharacterDoc, instanceId: string, state: BrowseState): InventoryView | null {
+export function buildDropConfirm(character: CharacterDoc, instanceId: string, state: BrowseState): PanelView | null {
    const item = findItem(character, instanceId);
    if (!item)
       return null;
 
-   const quantity = item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : '';
+   const quantity = quantitySuffix(item.instance.quantity);
    const embed = detailEmbed(character, item, `⚠️ Drop **${itemDisplayName(item)}**${quantity}? It will be gone for good.`);
    const suffix = actionSuffix(character._id, instanceId, state);
 
-   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const row = actionRow(
       new ButtonBuilder().setCustomId(`inventory:dropc:${suffix}`).setLabel('Drop it').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`inventory:detail:${suffix}`).setLabel('Keep it').setStyle(ButtonStyle.Secondary),
    );
@@ -251,7 +238,7 @@ export function buildDropConfirm(character: CharacterDoc, instanceId: string, st
  *  Each option surfaces the slot's current occupant (Ruleset "equipped items
  *  surfaced in the equip dropdowns") so the player sees what they'd displace
  *  before committing — the actual swap-and-stow already happens in `planEquip`. */
-export function buildSlotChooser(character: CharacterDoc, instanceId: string, state: BrowseState): InventoryView | null {
+export function buildSlotChooser(character: CharacterDoc, instanceId: string, state: BrowseState): PanelView | null {
    const item = findItem(character, instanceId);
    if (!item || !isEquippable(item.definition))
       return null;
@@ -274,17 +261,17 @@ export function buildSlotChooser(character: CharacterDoc, instanceId: string, st
          };
       }));
 
-   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
-   const cancelRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const row = actionRow(menu);
+   const cancelRow = actionRow(
       new ButtonBuilder().setCustomId(`inventory:detail:${suffix}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary),
    );
 
    return { embeds: [embed], components: [row, cancelRow] };
 }
 
-/** The item stat card. Exported so the stash panel (D33) reuses the exact same
+/** The item stat card. Exported so the stash panel reuses the exact same
  *  renderer — a stashed item shows an identical card (it is never equipped, so
- *  no 'Equipped' line appears). Renders the owner's BELIEF (R16): a mislabeled
+ *  no 'Equipped' line appears). Renders the owner's BELIEF: a mislabeled
  *  find shows its apparent item's card wholesale; an unidentified one hides
  *  everything but its look and its (real, physical) weight. */
 export function detailEmbed(character: CharacterDoc, item: ResolvedItem, note?: string): EmbedBuilder {
@@ -303,7 +290,7 @@ export function detailEmbed(character: CharacterDoc, item: ResolvedItem, note?: 
 
    const embed = new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle(`${ITEM_KINDS[def.kind].emoji} ${itemDisplayName(item)}${item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : ''}`)
+      .setTitle(`${ITEM_KINDS[def.kind].emoji} ${itemDisplayName(item)}${quantitySuffix(item.instance.quantity)}`)
       .setDescription(headline)
       .addFields(
          ...statFields(character, item),
@@ -324,14 +311,14 @@ export function detailEmbed(character: CharacterDoc, item: ResolvedItem, note?: 
 }
 
 /** The card of an honest unknown: its look, its family, its weight — and
- *  nothing else. The mystery is the pitch (professions.md R16). */
+ *  nothing else. The mystery is the pitch (professions.md). */
 function mysteryEmbed(item: ResolvedItem, note?: string): EmbedBuilder {
    const family = foragableInfo(item.instance.itemId);
    const singular = family ? FORAGE_FAMILIES[family.family].singular : 'find';
 
    return new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle(`${ITEM_KINDS[item.definition.kind].emoji} ${itemDisplayName(item)}${item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : ''}`)
+      .setTitle(`${ITEM_KINDS[item.definition.kind].emoji} ${itemDisplayName(item)}${quantitySuffix(item.instance.quantity)}`)
       .setDescription([
          note ?? '',
          `*You cannot yet say which ${singular} this is. A keener eye might.*`,
@@ -347,7 +334,7 @@ function mysteryEmbed(item: ResolvedItem, note?: string): EmbedBuilder {
 }
 
 /** The kind-specific stat block (of the PERCEIVED definition — a mislabel
- *  shows its false stats, R16). Extend with a case when a new kind lands. */
+ *  shows its false stats). Extend with a case when a new kind lands. */
 function statFields(character: CharacterDoc, item: ResolvedItem): { name: string; value: string; inline?: boolean }[] {
    const def = perceivedDefinition(item);
 
@@ -397,7 +384,7 @@ function statFields(character: CharacterDoc, item: ResolvedItem): { name: string
    return [];
 }
 
-function detailButtons(character: CharacterDoc, item: ResolvedItem, state: BrowseState): Row {
+function detailButtons(character: CharacterDoc, item: ResolvedItem, state: BrowseState): ComponentRow {
    const def = item.definition;
    const suffix = actionSuffix(character._id, item.instance.instanceId, state);
    const equippedSlot = slotOfInstance(character, item.instance.instanceId);
@@ -412,12 +399,12 @@ function detailButtons(character: CharacterDoc, item: ResolvedItem, state: Brows
    if (def.kind === 'consumable')
       buttons.push(new ButtonBuilder().setCustomId(`inventory:use:${suffix}`).setLabel('Use').setEmoji('🍽️').setStyle(ButtonStyle.Primary));
 
-   // Examine (R16): offered on EVERY foraged find, identified or not — a
+   // Examine: offered on EVERY foraged find, identified or not — a
    // settled-only button would leak which confident labels are actually wrong.
    if (isForagableId(item.instance.itemId))
       buttons.push(new ButtonBuilder().setCustomId(`inventory:examine:${suffix}`).setLabel(`Examine (${EXAMINE_AP_COST} AP)`).setEmoji('🔍').setStyle(ButtonStyle.Primary));
 
-   // Stow into the stash (D33) — only when not worn (unequip first); a fresh
+   // Stow into the stash — only when not worn (unequip first); a fresh
    // read on the click side re-checks. Whole entry moves; open it in `/stash`.
    if (!equippedSlot)
       buttons.push(new ButtonBuilder().setCustomId(`inventory:store:${suffix}`).setLabel('Store').setEmoji('🗄️').setStyle(ButtonStyle.Secondary));
@@ -427,7 +414,7 @@ function detailButtons(character: CharacterDoc, item: ResolvedItem, state: Brows
       new ButtonBuilder().setCustomId(`inventory:list:${character._id}:${packBrowseState(state)}`).setLabel('Back').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
    );
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(buttons);
+   return actionRow(buttons);
 }
 
 // --- Shared bits -------------------------------------------------------------------------
@@ -442,8 +429,8 @@ function actionSuffix(characterId: string, instanceId: string, state: BrowseStat
 }
 
 /** One-line stat summary for list rows and select descriptions. Exported for
- *  the stash panel to render identical rows (D33). Reads the PERCEIVED
- *  definition (R16) — an unknown admits it, a mislabel keeps lying. */
+ *  the stash panel to render identical rows. Reads the PERCEIVED
+ *  definition — an unknown admits it, a mislabel keeps lying. */
 export function lineSummary(item: ResolvedItem): string {
    if (identificationOf(item.instance) === 'unidentified')
       return `unidentified · ${formatKg(item.definition.weightKg)}`;

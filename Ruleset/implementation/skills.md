@@ -71,7 +71,7 @@ Mastery above that via special sources is future, per the Ruleset section above.
 ### Storage — `progression` subdoc ✅ D32
 `Character.progression: { skills: SkillProgression }`, stored as a plain (Mixed) object so
 talents/points can join the subdoc later with **no schema change**. Bounded + hot-path
-(read on every check) ⇒ embedded, per root `CLAUDE.md`'s D32 persistence rule — the opposite
+(read on every check) ⇒ embedded, per `DECISIONS.md` D32 persistence rule — the opposite
 case (unbounded state) is why owned-but-uncarried items got their own collection
 (items-equipment.md's stash, D33).
 

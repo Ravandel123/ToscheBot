@@ -1,31 +1,30 @@
-import { MessageFlags, type ButtonInteraction, type SendableChannels } from 'discord.js';
+import type { ButtonInteraction, SendableChannels } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { characterService } from '../../db/services/characterService.js';
 import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { boutService } from '../../db/services/boutService.js';
 import { canCharacterAct } from '../../game/character/rules.js';
 import { displayName } from '../../game/character/identity.js';
-import { boutMode, type BoutMode } from '../../game/combat/bouts.js';
+import { boutMode } from '../../game/combat/bouts.js';
 import { combatProfile } from '../../game/combat/profile.js';
 import { resolveDuel, type DuelResult } from '../../game/combat/duel.js';
 import { pendingChallenges } from '../../game/combat/pendingChallenges.js';
 import { postChronicle } from '../../game/chronicle.js';
-import { sleep } from '../../lib/async.js';
 import {
    buildAcceptedCard,
    buildCancelledCard,
    buildDeclinedCard,
    buildOutcomeLine,
-   buildStyleIntro,
    buildTrainingLine,
    duelOpeningLine,
-   renderBlow,
 } from './_duelView.js';
+import { announce, MessageClaims, narrateBout } from './_boutNarration.js';
+import { ephemeral } from '../../lib/discord.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { ToscheClient } from '../../client.js';
 
-// The serious duel (D16/combat.md R24): the consent gate + the auto-resolve
-// fight on the REAL Health/Soak/opposed-d100 engine. Real damage is PERSISTED to
+// The serious duel (combat.md): the consent gate + the auto-resolve fight on
+// the REAL Health/Soak/opposed-d100 engine. Real damage is PERSISTED to
 // each character's Health resource (it does not mend at once), and a fighter at
 // 0 Health is Downed — unconscious, cannot act (canCharacterAct 'incapacitated')
 // — but pays NO other cost (no Action Points, no permadeath): the owner's brief.
@@ -34,19 +33,10 @@ import type { ToscheClient } from '../../client.js';
 // is posted with the fight uncommitted, and only the CHALLENGED player's Accept
 // starts it — nobody loses Health while offline. Stateless like every component
 // (ids ride in the customId), so the buttons survive a restart.
-//
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
-// Pacing of the narrated bout.
-const INTRO_DELAY_MS = 1500;
-const ROUND_DELAY_MS = 1200;
-
-// One consent card must start at most one fight, but two near-simultaneous
-// Accept clicks are two separate interactions that can BOTH pass the lock
-// check before either acquires it. First click wins on the card's message id;
-// in-memory is enough (single process), and once the winning click repaints
+// One consent card starts at most one fight; once the winning click repaints
 // the card its buttons are gone for good.
-const startingCards = new Set<string>();
+const startingCards = new MessageClaims();
 
 export default {
    namespace: 'duel',
@@ -70,13 +60,10 @@ async function handleAccept(client: ToscheClient, interaction: ButtonInteraction
       return;
    }
 
-   // First-click-wins: the has+add below is synchronous, so of two clicks
-   // racing this line exactly one proceeds to start the fight.
-   if (startingCards.has(interaction.message.id)) {
+   if (!startingCards.claim(interaction.message.id)) {
       await interaction.reply({ content: 'That challenge is already being answered.', ...ephemeral });
       return;
    }
-   startingCards.add(interaction.message.id);
    // Answered, whatever happens next — the target may be challenged again.
    pendingChallenges.clear(opponentId);
 
@@ -112,7 +99,7 @@ async function handleAccept(client: ToscheClient, interaction: ButtonInteraction
       if (channel?.isSendable())
          await runDuel(client, channel, challengerId, opponentId, modeId);
    } finally {
-      startingCards.delete(interaction.message.id);
+      startingCards.release(interaction.message.id);
    }
 }
 
@@ -136,8 +123,8 @@ async function handleDecline(interaction: ButtonInteraction, challengerId: strin
 }
 
 /**
- * Runs the whole bout under both characters' lock (so regen/other writes can't
- * interleave — D5), re-reads the authoritative docs, resolves, saves the
+ * Runs the whole bout under both characters' lock (so regen and other writes
+ * can't interleave), re-reads the authoritative docs, resolves, saves the
  * outcome, then narrates it.
  */
 async function runDuel(client: ToscheClient, channel: SendableChannels, challengerId: string, opponentId: string, modeId: string): Promise<void> {
@@ -163,7 +150,7 @@ async function runDuel(client: ToscheClient, channel: SendableChannels, challeng
       }
 
       // The bout's loadout decides how gear feeds each profile (bare-knuckle
-      // strips weapons/armour; full-gear fights as equipped — D35 bouts).
+      // strips weapons/armour; full-gear fights as equipped).
       const p1 = combatProfile(challenger, { loadout: mode.loadout });
       const p2 = combatProfile(opponent, { loadout: mode.loadout });
       const names = { [p1.characterId]: p1.name, [p2.characterId]: p2.name };
@@ -174,7 +161,8 @@ async function runDuel(client: ToscheClient, channel: SendableChannels, challeng
       const result = resolveDuel(p1, p2);
       const levelUps = await boutService.commitDuel(p1, p2, result);
 
-      await narrateDuel(channel, result, names, maxHealth, mode);
+      await narrateBout(channel, duelOpeningLine(p1.name, p2.name, mode), result, names);
+      await announce(channel, buildOutcomeLine(result, names, maxHealth));
       for (const fighter of [p1, p2]) {
          const gained = levelUps[fighter.characterId];
          if (gained.length > 0)
@@ -185,29 +173,8 @@ async function runDuel(client: ToscheClient, channel: SendableChannels, challeng
    });
 }
 
-async function narrateDuel(channel: SendableChannels, result: DuelResult, names: Record<string, string>, maxHealth: Record<string, number>, mode: BoutMode): Promise<void> {
-   const [challengerName, opponentName] = Object.values(names);
-
-   await announce(channel, duelOpeningLine(challengerName, opponentName, mode));
-   await sleep(INTRO_DELAY_MS);
-
-   // Fighters with a combat plan open in a named style (D41) — worth a beat.
-   const styleIntro = buildStyleIntro(result.openingStyles, names);
-   if (styleIntro) {
-      await announce(channel, styleIntro);
-      await sleep(ROUND_DELAY_MS);
-   }
-
-   for (const blow of result.blows) {
-      await announce(channel, renderBlow(blow, names));
-      await sleep(ROUND_DELAY_MS);
-   }
-
-   await announce(channel, buildOutcomeLine(result, names, maxHealth));
-}
-
-/** A reason this character cannot duel right now, or null. Approval + Health via
- *  the shared `canCharacterAct` gate (D13), plus "not mid-activity" (D22). */
+/** A reason this character cannot duel right now, or null: approval and
+ *  Health via the shared `canCharacterAct` gate, plus "not mid-activity". */
 async function duelBlock(character: CharacterDoc): Promise<string | null> {
    const act = canCharacterAct(character);
    if (!act.ok)
@@ -228,9 +195,4 @@ function chronicleLine(result: DuelResult, names: Record<string, string>): strin
    return result.knockout
       ? `⚔️ **${winner}** knocked **${loser}** out cold in a duel at the Smackdown Spire.`
       : `⚔️ **${winner}** edged **${loser}** on points in a duel at the Smackdown Spire.`;
-}
-
-/** Channel line that never pings (chronicle-style). */
-async function announce(channel: SendableChannels, content: string): Promise<void> {
-   await channel.send({ content, allowedMentions: { parse: [] } });
 }

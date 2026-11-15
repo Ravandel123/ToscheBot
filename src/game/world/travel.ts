@@ -1,9 +1,9 @@
 import { LOCATIONS, resolveLocationId, type LocationId } from '../data/locations.js';
 
-// Pure travel rules (D21) — no Discord, no DB. The `/play` hub's travel menu and
+// Pure travel rules — no Discord, no DB. The `/play` hub's travel menu and
 // any future NPC movement both walk the same graph through these helpers.
 
-// PLACEHOLDER (D14): travel is free until the ruleset prices actions. The
+// PLACEHOLDER: travel is free until the ruleset prices actions. The
 // spend path is already wired through `spendActionPoints`, so setting a real
 // cost (flat or per-edge) later changes only this value/shape.
 export const TRAVEL_AP_COST = 0;
@@ -19,7 +19,7 @@ export function connectionsFrom(id: string): LocationId[] {
    return [...LOCATIONS[resolveLocationId(id)].connectedTo] as LocationId[];
 }
 
-/** Validates one travel move along the graph. Stale `from` ids fall back to the start (D10 rule 3). */
+/** Validates one travel move along the graph. Stale `from` ids fall back to the start. */
 export function checkTravel(fromRaw: string, toRaw: string): TravelCheck {
    const from = resolveLocationId(fromRaw);
 

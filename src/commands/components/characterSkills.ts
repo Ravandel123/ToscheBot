@@ -1,9 +1,10 @@
-import { MessageFlags } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { accountService } from '../../db/services/accountService.js';
 import { buildSkillOverview, buildSkillTreeView } from './_skillPanel.js';
+import { ephemeral } from '../../lib/discord.js';
+import { NO_ACTIVE_CHARACTER } from './_characterAction.js';
 
-// Handles `charskills:*` from the `/character skills` viewer (D34's skill panel):
+// Handles `charskills:*` from the `/character skills` viewer (the skill panel):
 //   open:<rootId> (select) → that tree's breakdown;
 //   overview (button)      → back to the tree list.
 // The panel is personal + ephemeral (like `/profile`), so the clicker IS the
@@ -17,7 +18,7 @@ export default {
 
       const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
       if (!character) {
-         await interaction.reply({ content: 'You have no active character. Draft one with `/character create`.', flags: MessageFlags.Ephemeral });
+         await interaction.reply({ content: NO_ACTIVE_CHARACTER, ...ephemeral });
          return;
       }
 

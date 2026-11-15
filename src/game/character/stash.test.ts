@@ -16,7 +16,7 @@ import type { EquipSubject, ItemInstance } from './inventory.js';
 function attributes(overrides: Partial<Record<AttributeKey, number>> = {}): Record<AttributeKey, number> {
    return {
       ...Object.fromEntries(ATTRIBUTE_KEYS.map((key) => [key, 25])) as Record<AttributeKey, number>,
-      strength: 30, // carry capacity = strength kg (placeholder, D28)
+      strength: 30, // carry capacity = strength kg (placeholder)
       ...overrides,
    };
 }

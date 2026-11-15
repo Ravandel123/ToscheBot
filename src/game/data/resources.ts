@@ -1,7 +1,7 @@
 // Vitals tracked per player. Each is stored as { current, max } and clamped
-// to [0, max] on every write (D6). `regenPerHour` drives the hourly regen cron.
-// Phase 2 ships the two core vitals; meters that *rise* over time (hunger,
-// stress) have different tick semantics and are added later.
+// to [0, max] on every write. `regenPerHour` drives the hourly regen cron.
+// Only the two core vitals exist; meters that *rise* over time (hunger,
+// stress) have different tick semantics and get their own job when built.
 
 export interface ResourceDefinition {
    name: string;
@@ -11,7 +11,7 @@ export interface ResourceDefinition {
    defaultMax: number;
    regenPerHour: number;
    /** Whether the hourly regen still applies while the character is busy in a
-    *  durable activity (D23). Vitals pause — you don't heal mid-climb/mid-duel;
+    *  durable activity. Vitals pause — you don't heal mid-climb/mid-duel;
     *  Action Points are separate and ALWAYS accrue. */
    regenWhileBusy: boolean;
    /** Stored and regenerated, but not shown to players — nothing spends it yet. */

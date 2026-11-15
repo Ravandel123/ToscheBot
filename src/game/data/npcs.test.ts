@@ -4,7 +4,7 @@ import { ITEMS } from './items.js';
 import { effectiveAttributes, emptyAllocation } from '../character/attributes.js';
 import { BIO_MAX_LENGTH, EPITHET_MAX_LENGTH, NAME_MAX_LENGTH, NAME_MIN_LENGTH } from '../character/identity.js';
 
-// Content-integrity checks for the NPC roster (D44): ids/races/homes/items are
+// Content-integrity checks for the NPC roster: ids/races/homes/items are
 // compile-time checked by the catalog types; everything the types can't see
 // (lengths, weights vs carry capacity, plausible amounts) fails `npm test`
 // here, not inside a live `npm run seed-npcs`.
@@ -57,8 +57,8 @@ describe('NPCS roster content', () => {
       }
    });
 
-   // S3 builds the shop on the plaza merchant's inventory + gold pool.
-   it('keeps a merchant with a gold pool at the plaza (the S3 shop anchor)', () => {
+   // The shop trades from the plaza merchant's own pack and purse.
+   it('keeps a merchant with a gold pool at the plaza (the shop anchor)', () => {
       const merchant = entries.find(([, npc]) => npc.archetype === 'merchant' && npc.homeLocationId === 'plaza');
       expect(merchant).toBeDefined();
       expect(merchant?.[1].startingCoins ?? 0).toBeGreaterThan(0);

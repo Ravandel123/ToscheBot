@@ -2,8 +2,9 @@ import challenge from './challenge.js';
 import dialogue from './dialogue.js';
 import type { ActivityHandler } from '../../../types/activities.js';
 import type { ActivitySessionDoc } from '../../../db/models/activitySession.js';
+import type { PanelView } from '../../../lib/discord.js';
 
-// The activity-handler registry (D22): ActivitySession.type → handler. Add a
+// The activity-handler registry: ActivitySession.type → handler. Add a
 // new interactive activity by dropping a handler file in this (loader-invisible)
 // folder and listing it here — the `activity` component router and every
 // re-entry point (e.g. `/play` telling you you're busy) pick it up.
@@ -26,7 +27,7 @@ function buildRegistry(): ReadonlyMap<string, ActivityHandler> {
 export const activityHandlers = buildRegistry();
 
 /** The handler owning a session type, or undefined for a type with no handler
- *  (an old session after a rename — callers degrade gracefully, D10 rule 3). */
+ *  (an old session after a rename — callers degrade gracefully). */
 export function activityHandler(type: string): ActivityHandler | undefined {
    return activityHandlers.get(type);
 }
@@ -41,4 +42,12 @@ export function activityTitle(session: ActivitySessionDoc): string {
  *  what is holding the character). */
 export function busyNote(session: ActivitySessionDoc): string {
    return `⚠️ Unfinished business — **${activityTitle(session)}**. Deal with it first.`;
+}
+
+/** A session's current step with `note` above it, ready to send. A session
+ *  whose type has no handler any more gets the note alone (the owner can end
+ *  it with `h!session`). */
+export function activityStepView(session: ActivitySessionDoc, note = busyNote(session)): PanelView & { content: string } {
+   const view = activityHandler(session.type)?.render(session);
+   return { content: note, embeds: view?.embeds ?? [], components: view?.components ?? [] };
 }

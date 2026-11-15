@@ -1,7 +1,7 @@
 import { createCanvas, loadImage, type Canvas, type Image, type SKRSContext2D } from '@napi-rs/canvas';
 import { defaultFontFamily } from './fonts.js';
 
-// Pure image-compositing seam (Ruleset/images.md §Compositing, D46): a
+// Pure image-compositing seam (Ruleset/images.md §Compositing): a
 // declarative CompositeSpec goes in, one flattened PNG buffer comes out.
 // Callers build the spec from game state (a character's location anchor, a
 // dealt hand) and never touch pixels directly; a marked adapter uploads the

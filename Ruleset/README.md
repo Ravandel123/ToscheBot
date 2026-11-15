@@ -143,7 +143,7 @@ vulpin's governing body **the Council**.
 This ruleset **is** ToscheBot's server-RPG game model — not a separate game. It replaces the
 placeholder attributes/skills/combat that the bot shipped with while the ruleset was being
 designed (root `CLAUDE.md`'s old "Phase 7" framing). A **separate, later** pen-and-paper
-voice-chat campaign (root `CLAUDE.md` D9) is out of scope here and shares no models with this.
+voice-chat campaign (`DECISIONS.md` D9) is out of scope here and shares no models with this.
 
 The world is run by the **bot** (exploration, travel, encounters) plus the **Imperator**
 (the owner, as admin — authors quests/rewards by hand). The AI persona (Tosch) is
@@ -165,8 +165,8 @@ for what's still waiting on the owner.
 ## Decision log
 
 Numbered decisions that are locked (design **R#**, mirroring the old `RPG/CLAUDE.md`'s log;
-bot-engineering **D#** entries that are pure infrastructure, not game rules, stay in root
-`CLAUDE.md` and aren't duplicated here). Each topic file links back to the entries relevant to
+bot-engineering **D#** entries that are pure infrastructure, not game rules, live in root
+`DECISIONS.md` and aren't duplicated here). Each topic file links back to the entries relevant to
 it; this table is the chronological master list.
 
 | # | Decision | Where it lives now |
@@ -276,7 +276,7 @@ race table and this file's "Setting" section):
 - `RPG_SYSTEM.md` (repo root) — the original implementation-tracking doc. Fully folded into
   this folder's `implementation/` files.
 
-If you find a citation anywhere (root `CLAUDE.md`'s decision log, a topic file's prose) still
+If you find a citation anywhere (root `DECISIONS.md`, a topic file's prose) still
 pointing at a path under `RPG/` or at `RPG_SYSTEM.md`, it's a stale reference from before the
 deletion — the content it pointed to is here, in the relevant topic file, not lost.
 
@@ -287,6 +287,6 @@ deletion — the content it pointed to is here, in the relevant topic file, not 
 > with a topic file in this folder, the topic file wins. Use it only to look up how a decision
 > was originally framed.
 
-Root `CLAUDE.md` still owns the bot's engineering conventions and its own decision log for
+Root `CLAUDE.md` still owns the bot's engineering conventions, and root `DECISIONS.md` the decision log for
 non-game infrastructure calls (D1–D11, D14, D17, D18, D22–D24, D29, D30 and similar) — those
 never moved.

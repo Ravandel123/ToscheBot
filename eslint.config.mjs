@@ -58,6 +58,18 @@ export default tseslint.config(
          'default-case-last': 'error',
          // All runtime logging goes through lib/log.ts (scripts/ are exempt below).
          'no-console': 'error',
+         // One way to build the pieces every panel repeats (lib/discord.ts is
+         // exempt below — it is where they are defined).
+         'no-restricted-syntax': ['error',
+            {
+               selector: "NewExpression[callee.name='ActionRowBuilder']",
+               message: 'Build rows with actionRow() or buttonRows() from lib/discord.ts.',
+            },
+            {
+               selector: "MemberExpression[object.name='MessageFlags'][property.name='Ephemeral']",
+               message: 'Spread `ephemeral` from lib/discord.ts instead.',
+            },
+         ],
 
          // Import order: Node builtins → third-party → local, one block, no blank
          // lines. Order WITHIN a group is the author's (type: 'unsorted').
@@ -120,6 +132,12 @@ export default tseslint.config(
       files: ['**/*.test.ts', 'src/testing/**/*.ts'],
       rules: {
          '@typescript-eslint/require-await': 'off',
+      },
+   },
+   {
+      files: ['src/lib/discord.ts'],
+      rules: {
+         'no-restricted-syntax': 'off',
       },
    },
    {

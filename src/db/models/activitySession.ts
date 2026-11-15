@@ -3,8 +3,8 @@ import { Schema, model, type Model } from 'mongoose';
 // A durable, long, interactive activity (a travel challenge, a conversation…).
 // The document is BOTH the saved per-step state (so the activity survives a bot
 // restart) AND the cross-restart "this character is busy" lock. Short, auto-resolved
-// actions (a duel, a gather roll) do NOT use this — they commit atomically (D5
-// rule 1). See D17. A session never expires on its own (D58): it ends when the
+// actions (a duel, a gather roll) do NOT use this — they commit atomically
+// under the character lock. A session never expires on its own: it ends when the
 // player finishes it, takes its exit, or the owner clears it (`h!session`).
 
 export type ActivityType = 'duel' | 'exploration' | 'challenge' | 'dialogue'; // extend as activities are built
@@ -17,7 +17,7 @@ export interface ActivitySessionDoc {
    step: number; // monotonic; the optimistic-concurrency guard (idempotent steps)
    status: ActivityStatus;
    // Opaque per-activity state (HP mid-duel, rooms visited…). The activity's own
-   // code owns the shape; the durability layer treats it as a blob (D17).
+   // code owns the shape; the durability layer treats it as a blob.
    state: Record<string, unknown>;
    createdAt: Date;
    updatedAt: Date;

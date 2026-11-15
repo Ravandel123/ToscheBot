@@ -39,7 +39,7 @@ export function displayName(character: Pick<CharacterDoc, 'identity'>): string {
 /**
  * Whether a character is complete enough to be *submitted* for approval: at
  * least a real name and a chosen race. The owner does the real vetting at the
- * approval step (D13) — this just blocks empty/placeholder submissions.
+ * approval step — this just blocks empty/placeholder submissions.
  */
 export function isIdentityComplete(identity: CharacterIdentity): boolean {
    return identity.name.trim().length >= NAME_MIN_LENGTH && identity.race !== null;

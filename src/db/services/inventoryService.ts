@@ -15,9 +15,10 @@ import {
 } from '../../game/character/inventory.js';
 import { ITEM_KINDS, itemDefinition, type ConsumableDefinition, type ItemQualityId } from '../../game/data/items.js';
 import { STARTER_KIT } from '../../game/data/starterKit.js';
+import { quantitySuffix } from '../../lib/text.js';
 import type { EquipmentSlotId } from '../../game/data/equipmentSlots.js';
 
-// Inventory writes (D28). CONTRACT: callers hold the character's lock
+// Inventory writes. CONTRACT: callers hold the character's lock
 // (`client.locks.runExclusive`) around read-decide-write flows — that is what
 // makes two open panels / a panel + a command safe against each other. Every
 // write here is ADDITIONALLY filter-guarded on the exact instance it touches,
@@ -50,7 +51,7 @@ export const inventoryService = {
    /** Adds items to a character's pack, merging into an existing stack where
     *  the kind allows it (stack key = itemId + quality). Non-stackables arrive
     *  as `quantity` separate instances. A `mystery` grant (an unidentified/
-    *  mislabeled find, R16) never merges — its veil is per-instance state.
+    *  mislabeled find) never merges — its veil is per-instance state.
     *  Enforces the stack cap and carry capacity — the only entry point for
     *  items coming into the world. */
    async grantItems(characterId: string, itemId: string, quality: ItemQualityId, quantity: number, mystery?: MysteryFields): Promise<GrantResult> {
@@ -92,11 +93,11 @@ export const inventoryService = {
    },
 
    /**
-    * Applies an Examine outcome (R16, game/professions/identify.ts) to one
+    * Applies an Examine outcome (game/professions/identify.ts) to one
     * pack instance. CONTRACT: the caller holds the character lock. 'reveal'
     * lifts the veil and — for stackable kinds — merges the now-known find into
     * an existing identified stack (inc-before-pull: a crash duplicates, never
-    * loses, D33's transfer principle). 'mislabel' stamps the confident wrong
+    * loses — the stash transfer principle). 'mislabel' stamps the confident wrong
     * id. Returns the instanceId the item now lives under (the merge target's
     * on a merge), or null when the instance vanished (stale click).
     */
@@ -107,8 +108,6 @@ export const inventoryService = {
          return null;
 
       if (outcome.apply === 'mislabel') {
-         // matchedCount, not modifiedCount: re-stamping the same label is a
-         // no-op $set the in-memory mongod misreports (CLAUDE.md caveat).
          const result = await Character.updateOne(
             { _id: characterId, 'inventory.instanceId': instanceId },
             { $set: { 'inventory.$.identified': false, 'inventory.$.apparentItemId': outcome.apparentItemId } },
@@ -155,7 +154,7 @@ export const inventoryService = {
          update.$unset = { [`equipment.${slot}`]: '' };
 
       const result = await Character.updateOne({ _id: characterId, 'inventory.instanceId': instanceId }, update);
-      return result.modifiedCount > 0 ? { ok: true, removed } : { ok: false, reason: 'not-found' };
+      return result.matchedCount > 0 ? { ok: true, removed } : { ok: false, reason: 'not-found' };
    },
 
    /** Applies a planEquip result: one $set of the target slot plus any slots
@@ -174,7 +173,7 @@ export const inventoryService = {
          { _id: characterId, ...(equippedId ? { 'inventory.instanceId': equippedId } : {}) },
          update,
       );
-      return result.modifiedCount > 0;
+      return result.matchedCount > 0;
    },
 
    /** Unequips whatever occupies `slot` (the item stays in the pack). Returns
@@ -184,7 +183,7 @@ export const inventoryService = {
          { _id: characterId, [`equipment.${slot}`]: { $exists: true } },
          { $unset: { [`equipment.${slot}`]: '' } },
       );
-      return result.modifiedCount > 0;
+      return result.matchedCount > 0;
    },
 
    /** Uses one charge of a consumable: quantity-guarded decrement, then the
@@ -202,7 +201,7 @@ export const inventoryService = {
          { _id: characterId, inventory: { $elemMatch: { instanceId, quantity: { $gte: 1 } } } },
          { $inc: { 'inventory.$.quantity': -1 } },
       );
-      if (result.modifiedCount === 0)
+      if (result.matchedCount === 0)
          return { ok: false, reason: 'not-found' };
 
       await Character.updateOne({ _id: characterId }, { $pull: { inventory: { instanceId, quantity: { $lte: 0 } } } });
@@ -216,7 +215,7 @@ export const inventoryService = {
    /**
     * Moves `quantity` units of one pack entry into ANOTHER character's pack —
     * the item half of a trade. CONTRACT: the caller holds BOTH characters'
-    * locks. Insert-before-remove (D33): a crash in between duplicates the item,
+    * locks. Insert-before-remove: a crash in between duplicates the item,
     * never loses it. What travels: the item, its quality and its wear. What
     * does not: the identification veil — it was the previous owner's belief, so
     * the goods arrive as what they truly are. An equipped item is refused
@@ -270,7 +269,7 @@ export const inventoryService = {
    /**
     * Replaces a character's whole pack with a fixed stock list — a merchant
     * laying out the stall for the day. CONTRACT: the caller holds the lock.
-    * Unknown item ids are skipped (D10 rule 3). Not for player characters.
+    * Unknown item ids are skipped. Not for player characters.
     */
    async setStock(characterId: string, stock: readonly StockEntry[]): Promise<void> {
       const ids = new Set<string>();
@@ -310,7 +309,7 @@ export const inventoryService = {
          const granted = await this.grantItems(characterId, entry.itemId, entry.quality, entry.quantity);
          const name = itemDefinition(entry.itemId)?.name ?? entry.itemId;
          if (granted.ok)
-            issued.push(entry.quantity > 1 ? `${entry.quantity}× ${name}` : name);
+            issued.push(`${name}${quantitySuffix(entry.quantity)}`);
       }
 
       await Character.updateOne({ _id: characterId }, { $set: { starterKitGranted: true } });

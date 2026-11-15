@@ -8,9 +8,9 @@ import {
 } from '../data/skills.js';
 import type { AttributeKey } from '../data/attributes.js';
 
-// The skill-tree ENGINE (RPG/ P-skilltree). Pure — no Discord, no DB. Operates
+// The skill-tree ENGINE (Ruleset/skills.md). Pure — no Discord, no DB. Operates
 // on a character's SPARSE progression map: only nodes the character has touched
-// are stored; an absent node reads as 0 points (M0-friendly, D32). The tree
+// are stored; an absent node reads as 0 points (M0-friendly). The tree
 // SHAPE lives in game/data/skills.ts; this file turns "points on nodes" into the
 // two things the game reads — a check's Effective and learn-by-doing growth.
 
@@ -24,7 +24,7 @@ export interface SkillNodeState {
 /** The sparse map stored on the character — only non-zero nodes are present. */
 export type SkillProgression = Partial<Record<SkillNodeId, SkillNodeState>>;
 
-/** The `progression` subdoc (D32). Only `skills` is real today; talents/points
+/** The `progression` subdoc. Only `skills` is real today; talents/points
  *  join it when those phases land — stored as a plain object so growing the
  *  shape needs no migration. */
 export interface CharacterProgression {
@@ -77,7 +77,7 @@ export interface SkillSpec {
 /**
  * Raw Effective for a skill spec: `attribute term (primary node's blend) + Σ path
  * points`. UNCAPPED on purpose — a master's surplus over an item's required sum is
- * crafting quality / combat Mastery (RPG/ §2). checks.ts clamps it into a d100 %.
+ * crafting quality / combat Mastery. checks.ts clamps it into a d100 %.
  */
 export function effectiveSkill(
    attributes: Record<AttributeKey, number>,

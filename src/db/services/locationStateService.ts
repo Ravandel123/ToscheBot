@@ -2,7 +2,7 @@ import { LocationState, type LocationStateDoc } from '../models/locationState.js
 import { rollWeather } from '../../game/data/weather.js';
 import { LOCATION_STATS, initialStats, type LocationStatKey } from '../../game/data/locationStats.js';
 
-// Dynamic world state per location (D31). Every write is an atomic single-doc,
+// Dynamic world state per location. Every write is an atomic single-doc,
 // filter-guarded update — concurrent hub opens and arrivals (even one player's
 // three stale panels) race safely: one writer wins the guard, the rest re-read.
 // No location locks: nothing here ever spans more than one document, and none
@@ -66,7 +66,7 @@ export const locationStateService = {
          { $push: { events: { eventId, startedAt, endsAt } } },
       );
 
-      return result.modifiedCount > 0;
+      return result.matchedCount > 0;
    },
 
    /** Marks a feature discovered. True = newly found (announce it, chronicle it);
@@ -83,7 +83,7 @@ export const locationStateService = {
    },
 
    /** Nudges one dynamic stat, clamped to its catalog range — the write seam
-    *  for events and encounter outcomes (🟡 no consumer writes yet, D31). */
+    *  for events and encounter outcomes (🟡 no consumer writes yet). */
    async adjustStat(locationId: string, key: LocationStatKey, delta: number): Promise<void> {
       const { min, max } = LOCATION_STATS[key];
       const fallback = initialStats(locationId)[key];

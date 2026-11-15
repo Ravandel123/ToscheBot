@@ -14,7 +14,7 @@ import type { ResourceState } from '../../db/models/character.js';
 // raceless, unallocated draft (every attribute at ATTRIBUTE_BASE = 25) lands on
 // the old flat defaults (Health 20 / Stamina 10), so today's placeholder combat
 // numbers (duel/Spire) don't silently shift for the "average" character. Frame
-// (weight/height, R12) is a documented future addend, not built here.
+// (weight/height) is a documented future addend, not built here.
 
 const HEALTH_BASE = 12;
 const HEALTH_CONSTITUTION_WEIGHT = 2;

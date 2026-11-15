@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import type { SlashCommand } from '../../../types/commands.js';
 import { config } from '../../../config.js';
 import { settings } from '../../../settings.js';
@@ -11,11 +11,9 @@ import { DEFAULT_BOUT_MODE, boutMode, selectableBoutModes } from '../../../game/
 import { CHALLENGE_COOLDOWN_SECONDS, pendingChallenges } from '../../../game/combat/pendingChallenges.js';
 import { buildChallengeButtons, buildChallengeCard } from '../../components/_duelView.js';
 import { buildTrialBrowser } from '../../components/_trialView.js';
-import { resolveGuildChannel } from '../../../lib/discord.js';
+import { ephemeral, resolveGuildChannel } from '../../../lib/discord.js';
 import type { CharacterDoc } from '../../../db/models/character.js';
 import type { ToscheClient } from '../../../client.js';
-
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
    // `duel` — an approved character, real Health that is spent and persists, a
@@ -52,7 +50,7 @@ export default {
    },
 } satisfies SlashCommand;
 
-// --- Duel (real stakes, consent-gated — D16/combat.md) -------------------------
+// --- Duel (real stakes, consent-gated) -------------------------------------
 
 /** Validates the matchup, then posts the consent card to the Spire. The fight
  *  itself starts only when the challenged player clicks Accept — the `duel`
@@ -96,7 +94,7 @@ async function challengeToDuel(client: ToscheClient, interaction: ChatInputComma
       return;
    }
 
-   // A duel needs an APPROVED, healthy character on both sides (D16). The consent
+   // A duel needs an APPROVED, healthy character on both sides. The consent
    // handler re-checks under the lock; this is the early, friendly rejection.
    const problem = actProblem(challenger, 'Your character') ?? actProblem(opponent, `**${displayName(opponent)}**`);
    if (problem) {
@@ -104,7 +102,7 @@ async function challengeToDuel(client: ToscheClient, interaction: ChatInputComma
       return;
    }
 
-   // Spam guard (D59): one unanswered challenge per target, and a pause between
+   // Spam guard: one unanswered challenge per target, and a pause between
    // a challenger's own challenges. Checked last, so a refused attempt above
    // never burns the cooldown. The owner skips the cooldown, as everywhere.
    const waiting = pendingChallenges.waitingOn(opponent._id);
@@ -144,7 +142,7 @@ function actProblem(character: CharacterDoc, subject: string): string | null {
       : `${subject} is in no shape to fight right now.`;
 }
 
-// --- Trial (PvE Spire ladder — D37) --------------------------------------------
+// --- Trial (PvE Spire ladder) --------------------------------------------
 
 /** Opens the browsable Spire-ladder panel (the fight itself is owned by the
  *  `trial` component handler). This replaced the old `opponent:<name>` argument:

@@ -3,17 +3,13 @@
 // message as the hub — so a panel opened from a hub shortcut returns to it, and
 // one opened by its slash command becomes a hub. Underscore prefix → loader
 // skips it.
-import {
-   ActionRowBuilder,
-   ButtonBuilder,
-   ButtonStyle,
-   type MessageActionRowComponentBuilder,
-} from 'discord.js';
+import { ButtonBuilder, ButtonStyle } from 'discord.js';
+import { actionRow, type ComponentRow } from '../../lib/discord.js';
 
 export function backToPlayButton(): ButtonBuilder {
    return new ButtonBuilder().setCustomId('play:hub').setLabel('Back to /play').setEmoji('↩️').setStyle(ButtonStyle.Secondary);
 }
 
-export function backToPlayRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(backToPlayButton());
+export function backToPlayRow(): ComponentRow {
+   return actionRow(backToPlayButton());
 }

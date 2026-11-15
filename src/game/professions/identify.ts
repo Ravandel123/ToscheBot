@@ -3,7 +3,7 @@ import { identificationOf, type ItemInstance } from '../character/inventory.js';
 import { checkTarget, type CheckDefinition, type CheckSubject } from '../checks.js';
 import { FORAGABLES, FORAGABLE_ITEM_IDS, foragableInfo, isForagableId, type ForagableItemId } from '../data/foragables.js';
 
-// Identification & the misidentification gamble (R16, professions.md). Pure —
+// Identification & the misidentification gamble (professions.md). Pure —
 // no Discord, no DB. The one rule that shapes everything here: the bot never
 // reveals whether an identification was RIGHT. Every outcome reads confident
 // ("Ah — of course. Honeycap."), so a wrong label is indistinguishable from a
@@ -20,7 +20,7 @@ export const EXAMINE_AP_COST = 1;
 export const MISLABEL_CHANCE_PERCENT = 40;
 
 /** The d100 check an identify attempt rolls: the Identify leaf (trains the
- *  whole Foraging path, D40) shifted by how recognizable this item is. */
+ *  whole Foraging path) shifted by how recognizable this item is. */
 export function identifyCheck(itemId: ForagableItemId): CheckDefinition {
    return { node: 'identify_forage', modifier: FORAGABLES[itemId].identifyModifier };
 }
@@ -34,7 +34,7 @@ export function pickDescriptor(itemId: ForagableItemId): string {
  * The plausible wrong id a failed identify settles on: same family, sharing
  * the shown look where possible (an ashgill passing for a honeycap), never
  * the item itself. Null when the family offers no impostor — then the find
- * simply stays unidentified (a mislabel must always be plausible, R16).
+ * simply stays unidentified (a mislabel must always be plausible).
  */
 export function plausibleMislabel(itemId: ForagableItemId, descriptorId: string): ForagableItemId | null {
    const family = FORAGABLES[itemId].family;
@@ -75,7 +75,7 @@ export type ExamineResult =
  * Resolves one Examine of an owned instance. Rolls internally (mock
  * Math.random in tests). Truth is sticky: an `identified: true` instance can
  * only be confirmed, never talked back into doubt. `target` is exposed so the
- * caller can credit the rolled attempt (checkTrainingWeight, D40) — a
+ * caller can credit the rolled attempt (checkTrainingWeight) — a
  * 'confirmed' shortcut rolled nothing and must credit nothing.
  */
 export function examineInstance(subject: CheckSubject, instance: ItemInstance): ExamineResult {

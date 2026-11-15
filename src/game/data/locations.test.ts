@@ -3,7 +3,7 @@ import { LOCATIONS, locationFeature, type LocationDefinition, type LocationId } 
 import { WEATHER } from './weather.js';
 import { LOCATION_STATS, type LocationStatKey } from './locationStats.js';
 
-// Content-integrity checks for the D31 world fields (the graph itself is
+// Content-integrity checks for the living-world fields (the graph itself is
 // enforced in game/world/travel.test.ts): a typo'd weather kind or an
 // out-of-range base stat should fail `npm test`, not surface mid-game.
 

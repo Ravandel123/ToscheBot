@@ -1,7 +1,7 @@
 import type { ArmorDefinition } from './types.js';
 
-// Armor catalog entries (D28/D50) — spread into ITEMS by ../items.js.
-// Ids are append-only (D10); 🟡 all numbers are balance placeholders.
+// Armor catalog entries — spread into ITEMS by ../items.js.
+// Ids are append-only; 🟡 all numbers are balance placeholders.
 
 export const ARMOR = {
    leather_jerkin: {

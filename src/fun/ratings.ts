@@ -1,4 +1,4 @@
-// Flavor remarks for `h!rate`, grouped by score tier. Pure data (D10) — the
+// Flavor remarks for `h!rate`, grouped by score tier. Pure data — the
 // command picks a tier from the rolled score and a random remark from it.
 
 export const RATING_REMARKS = {

@@ -20,11 +20,11 @@ import {
 import { isStorageContainerId } from '../../game/data/containers.js';
 import { DEFAULT_ITEM_QUALITY, isItemQualityId, itemDefinition, type ItemKindId } from '../../game/data/items.js';
 
-// Stash reads + transfers (D33). CONTRACT: deposit/withdraw run under the
+// Stash reads + transfers. CONTRACT: deposit/withdraw run under the
 // character's lock (`client.locks.runExclusive`) — same as inventoryService —
 // so the pack side is read-decide-write-safe against the player's own panels.
 // Cross-collection transfers are NOT transactional (the codebase deliberately
-// stays single-doc atomic, D5/D6); instead each transfer INSERTS the destination
+// stays single-doc atomic); instead each transfer INSERTS the destination
 // copy BEFORE removing the source, so the failure mode of a crash mid-transfer
 // is a recoverable DUPLICATE, never a lost item (favor-duplicate-over-loss).
 // Reads NEVER load the whole stash: category pages and counts run server-side.
@@ -109,7 +109,7 @@ export const itemService = {
          quantity: packItem.quantity,
          ...(packItem.durability === undefined ? {} : { durability: packItem.durability }),
          acquiredAt: packItem.acquiredAt instanceof Date ? packItem.acquiredAt : new Date(),
-         // The identification veil (R16) survives the transfer — a stored
+         // The identification veil survives the transfer — a stored
          // mystery is still a mystery when withdrawn.
          ...(packItem.identified === undefined ? {} : { identified: packItem.identified }),
          ...(packItem.apparentItemId === undefined ? {} : { apparentItemId: packItem.apparentItemId }),
@@ -123,7 +123,7 @@ export const itemService = {
          update.$unset = { [`equipment.${slot}`]: '' };
 
       const result = await Character.updateOne({ _id: characterId, 'inventory.instanceId': instanceId }, update);
-      if (result.modifiedCount === 0) {
+      if (result.matchedCount === 0) {
          // The pack entry vanished between our read and the pull (should not
          // happen under the lock) — roll back the stash copy so it isn't orphaned.
          await Item.deleteOne({ _id: docId });
@@ -157,7 +157,7 @@ export const itemService = {
          if (!fit.ok)
             return fit;
       } else if (inventoryOf(character).length + 1 > INVENTORY_STACK_LIMIT) {
-         // Unknown item id (a retired catalog entry, D10 rule 3): still bound the
+         // Unknown item id (a retired catalog entry): still bound the
          // pack, but there is no weight to check.
          return { ok: false, reason: 'inventory-full' };
       }

@@ -80,7 +80,7 @@ choice); a two-handed weapon occupies `mainHand` and **freezes `offHand`** (equi
 the off hand, and the off hand refuses new gear while it's wielded).
 
 ### The carried pack — `Character.inventory[]` ✅ shape / 🟡 numbers D28
-Embedded on the character (bounded + read on every check, per root `CLAUDE.md`'s D32
+Embedded on the character (bounded + read on every check, per `DECISIONS.md` D32
 persistence rule): `{ instanceId (8-char, rides in customIds), itemId → catalog, quality,
 quantity (stackable kinds), durability?, acquiredAt }`, capped at
 `INVENTORY_STACK_LIMIT = 50` entries. **Carry capacity** = Strength in kg (🟡); going over

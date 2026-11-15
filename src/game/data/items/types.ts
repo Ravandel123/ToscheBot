@@ -3,13 +3,13 @@ import type { EquipmentSlotId } from '../equipmentSlots.js';
 import type { ResourceKey } from '../resources.js';
 import type { EffectId } from '../effects.js';
 
-// The item TYPE SYSTEM (D28/D50): kinds, craftsmanship qualities, materials,
+// The item TYPE SYSTEM: kinds, craftsmanship qualities, materials,
 // weapon properties/reach and the definition union. The catalog ENTRIES live
 // in the sibling per-kind files (weapons.ts, armor.ts…) and are assembled into
 // ITEMS by ../items.ts — import from there, not from here, unless you are a
 // catalog file yourself. WHFRP-flavored on purpose (Ruleset/items-equipment.md).
 // 🟡 Every NUMBER in the catalogs (damage, weights, values, penalties,
-// requirements) is a balance placeholder pending the Phase 7 ruleset (D14) —
+// requirements) is a balance placeholder until the owner signs it off —
 // the SHAPES here are the stable part.
 
 // --- Item kinds ---------------------------------------------------------------
@@ -52,7 +52,7 @@ export interface ItemQualityDefinition {
 
 // WHFRP's poor/common/good/best ladder. One catalog entry drops at any tier,
 // so loot variety costs nothing. 🟡 Multipliers are placeholders; quality does
-// NOT touch damage/armor yet — that interaction belongs to the Phase 7 ruleset.
+// NOT touch damage/armor yet (an open question in items-equipment.md).
 export const ITEM_QUALITIES = {
    poor: { name: 'Poor', prefix: 'Battered', durabilityMultiplier: 0.5, valueMultiplier: 0.4 },
    common: { name: 'Common', prefix: '', durabilityMultiplier: 1, valueMultiplier: 1 },
@@ -98,8 +98,9 @@ export interface WeaponPropertyDefinition {
    description: string;
 }
 
-// Descriptors for now: combat consumes them in Phase 7 (D14); until then they
-// are honest flavor the owner can author against. Append-only ids (D10).
+// Descriptors for now: combat only reads them for the damage family shown in
+// narration; the rest is honest flavor the owner can author against.
+// Append-only ids.
 export const WEAPON_PROPERTIES = {
    piercing: { name: 'Piercing', description: 'Punches through armor.' },
    entangling: { name: 'Entangling', description: 'Snags limbs and weapons — can grapple a foe.' },
@@ -141,7 +142,7 @@ interface ItemDefinitionBase {
    /** What it's (mostly) made of; omit where it makes no sense (rations). */
    material?: MaterialId;
    weightKg: number;
-   /** 🪙 Base value in deltradaCoins — display-only until the economy (D19/P17). */
+   /** 🪙 Base value in deltradaCoins — what a merchant asks for a Common, unworn piece. */
    value: number;
 }
 
@@ -160,7 +161,7 @@ interface EquippableBase extends ItemDefinitionBase {
 
 export interface WeaponDefinition extends EquippableBase {
    kind: 'weapon';
-   /** 🟡 Placeholder damage range until the Phase 7 combat math (D14). */
+   /** 🟡 Damage range a connecting blow rolls in a fight. */
    damage: { min: number; max: number };
    reach: WeaponReachId;
    /** Two-handed weapons occupy the main hand and demand the off hand be free. */
@@ -170,7 +171,7 @@ export interface WeaponDefinition extends EquippableBase {
 
 export interface ShieldDefinition extends EquippableBase {
    kind: 'shield';
-   /** 🟡 Armor value (AV) it adds; Soak math comes with Phase 7 (Ruleset/combat.md). */
+   /** 🟡 Armor value (AV) it adds to Soak in a fight (Ruleset/combat.md). */
    armor: number;
 }
 

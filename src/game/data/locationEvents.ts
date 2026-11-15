@@ -1,12 +1,12 @@
 import type { LocationCondition } from '../world/conditions.js';
 
-// Location-event catalog (D31): transient happenings that switch ON at a place
+// Location-event catalog: transient happenings that switch ON at a place
 // for a few hours (market day, bards' night…). The catalog is the static half;
 // which events are RUNNING right now lives in LocationState.events. Events are
 // rolled on qualifying arrivals (game/world/events.ts) and expire on their
 // `endsAt`. While active they banner the /play hub and can gate hub actions
 // (`availability.duringEvent`) or encounters (`conditions.duringEvent`).
-// ADDING AN EVENT = one entry here; ids are stable slugs (D10) — they are
+// ADDING AN EVENT = one entry here; ids are stable slugs — they are
 // stored in LocationState docs.
 
 export interface LocationEventDefinition {
@@ -56,7 +56,7 @@ export const LOCATION_EVENTS = {
 
 export type LocationEventId = keyof typeof LOCATION_EVENTS;
 
-/** Resolves a stored event id, tolerating unknown/retired ids (D10 rule 3). */
+/** Resolves a stored event id, tolerating unknown/retired ids. */
 export function locationEvent(id: string): LocationEventDefinition | undefined {
    return LOCATION_EVENTS[id as LocationEventId];
 }

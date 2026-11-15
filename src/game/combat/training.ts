@@ -50,7 +50,7 @@ export function trainingWeight(self: CombatProfile, foe: CombatProfile): number 
 }
 
 /**
- * The skill nodes one fighter's bout actually exercised (D41): each style they
+ * The skill nodes one fighter's bout actually exercised: each style they
  * fought in trains its own branch (you practise what you did — a whole bout in
  * Grappler banks nothing into Striking), a plain stretch trains the base attack
  * node, and an armed fighter keeps training the weapon branch under any style

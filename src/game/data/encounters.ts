@@ -4,20 +4,20 @@ import type { CheckDefinition } from '../checks.js';
 import type { LocationCondition } from '../world/conditions.js';
 import type { TraitKey } from './traits.js';
 
-// Travel-encounter catalog (D21/D26): things that can happen on the road. Two
+// Travel-encounter catalog: things that can happen on the road. Two
 // kinds, matching the two action shapes of the game:
 //   'flavor'   — instant; a line of text, no state change, the move completes;
 //   'activity' — interactive; the move is INTERRUPTED and a durable 'challenge'
-//                ActivitySession runs (D17). A challenge exposes SEVERAL
-//                approaches (RPG/'s multi-approach model): most are d100
+//                ActivitySession runs. A challenge exposes SEVERAL
+//                approaches (the multi-approach model): most are d100
 //                roll-under checks (game/checks.ts) — pick the one your build
 //                is good at — and some are free choices that shape your deed
 //                traits instead (ignore the drowning stranger → cowardice).
 // 🟡 Content and numbers are placeholder; the check SHAPE is the stable part.
-// Ids (encounters AND option ids) are stable slugs (D10) — they ride in
+// Ids (encounters AND option ids) are stable slugs — they ride in
 // session state and customIds.
 // A rolled check that names a skill `node` also TRAINS that node's path
-// (learn-by-doing, D40) — prefer a skill node over a bare attribute wherever
+// (learn-by-doing) — prefer a skill node over a bare attribute wherever
 // one fits; attribute-only checks stay untrained feats and credit nothing.
 
 interface EncounterBase {
@@ -26,7 +26,7 @@ interface EncounterBase {
    locations: readonly string[] | 'anywhere';
    /** Relative pick weight within the eligible pool. */
    weight: number;
-   /** When it can fire (D31): time of day, weather, running events, traits… —
+   /** When it can fire: time of day, weather, running events, traits… —
     *  the owner's "character walks in and, if a criterion holds, something
     *  happens". Omitted = always eligible. */
    conditions?: LocationCondition;
@@ -36,7 +36,7 @@ export interface FlavorEncounter extends EncounterBase {
    kind: 'flavor';
    /** One is appended to the arrival message (and the chronicle line). */
    lines: readonly [string, ...string[]];
-   /** A location feature this sighting reveals (→ LocationFeature.id, D31). */
+   /** A location feature this sighting reveals (→ LocationFeature.id). */
    discovers?: string;
 }
 
@@ -48,9 +48,9 @@ export interface ChallengeOutcome {
     *  the road wins). */
    result: 'proceed' | 'turn-back' | 'retry';
    lines: readonly [string, ...string[]];
-   /** Deed-trait deltas this outcome inflicts/earns (D26). */
+   /** Deed-trait deltas this outcome inflicts/earns. */
    traits?: Partial<Record<TraitKey, number>>;
-   /** A location feature this outcome reveals at the DESTINATION (D31). */
+   /** A location feature this outcome reveals at the DESTINATION. */
    discovers?: string;
 }
 
@@ -79,7 +79,7 @@ export interface ActivityEncounter extends EncounterBase {
    options: readonly [ChallengeOption, ...ChallengeOption[]];
    /** Failed retries before the challenge forces the character back. */
    maxSetbacks: number;
-   /** Walking away, in character (D58). Ends the challenge at the origin and
+   /** Walking away, in character. Ends the challenge at the origin and
     *  must never be a better deal than the worst option above. */
    exit: ActivityExit;
 }
@@ -110,7 +110,7 @@ export const ENCOUNTERS = {
          'A crow watches you from a fencepost, unimpressed.',
       ],
    },
-   // --- Conditional encounters (D31): fire only when their criteria hold -------
+   // --- Conditional encounters: fire only when their criteria hold -------
    soaked_traveler: {
       name: 'Soaked through',
       kind: 'flavor',
@@ -166,7 +166,7 @@ export const ENCOUNTERS = {
             emoji: '🧗',
             description: 'Scramble up the trunk and drop down the far side.',
             // Same odds as the old bare-agility check (the blend is 1.0 AGI)
-            // but the attempt now trains Athletics → Climbing (D40).
+            // but the attempt now trains Athletics → Climbing.
             check: { node: 'climbing' },
             success: { result: 'proceed', lines: ['You find a solid hold, haul yourself up and drop onto the road beyond.'] },
             failure: { result: 'retry', lines: ['Your grip slips on wet bark and you slide back down.', 'A branch snaps under you — back to the start.'] },

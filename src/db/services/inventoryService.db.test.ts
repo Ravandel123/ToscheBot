@@ -4,7 +4,7 @@ import { inventoryService } from './inventoryService.js';
 import { identificationOf, inventoryOf } from '../../game/character/inventory.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// Layer-1 tests for the identification writes (R16/S1): what a mock can't
+// Layer-1 tests for the identification writes: what a mock can't
 // prove — that mystery grants really stay separate instances, that a reveal's
 // merge is inc-before-pull with the right quantities, and that the positional
 // filter guards degrade a stale instanceId to a null, never a wrong write.
@@ -103,7 +103,7 @@ describe('inventoryService.issueStarterKit', () => {
       await characterService.approve(id);
 
       const issued = await inventoryService.issueStarterKit(id);
-      expect(issued).toEqual(['Iron Dagger', 'Leather Jerkin', '2× Healer\'s Poultice']);
+      expect(issued).toEqual(['Iron Dagger', 'Leather Jerkin', 'Healer\'s Poultice ×2']);
 
       const stored = (await characterService.get(id))!;
       expect(stored.starterKitGranted).toBe(true);

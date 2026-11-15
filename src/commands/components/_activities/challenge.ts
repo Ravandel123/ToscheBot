@@ -1,6 +1,5 @@
-// Discord adapter (marked): the 'challenge' activity handler — the multi-
-// approach successor of the old single-button 'obstacle' (D26) and still the
-// reference pattern for every future interactive activity:
+// Discord adapter (marked): the 'challenge' activity handler — the reference
+// pattern for every interactive activity:
 //   * each click = one step-guarded `advance` (idempotent against double-clicks
 //     and crash-replay); flavor + roll summary ride IN the state so repaints
 //     are stable;
@@ -9,16 +8,17 @@
 //     session — if the bot dies in between, `render` sees a terminal state and
 //     offers a "Press on" finalize button that redoes the idempotent tail.
 // Each approach is a d100 roll-under check (game/checks.ts) against a target
-// computed when the session opened — the panel shows your % honestly (R1).
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type ButtonInteraction, type MessageActionRowComponentBuilder } from 'discord.js';
+// computed when the session opened — the panel shows your % honestly.
+import { ButtonBuilder, ButtonStyle, EmbedBuilder, type ButtonInteraction } from 'discord.js';
 import { activitySessionService } from '../../../db/services/activitySessionService.js';
+import { hubAfter, optionRows, repaintSession, rollSummary, takeExit, trainFromCheck } from './shared.js';
 import { characterService } from '../../../db/services/characterService.js';
 import { locationStateService } from '../../../db/services/locationStateService.js';
-import { freshHubView, revealFeature } from '../_hubView.js';
+import { revealFeature } from '../_hubView.js';
 import { postChronicle } from '../../../game/chronicle.js';
 import { displayName } from '../../../game/character/identity.js';
 import { locationName } from '../../../game/data/locations.js';
-import { ENCOUNTERS, type ActivityEncounter, type ChallengeOption, type EncounterId } from '../../../game/data/encounters.js';
+import { ENCOUNTERS, type ActivityEncounter, type EncounterId } from '../../../game/data/encounters.js';
 import {
    appliedOutcome,
    attemptChallenge,
@@ -27,11 +27,10 @@ import {
    challengeStateFrom,
    type ChallengeState,
 } from '../../../game/activity/challenge.js';
-import { checkTarget, checkTrainingWeight, rollAgainst } from '../../../game/checks.js';
+import { checkTarget, rollAgainst } from '../../../game/checks.js';
 import { checkSubject } from '../../../game/character/modifiers.js';
-import { skillNode } from '../../../game/data/skills.js';
 import { randomItem } from '../../../lib/random.js';
-import type { SkillLevelUp } from '../../../game/character/skills.js';
+import { actionRow } from '../../../lib/discord.js';
 import type { ActivityExit } from '../../../game/activity/exit.js';
 import type { ActivityHandler, ActivityView } from '../../../types/activities.js';
 import type { ActivitySessionDoc } from '../../../db/models/activitySession.js';
@@ -40,20 +39,24 @@ import type { ToscheClient } from '../../../client.js';
 
 const CHALLENGE_COLOR = 0x7A5C3E; // weathered timber
 
-/** For a session whose encounter id no longer resolves (D10 rule 3). */
+/** For a session whose encounter id no longer resolves. */
 const FALLBACK_EXIT: ActivityExit = { label: 'Turn back', emoji: '↩️', lines: ['You turn back the way you came.'] };
+
+const ENDED_LINE = 'This activity has already ended.';
+
+function render(session: ActivitySessionDoc): ActivityView {
+   const state = challengeStateFrom(session.state);
+
+   return challengeProgress(state) === 'ongoing'
+      ? stepView(session, state)
+      // Crash-recovery window: the final step was persisted but the tail
+      // (move/cleanup) may not have run. Offer to finish it.
+      : finalizeView(session, state);
+}
 
 export default {
    type: 'challenge',
-   render(session) {
-      const state = challengeStateFrom(session.state);
-
-      return challengeProgress(state) === 'ongoing'
-         ? stepView(session, state)
-         // Crash-recovery window: the final step was persisted but the tail
-         // (move/cleanup) may not have run. Offer to finish it.
-         : finalizeView(session, state);
-   },
+   render,
    title(session) {
       const state = challengeStateFrom(session.state);
       return `${encounterName(state.encounterId)}, on the road to ${locationName(state.toId)}`;
@@ -85,26 +88,25 @@ async function handleOption(
    const option = encounter && availableOptions(encounter.options, state).find((o) => o.id === optionId);
    if (!encounter || !option) {
       // A stale button (burned one-shot, or a renamed encounter/option id) —
-      // repaint whatever is authoritative now (D10 rule 3).
-      await repaintCurrent(interaction, session._id);
+      // repaint whatever is authoritative now.
+      await repaintSession(interaction, session._id, render, ENDED_LINE);
       return;
    }
 
    // Roll against the target computed (and shown) when the session opened;
-   // fall back to a fresh computation for pre-D26 blobs (with equipped-gear
-   // modifiers applied, like the session-start computation — D28).
+   // fall back to a fresh computation for a state that lacks it.
    const check = option.check
       ? rollAgainst(state.optionTargets[option.id] ?? checkTarget(checkSubject(actor), option.check))
       : null;
    const success = check?.success ?? true;
    const outcome = appliedOutcome(option, success);
-   const line = randomItem(outcome.lines) + (check ? ` (🎲 ${check.roll} vs **${check.target}%** — ${check.success ? 'success' : 'failure'})` : '');
+   const line = randomItem(outcome.lines) + (check ? ` ${rollSummary(check)}` : '');
 
    const next = attemptChallenge(state, option, success, line, encounter.maxSetbacks);
    const advanced = await activitySessionService.advance(session._id, session.step, { ...next });
    if (!advanced) {
       // Stale click (double-click or replay) — repaint whatever is authoritative now.
-      await repaintCurrent(interaction, session._id);
+      await repaintSession(interaction, session._id, render, ENDED_LINE);
       return;
    }
 
@@ -114,20 +116,12 @@ async function handleOption(
    if (outcome.traits)
       await characterService.applyTraitDeltas(actor._id, outcome.traits);
 
-   // Learn-by-doing (D40): a ROLLED check trains its skill path, success or
-   // failure alike, weighted by how hard the attempt was for this character.
-   // Checkless choices (and attribute-only checks — no node to train) credit
-   // nothing. The step-guard win serializes this write: a session-busy
-   // character cannot equip, duel or switch, so no other progression writer
-   // can interleave (same argument as the trait deltas above).
-   let trainingNote = '';
-   if (check && option.check?.node) {
-      const levelUps = await characterService.creditSkillUse(actor._id, [option.check.node], checkTrainingWeight(check.target));
-      if (levelUps.length > 0)
-         trainingNote = trainingLine(levelUps);
-   }
+   // Learn-by-doing, weighted by how hard the attempt was for this character.
+   // The step-guard win serializes this write: a session-busy character cannot
+   // equip, duel or switch, so no other progression writer can interleave.
+   const trainingNote = await trainFromCheck(actor._id, option.check, check, 'The attempt taught you something');
 
-   // Some outcomes reveal a feature of the destination (D31) — idempotent, and
+   // Some outcomes reveal a feature of the destination — idempotent, and
    // it announces itself to the chronicle only when genuinely new.
    if (outcome.discovers)
       await revealFeature(client, actor, next.toId, outcome.discovers);
@@ -141,9 +135,9 @@ async function handleOption(
    await finalize(client, interaction, advanced, actor, next, trainingNote);
 }
 
-/** The idempotent completion tail: move (only on 'proceed') → chronicle → delete
- *  session → repaint the HUB at wherever the character ended up, so the play
- *  loop continues without a fresh `/play` (D30/D31). `trainingNote` rides only
+/** The idempotent completion tail: move (only on 'proceed') → delete session →
+ *  repaint the HUB at wherever the character ended up, so the play loop
+ *  continues without a fresh `/play` → chronicle. `trainingNote` rides only
  *  the attempt that just credited it — a crash-replay re-entry passes none. */
 async function finalize(
    client: ToscheClient,
@@ -164,21 +158,17 @@ async function finalize(
 
    await activitySessionService.complete(session._id);
 
-   const survivor = await characterService.get(actor._id);
    const outcomeLine = proceeded
       ? `✅ ${state.lastLine || 'You press on.'}\nYou arrive at **${locationName(state.toId)}**.`
       : `❌ ${challenge} proves too much — you trudge back to **${locationName(state.fromId)}**.`;
-   const banner = trainingNote ? `${outcomeLine}\n${trainingNote}` : outcomeLine;
-   await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
+   await interaction.update(await hubAfter(actor._id, trainingNote ? `${outcomeLine}\n${trainingNote}` : outcomeLine));
 
    await postChronicle(client, proceeded
       ? `🧭 **${name}** reached **${locationName(state.toId)}**, getting past ${challenge.toLowerCase()} on the way.`
       : `🧭 **${name}** set out for **${locationName(state.toId)}**, but ${challenge.toLowerCase()} forced them back to **${locationName(state.fromId)}**.`);
 }
 
-/** Taking the encounter's exit (D58). The session is removed FIRST: winning
- *  that delete is what entitles this click to apply the exit's consequences,
- *  so a double-click cannot charge them twice. */
+/** Taking the encounter's exit. */
 async function handleExit(
    client: ToscheClient,
    interaction: ButtonInteraction,
@@ -194,24 +184,8 @@ async function handleExit(
    }
 
    const exit = activityEncounter(state.encounterId)?.exit ?? FALLBACK_EXIT;
-   if (await activitySessionService.abandon(session._id) && exit.traits)
-      await characterService.applyTraitDeltas(actor._id, exit.traits);
-
-   const survivor = await characterService.get(actor._id);
-   const banner = `${exit.emoji} ${randomItem(exit.lines)}\nYou are back at **${locationName(state.fromId)}**.`;
-   await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
-}
-
-async function repaintCurrent(interaction: ButtonInteraction, sessionId: string): Promise<void> {
-   const fresh = await activitySessionService.get(sessionId);
-
-   if (fresh?.status !== 'active') {
-      await interaction.update({ content: 'This activity has already ended.', embeds: [], components: [] });
-      return;
-   }
-
-   const state = challengeStateFrom(fresh.state);
-   await interaction.update(challengeProgress(state) === 'ongoing' ? stepView(fresh, state) : finalizeView(fresh, state));
+   await takeExit(session, actor._id, exit);
+   await interaction.update(await hubAfter(actor._id, `${exit.emoji} ${randomItem(exit.lines)}\nYou are back at **${locationName(state.fromId)}**.`));
 }
 
 // --- Views --------------------------------------------------------------------
@@ -238,7 +212,7 @@ function stepView(session: ActivitySessionDoc, state: ChallengeState, trainingNo
          encounter ? `\nSetbacks: **${state.setbacks}/${encounter.maxSetbacks}**` : '',
       ].filter(Boolean).join('\n'));
 
-   return { embeds: [embed], components: optionRows(session._id, options, encounter?.exit ?? FALLBACK_EXIT) };
+   return { embeds: [embed], components: optionRows(session._id, options, 'retreat', encounter?.exit ?? FALLBACK_EXIT) };
 }
 
 function finalizeView(session: ActivitySessionDoc, state: ChallengeState): ActivityView {
@@ -250,43 +224,20 @@ function finalizeView(session: ActivitySessionDoc, state: ChallengeState): Activ
          ? `You are past the worst of it — **${locationName(state.toId)}** lies ahead.`
          : `It bested you this time. The road back to **${locationName(state.fromId)}** awaits.`);
 
-   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const row = actionRow(
       new ButtonBuilder().setCustomId(`activity:finalize:${session._id}`).setLabel('Press on').setEmoji('🥾').setStyle(ButtonStyle.Primary),
    );
 
    return { embeds: [embed], components: [row] };
 }
 
-/** One button per available approach + the encounter's exit, chunked into ≤5-wide rows. */
-function optionRows(sessionId: string, options: readonly ChallengeOption[], exit: ActivityExit): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
-   const buttons = [
-      ...options.map((option) =>
-         new ButtonBuilder().setCustomId(`activity:opt:${sessionId}:${option.id}`).setLabel(option.label).setEmoji(option.emoji).setStyle(ButtonStyle.Primary),
-      ),
-      new ButtonBuilder().setCustomId(`activity:retreat:${sessionId}`).setLabel(exit.label).setEmoji(exit.emoji).setStyle(ButtonStyle.Secondary),
-   ];
-
-   const rows: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
-   for (let i = 0; i < buttons.length; i += 5)
-      rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(buttons.slice(i, i + 5)));
-
-   return rows;
-}
-
-/** Second-person "you improved" note (the duel narration's sibling, skills.md:
- *  growth must announce itself; quiet when the attempt only banked progress). */
-function trainingLine(levelUps: readonly SkillLevelUp[]): string {
-   const gains = levelUps.map((up) => `**${skillNode(up.node).name}** rises to **${up.to}**`).join(', ');
-   return `📈 The attempt taught you something — ${gains}.`;
-}
-
-/** The encounter behind a state, if it still exists and is activity-kind (D10 rule 3). */
+/** The encounter behind a state, if it still exists and is activity-kind. */
 function activityEncounter(encounterId: string): ActivityEncounter | undefined {
    const encounter = ENCOUNTERS[encounterId as EncounterId];
    return encounter?.kind === 'activity' ? encounter : undefined;
 }
 
-/** Encounter display name with a graceful unknown-id fallback (D10 rule 3). */
+/** Encounter display name with a graceful unknown-id fallback. */
 function encounterName(encounterId: string): string {
    return ENCOUNTERS[encounterId as EncounterId]?.name ?? 'An obstacle';
 }

@@ -6,10 +6,10 @@ import type { RaceId } from './data/races.js';
 import type { CharacterDoc } from '../db/models/character.js';
 
 // The core resolution mechanic: d100, roll-under, with Success Levels — the
-// shape locked in RPG/'s R1 (WHFRP-style). A check draws on either a SKILL-TREE
-// node (its blend gives the attribute term, its path is summed — the R10 sum
-// model, game/character/skills.ts) or a bare attribute (untrained feats like
-// heaving a trunk aside; these train nothing — D40). The raw Effective is then shaped into a d100 % by a
+// WHFRP-style shape. A check draws on either a SKILL-TREE node (its blend
+// gives the attribute term, its path is summed — the sum model,
+// game/character/skills.ts) or a bare attribute (untrained feats like
+// heaving a trunk aside; these train nothing). The raw Effective is then shaped into a d100 % by a
 // difficulty modifier and any racial affinity (a lutren swims at ×1.5), and
 // clamped so nothing is ever certain.
 
@@ -23,7 +23,7 @@ export interface CheckDefinition {
    attribute?: AttributeKey;
    /** Weight on `attribute` when used directly (default 1 — the whole attribute). */
    attributeWeight?: number;
-   /** Difficulty ladder step (RPG/Ruleset.md §2): +20 easy … −30 punishing. */
+   /** Difficulty ladder step (Ruleset/skills.md): +20 easy … −30 punishing. */
    modifier?: number;
    /** Racial chance multipliers (1.5 = 50% better odds), applied to the target. */
    raceAffinity?: Partial<Record<RaceId, number>>;
@@ -37,7 +37,7 @@ export interface CheckResult {
    successLevels: number;
 }
 
-/** Roll-under floor/cap: nothing is impossible, nothing is guaranteed (R1). */
+/** Roll-under floor/cap: nothing is impossible, nothing is guaranteed. */
 export const CHECK_MIN_TARGET = 5;
 export const CHECK_MAX_TARGET = 95;
 
@@ -52,11 +52,11 @@ export type CheckSubject = Pick<CharacterDoc, 'attributes' | 'progression'> & {
 /**
  * The raw Effective (capability) for a check: a skill node's `attribute blend +
  * Σ path points`, or a bare weighted attribute. UNCAPPED — surplus is Mastery /
- * crafting quality (RPG/ §2). checkTarget shapes and clamps it into a d100 %.
+ * crafting quality. checkTarget shapes and clamps it into a d100 %.
  */
 export function checkEffective(subject: CheckSubject, check: CheckDefinition): number {
    if (check.node)
-      // `?? {}` tolerates a pre-D34 character doc with no progression (lean reads
+      // `?? {}` tolerates an older character doc with no progression (lean reads
       // don't apply the schema default) — an untrained sum, never a crash.
       return effectiveSkill(subject.attributes, subject.progression?.skills ?? {}, { node: check.node, extraNodes: check.extraNodes });
    if (check.attribute)

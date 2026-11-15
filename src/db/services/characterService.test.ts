@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { regenFields } from './characterService.js';
 import { RESOURCES } from '../../game/data/resources.js';
 
-// Only the pure tick-shape logic is tested (the D23 busy/free split); the
+// Only the pure tick-shape logic is tested (the busy/free split); the
 // surrounding service methods are DB glue and stay untested by policy.
 describe('regenFields', () => {
    it('full scope regens AP and every regenerating resource', () => {

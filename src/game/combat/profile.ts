@@ -13,10 +13,10 @@ import type { CharacterDoc } from '../../db/models/character.js';
 
 // Derives an engine-ready CombatProfile (duel.ts) from a real character — the
 // one place attributes, the skill tree (game/checks.ts + skills.ts) and equipped
-// gear (D28) feed serious combat. The engine itself never sees a CharacterDoc.
+// gear feed serious combat. The engine itself never sees a CharacterDoc.
 //
-// 🟡 Every tuning constant here is a balance placeholder (D14 stance: SHAPE is
-// stable, NUMBERS wait on the Phase 7 ruleset). They exist so the derived d100
+// 🟡 Every tuning constant here is a balance placeholder (SHAPE is stable,
+// NUMBERS wait on the owner's sign-off). They exist so the derived d100
 // targets land in a readable, decisive band on today's attribute values.
 
 /** Bare fists/claws when nothing is wielded — the Spire staple. 🟡 */
@@ -37,7 +37,7 @@ export interface CombatProfileOptions {
 /**
  * Builds a combatant from the character under the chosen bout loadout. With
  * `as-equipped` (default): equipment-modified attributes (a plate-clad brawler is
- * slower), the wielded weapon's damage, and worn Armour Value in Soak (D28). With
+ * slower), the wielded weapon's damage, and worn Armour Value in Soak. With
  * `unarmed-unarmored`: gear is set aside — bare attributes, fists, no AV — as if
  * the fighter stripped down at the door (the pack itself is untouched). Health is
  * always the character's real pool. Read the character fresh under the lock first.
@@ -57,7 +57,7 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
    const strengthBonus = attributeBonus(attributes.strength);
    const constitutionBonus = attributeBonus(attributes.constitution);
 
-   // Styles are family-specific (D41/D42): what's in your hands — and how it's
+   // Styles are family-specific: what's in your hands — and how it's
    // gripped — decides which catalog (and which stored plan) applies to this
    // bout. A one-handed ward and a greatsword ward are different schools.
    const family: StyleFamily = weapon ? weaponFamily(weapon) : 'unarmed';
@@ -90,9 +90,9 @@ export function combatProfile(character: CharacterDoc, options: CombatProfileOpt
  * Per-style base d100 targets for every style the plan references, computed
  * UP FRONT (the same honest-odds discipline as challenge options: what a
  * repaint would show and what the engine rolls can never disagree). Each style
- * draws on its skill node (D41): unarmed, the node replaces the attack draw;
+ * draws on its skill node: unarmed, the node replaces the attack draw;
  * armed, the weapon branch and the style branch are summed together (extraNodes
- * — since D42 the style node sits UNDER the grip, so the shared grip+melee
+ * — the style node sits UNDER the grip, so the shared grip+melee
  * path dedups; the sum stays correct when weapon-leaf nodes like Blades land).
  * Defence is the style node's path both ways — the owner's rule: knowing your
  * style well means defending better in it.
@@ -148,7 +148,7 @@ function weaponSkillNode(weapon: WeaponDefinition): SkillNodeId {
    return weapon.hands === 2 ? 'two_handed' : 'one_handed';
 }
 
-/** The style family a weapon's grip puts its wielder in (D42). */
+/** The style family a weapon's grip puts its wielder in. */
 function weaponFamily(weapon: WeaponDefinition): StyleFamily {
    return weapon.hands === 2 ? 'two_handed' : 'one_handed';
 }

@@ -1,5 +1,5 @@
 // Discord adapter (marked): the read-only skill-tree viewer behind
-// `/character skills` (D34's skill panel). Two views:
+// `/character skills`. Two views:
 //   overview → every tree root with the character's trained points + governing
 //     attributes, and a select to open one;
 //   tree view → one tree's whole node list (a monospace table: points, the
@@ -9,14 +9,7 @@
 // owner, so no ids ride in the customIds — the handler re-resolves the caller's
 // active character each time (stateless, restart-proof). Underscore prefix →
 // loader skips it.
-import {
-   ActionRowBuilder,
-   ButtonBuilder,
-   ButtonStyle,
-   EmbedBuilder,
-   StringSelectMenuBuilder,
-   type MessageActionRowComponentBuilder,
-} from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import {
    SKILL_ROOT_IDS,
    isSkillVisible,
@@ -34,16 +27,12 @@ import { effectiveSkill, nodePoints, usesForNextPoint, type SkillProgression } f
 import { displayName } from '../../game/character/identity.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import { backToPlayRow } from './_backToPlay.js';
+import { actionRow, type ComponentRow, type PanelView } from '../../lib/discord.js';
 
 const PANEL_COLOR = 0x4E6E58; // quartermaster ledger green (matches /profile)
 
-export interface SkillPanel {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
-
 /** The overview: every tree root, its trained points, and a picker to open one. */
-export function buildSkillOverview(character: CharacterDoc): SkillPanel {
+export function buildSkillOverview(character: CharacterDoc): PanelView {
    const skills = character.progression?.skills ?? {};
 
    const lines = SKILL_ROOT_IDS.filter(isSkillVisible).map((rootId) => {
@@ -63,7 +52,7 @@ export function buildSkillOverview(character: CharacterDoc): SkillPanel {
 }
 
 /** One tree's full breakdown (falls back to the overview on an unknown root id). */
-export function buildSkillTreeView(character: CharacterDoc, rootId: string): SkillPanel {
+export function buildSkillTreeView(character: CharacterDoc, rootId: string): PanelView {
    if (!isSkillNodeId(rootId) || skillNode(rootId).parent !== null || !isSkillVisible(rootId))
       return buildSkillOverview(character);
 
@@ -94,7 +83,7 @@ export function buildSkillTreeView(character: CharacterDoc, rootId: string): Ski
       embeds: [embed],
       components: [
          treePickerRow(rootId),
-         new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(back),
+         actionRow(back),
       ],
    };
 }
@@ -110,7 +99,7 @@ function nodeLine(character: CharacterDoc, skills: SkillProgression, id: SkillNo
    const eff = `${Math.round(effective)}`.padStart(3);
 
    // Progress toward the next point (banked uses / uses needed). Banked uses are
-   // fractional (training weights — D40); one decimal keeps the row readable.
+   // fractional (training weights); one decimal keeps the row readable.
    // Hidden once the node is capped — ordinary practice can't push it further.
    let progress = '';
    if (points < cap) {
@@ -136,7 +125,7 @@ function formatBlend(blend: AttributeWeights): string {
    return parts.length > 0 ? parts.join(' + ') : 'no governing attribute';
 }
 
-function treePickerRow(selected?: SkillNodeId): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function treePickerRow(selected?: SkillNodeId): ComponentRow {
    const menu = new StringSelectMenuBuilder()
       .setCustomId('charskills:open')
       .setPlaceholder('Open a skill tree…')
@@ -149,5 +138,5 @@ function treePickerRow(selected?: SkillNodeId): ActionRowBuilder<MessageActionRo
          })),
       );
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+   return actionRow(menu);
 }

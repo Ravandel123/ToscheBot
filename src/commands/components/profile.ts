@@ -1,17 +1,17 @@
-import { MessageFlags, type ButtonInteraction, type ModalSubmitInteraction } from 'discord.js';
+import type { ButtonInteraction, ModalSubmitInteraction } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { accountService } from '../../db/services/accountService.js';
 import { BOOLEAN_SETTING_KEYS, type BooleanSettingKey, type UnitSystem } from '../../db/models/account.js';
 import { isValidTimeZone } from '../../lib/datetime.js';
 import { fetchProfilePanel } from './_profilePanel.js';
 import { buildSettingModal, type SettingField } from './_profileModals.js';
+import { ephemeral } from '../../lib/discord.js';
 
-// Handles every `profile:*` interaction from the account panel (D27/R19). The
+// Handles every `profile:*` interaction from the account panel. The
 // panel is ephemeral, so the clicker is always the account owner:
 //   toggle:<key>  → flip a boolean setting;
 //   units         → cycle metric ⇄ imperial;
 //   country/timezone → open a text modal → set-country/set-timezone save it.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
    namespace: 'profile',

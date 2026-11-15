@@ -68,7 +68,7 @@ describe('rollAgainst', () => {
       expect(rollAgainst(45, 46).success).toBe(false);
    });
 
-   it('computes Success Levels as the tens difference (RPG/ R1)', () => {
+   it('computes Success Levels as the tens difference', () => {
       expect(rollAgainst(55, 23).successLevels).toBe(3); // clean success
       expect(rollAgainst(55, 54).successLevels).toBe(0); // bare success
       expect(rollAgainst(55, 71).successLevels).toBe(-2); // failure margin

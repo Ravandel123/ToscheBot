@@ -1,10 +1,10 @@
 // Deed traits — who a character is BECOMING, grown by choices, not points
-// (RPG/Ruleset.md §11 "Character (deed) traits", P-traits direction): ignore a
+// (Ruleset/flavor-progression.md): ignore a
 // drowning stranger → +cowardice; dive in after them → +courage. Independent
 // rising meters (courage and cowardice can coexist — people are complicated),
-// clamped ≥ 0, starting at 0. Nothing GATES on thresholds yet — encounters only
-// accrue them; consumers (trait-gated dialogue, titles, stress interplay) come
-// with the Phase 7 ruleset. Ids are stable slugs (D10): append, never rename.
+// clamped ≥ 0, starting at 0. Encounters and conversations accrue them;
+// dialogue options and encounters can gate on a threshold. Titles and stress
+// interplay are ideas, not built. Ids are stable slugs: append, never rename.
 
 export interface TraitDefinition {
    name: string;

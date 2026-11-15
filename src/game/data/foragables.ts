@@ -1,6 +1,6 @@
 import type { CraftingMaterialDefinition, ItemQualityId } from './items/types.js';
 
-// The foraging content catalog (R16, professions.md): what grows wild, what it
+// The foraging content catalog (professions.md): what grows wild, what it
 // looks like before you know what it is, and how hard it is to tell. The item
 // DEFINITIONS here are spread into the main ITEMS catalog (items.ts) so a
 // foraged find is an ordinary `material` instance everywhere (pack, stash,
@@ -12,10 +12,10 @@ import type { CraftingMaterialDefinition, ItemQualityId } from './items/types.js
 //     displays, chosen from the item's `looks`. Two items sharing a look is
 //     the point: that overlap is exactly where a failed identify can
 //     plausibly MISLABEL one as the other (game/professions/identify.ts);
-//   * per-item identify difficulty and the family's quality-name row (R23:
+//   * per-item identify difficulty and the family's quality-name row (
 //     one universal tier number, per-family display names — "Pristine", not
 //     "Masterwork Mushroom").
-// Ids are stable slugs, append-only once a character doc can hold one (D10).
+// Ids are stable slugs, append-only once a character doc can hold one.
 // 🟡 Every number (values, weights, identify modifiers) is a balance placeholder.
 
 // --- Families -------------------------------------------------------------------
@@ -64,7 +64,7 @@ export const FORAGE_DESCRIPTORS = {
 
 export type ForageDescriptorId = keyof typeof FORAGE_DESCRIPTORS;
 
-/** Resolves a stored descriptor id, tolerating stale ones (D10 rule 3). */
+/** Resolves a stored descriptor id, tolerating stale ones. */
 export function forageDescriptor(id: string): ForageDescriptorDefinition | null {
    return id in FORAGE_DESCRIPTORS ? FORAGE_DESCRIPTORS[id as ForageDescriptorId] : null;
 }
@@ -142,7 +142,7 @@ export interface ForagableInfo {
    /** Difficulty ladder step on the identify check: + = common knowledge,
     *  − = genuinely tricky (an ashgill passes for a honeycap when young). 🟡 */
    identifyModifier: number;
-   /** Rare enough that an identified find makes the chronicle (D24). */
+   /** Rare enough that an identified find makes the chronicle. */
    noteworthy?: boolean;
 }
 
@@ -163,15 +163,15 @@ export function isForagableId(id: string): id is ForagableItemId {
    return id in FORAGABLES;
 }
 
-/** The profession layer of a stored item id, if it is a foragable (D10 rule 3). */
+/** The profession layer of a stored item id, if it is a foragable. */
 export function foragableInfo(id: string): ForagableInfo | null {
    return isForagableId(id) ? FORAGABLES[id] : null;
 }
 
-// --- Quality display (the R23 seam: per-family name rows on the shared tiers) ------
+// --- Quality display (the seam: per-family name rows on the shared tiers) ------
 
 /** The forage family's name row over today's 4 quality tiers — 'Masterwork
- *  Mushroom' is nonsense, 'Pristine' is not (R23). Consulted by the display
+ *  Mushroom' is nonsense, 'Pristine' is not. Consulted by the display
  *  layer for foragable items; gear keeps ITEM_QUALITIES' own prefixes. 🟡 */
 export const FORAGE_QUALITY_PREFIXES: Record<ItemQualityId, string> = {
    poor: 'Wilted',

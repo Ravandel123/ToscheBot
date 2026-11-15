@@ -3,15 +3,15 @@ import type { LocationId } from './locations.js';
 import type { RaceId } from './races.js';
 import type { GENDER_CHOICES } from '../character/identity.js';
 
-// The hand-authored NPC roster (Phase 6C, static half — npcs.md R18). An NPC is
-// an ordinary Character with `ownerId: null` (D12): same attributes, inventory,
+// The hand-authored NPC roster (static half — npcs.md). An NPC is
+// an ordinary Character with `ownerId: null`: same attributes, inventory,
 // locks and presence as a player character. This catalog is the STATIC side of
-// that split (D10): everything here resolves from code at read time — the DB
+// that split: everything here resolves from code at read time — the DB
 // stores only the character doc itself, minted from this roster by
 // `npm run seed-npcs` (scripts/npcSeed.ts).
 //
 // The link between catalog and doc is the character id: an NPC's Character._id
-// is `npc-<npcId>` (npcCharacterId below) — stable, append-only (D10 rule 2),
+// is `npc-<npcId>` (npcCharacterId below) — stable, append-only,
 // and ':'-free because character ids ride in colon-separated customIds. That id
 // doubles as the seed's idempotency key: a reseed UPDATES the static half
 // (identity, race, home) and never resets what the world has mutated since
@@ -19,13 +19,13 @@ import type { GENDER_CHOICES } from '../character/identity.js';
 //
 // startingInventory/startingCoins are granted ONCE, on first seed. 🟡 All coin
 // amounts are balance placeholders until the owner signs off (the plaza
-// merchant's pool is the S3 shop's real, finite trading gold).
+// merchant's pool is the shop's real, finite trading gold).
 
 export type NpcGender = (typeof GENDER_CHOICES)[number]['value'];
 
 // Which behavior profile / player-facing verbs fit this NPC (npcs.md's
 // archetype table). DATA-ONLY seam today: nothing reads it at runtime until
-// the S3 shop (merchant) and the npc-tick cron (Decision queue #7) land.
+// NPCs act on their own (PLAN.md, "NPCs acting behind the scenes").
 export type NpcArchetype = 'guard' | 'homebody' | 'laborer' | 'merchant' | 'wanderer';
 
 export interface NpcStartingItem {
@@ -53,7 +53,7 @@ export interface NpcDefinition {
    startingCoins?: number;
    /** Hand-authored conversation tree (→ DialogueId, test-validated; kept a
     *  plain string to avoid a data-module cycle). Absent = the archetype's
-    *  small-talk template (dialogues.ts, D45). */
+    *  small-talk template (dialogues.ts). */
    dialogueId?: string;
 }
 
@@ -177,7 +177,7 @@ export function npcCharacterId(npcId: string): string {
 }
 
 /** The roster id behind a character id — null for player characters and for
- *  NPCs whose roster entry was retired (D10 rule 3: degrade, don't crash). */
+ *  NPCs whose roster entry was retired (degrade, don't crash). */
 export function npcIdFromCharacter(characterId: string): NpcId | null {
    if (!characterId.startsWith(NPC_CHARACTER_PREFIX))
       return null;
@@ -187,7 +187,7 @@ export function npcIdFromCharacter(characterId: string): NpcId | null {
 }
 
 /** Static roster data (archetype, home…) for a character id, or null. This is
- *  how runtime code reads an NPC's static half — it is never stored (D10). */
+ *  how runtime code reads an NPC's static half — it is never stored. */
 export function npcDefinition(characterId: string): NpcDefinition | null {
    const npcId = npcIdFromCharacter(characterId);
    return npcId ? NPCS[npcId] : null;

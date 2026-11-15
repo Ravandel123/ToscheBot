@@ -28,7 +28,7 @@ export function canEdit(character: CharacterDoc): boolean {
 }
 
 /** Whether the character may be submitted for the Imperator's approval. Pure.
- *  Completeness is catalog-driven (D20): every required creation step must be done. */
+ *  Completeness is catalog-driven: every required creation step must be done. */
 export function canSubmit(character: CharacterDoc): SubmitCheck {
    if (!canEdit(character))
       return { ok: false, reason: 'not-editable' };
@@ -43,7 +43,7 @@ export function canSubmit(character: CharacterDoc): SubmitCheck {
  * Whether a character may perform a *character action* (serious combat, travel,
  * activities). Viewing (profile, inventory) does NOT use this gate. Pure — no DB.
  *
- * Rules (D13/D15): must be approved, must have health left, and must have enough
+ * Rules: must be approved, must have health left, and must have enough
  * action points for the action's cost. A 0-HP character can be made active and
  * inspected, but cannot act.
  */

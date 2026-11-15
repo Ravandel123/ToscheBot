@@ -1,4 +1,4 @@
-// Duel-challenge spam guard (D59). A challenge card pings its target in the
+// Duel-challenge spam guard. A challenge card pings its target in the
 // Spire channel, so two limits keep it civil:
 //   * a challenger waits CHALLENGE_COOLDOWN_SECONDS between challenges;
 //   * a character with an unanswered challenge cannot be challenged again

@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import type { SlashCommand } from '../../../types/commands.js';
 import { accountService } from '../../../db/services/accountService.js';
 import { inventoryService } from '../../../db/services/inventoryService.js';
@@ -13,13 +13,14 @@ import {
    isItemQualityId,
    itemDefinition,
 } from '../../../game/data/items.js';
+import { ephemeral } from '../../../lib/discord.js';
+import { quantitySuffix } from '../../../lib/text.js';
 
-// Imperator-side item administration (D28). `grant` is the prototype's only
+// Imperator-side item administration. `grant` is the prototype's only
 // loot source: it conjures catalog items into a player's active character's
 // pack (for testing and hand-run events) until real sources land (loot,
 // shops, crafting). A subcommand so future tools (`/item inspect`, `/item
 // confiscate`) join without a new top-level command.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
    data: new SlashCommandBuilder()
@@ -82,7 +83,7 @@ export default {
          const prefix = ITEM_QUALITIES[quality].prefix;
          const name = prefix ? `${prefix} ${definition.name}` : definition.name;
          await interaction.editReply(
-            `📦 Granted **${name}**${quantity > 1 ? ` ×${quantity}` : ''} to **${displayName(character)}** (${player.displayName}).`,
+            `📦 Granted **${name}**${quantitySuffix(quantity)} to **${displayName(character)}** (${player.displayName}).`,
          );
       });
    },

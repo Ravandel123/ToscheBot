@@ -1,8 +1,8 @@
 import { FIGHTING_STYLES, isFightingStyleId, type FightingStyleId, type StyleFamily } from './styles.js';
 
-// The combat plan (D41, the owner's idea) — a character's standing orders for
+// The combat plan (the owner's idea) — a character's standing orders for
 // auto-resolved fights, set ahead of time on the `/character combat` panel.
-// In an async game the fight rolls itself (combat.md R24), so a plan IS the
+// In an async game the fight rolls itself (combat.md), so a plan IS the
 // player's agency: a default style per family plus conditional switches
 // ("below 50% Health go Stonewall") evaluated at the top of every exchange.
 // FF12-gambit shaped, deliberately tiny: one flat rule list, first match wins.
@@ -25,7 +25,7 @@ export interface PlanRule {
 }
 
 /** One family's standing orders: the default style (null = fight plain, the
- *  pre-D41 behavior) plus up to MAX_PLAN_RULES conditional switches. */
+ *  styleless behavior) plus up to MAX_PLAN_RULES conditional switches. */
 export interface FamilyPlan {
    style: FightingStyleId | null;
    rules: PlanRule[];
@@ -83,7 +83,7 @@ export function describeTrigger(trigger: PlanTrigger): string {
 }
 
 /**
- * Defensive read of a stored/authored family plan (D10 rule 3): unknown or
+ * Defensive read of a stored/authored family plan: unknown or
  * wrong-family style ids drop out (a renamed style must never crash a fight),
  * trigger values clamp to sane bounds, rules cap at MAX_PLAN_RULES. Junk shapes
  * degrade to the empty plan.

@@ -1,11 +1,12 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type MessageActionRowComponentBuilder } from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { FINISH_GIFS, START_GIFS } from '../../game/combat/flavor.js';
 import { LADDER_LENGTH, SPIRE_LADDER, trialTarget } from '../../game/combat/spireLadder.js';
 import { healthBar } from './_duelView.js';
 import { randomItem } from '../../lib/random.js';
+import { actionRow, type ComponentRow, type PanelView } from '../../lib/discord.js';
 import type { SpireChampion } from '../../game/combat/spireLadder.js';
 
-// Views for the PvE Spire ladder (`/smackdown trial`, D37). Two surfaces:
+// Views for the PvE Spire ladder (`/smackdown trial`). Two surfaces:
 //   1. `buildTrialBrowser` — an ephemeral, stateless "scroll the roster" panel
 //      (like `/character view` / the comic browser): one champion at a time, prev/
 //      next through the ladder, a Fight button live only for a climb or an earned
@@ -22,15 +23,10 @@ import type { SpireChampion } from '../../game/combat/spireLadder.js';
 const SPIRE_COLOR = 0xB8860B; // spire brass
 const PORTRAIT_PLACEHOLDER = '🖼️ Champion portrait — coming soon';
 
-export interface TrialBrowser {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
-
 /** The browsable ladder panel. Pure render — the caller supplies the viewer's
  *  cleared-rung progress (their next-unbeaten index) and which champion to show.
  *  `index` is clamped, so callers can pass raw prev/next arithmetic. */
-export function buildTrialBrowser(clearedRung: number, indexInput: number): TrialBrowser {
+export function buildTrialBrowser(clearedRung: number, indexInput: number): PanelView {
    const index = clampIndex(indexInput);
    const champion = SPIRE_LADDER[index];
    const target = trialTarget(champion.id, clearedRung);
@@ -65,7 +61,7 @@ export function buildTrialBrowser(clearedRung: number, indexInput: number): Tria
 
 /** Repaints the panel once the player commits to a bout — buttons gone, pointing
  *  them to the Spire channel where the fight narrates. */
-export function buildTrialSentOff(spireChannelId: string, champion: SpireChampion, isRematch: boolean): TrialBrowser {
+export function buildTrialSentOff(spireChannelId: string, champion: SpireChampion, isRematch: boolean): PanelView {
    const embed = new EmbedBuilder()
       .setColor(SPIRE_COLOR)
       .setTitle('🏟️ To the Spire!')
@@ -76,19 +72,19 @@ export function buildTrialSentOff(spireChannelId: string, champion: SpireChampio
    return { embeds: [embed], components: [] };
 }
 
-function navRow(index: number): ActionRowBuilder<MessageActionRowComponentBuilder> {
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+function navRow(index: number): ComponentRow {
+   return actionRow(
       new ButtonBuilder().setCustomId(`trial:show:${index - 1}`).setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(index === 0),
       new ButtonBuilder().setCustomId('trial:noop').setLabel(`${index + 1} / ${LADDER_LENGTH}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
       new ButtonBuilder().setCustomId(`trial:show:${index + 1}`).setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(index === LADDER_LENGTH - 1),
    );
 }
 
-function fightRow(champion: SpireChampion, kind: ReturnType<typeof trialTarget>['kind']): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function fightRow(champion: SpireChampion, kind: ReturnType<typeof trialTarget>['kind']): ComponentRow {
    const isRematch = kind === 'rematch';
    const canFight = kind === 'climb' || kind === 'rematch';
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   return actionRow(
       new ButtonBuilder()
          .setCustomId(`trial:fight:${champion.id}`)
          .setLabel(kind === 'locked' ? 'Locked' : isRematch ? 'Rematch' : 'Fight')

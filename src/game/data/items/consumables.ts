@@ -1,7 +1,7 @@
 import type { ConsumableDefinition } from './types.js';
 
-// Consumable catalog entries (D28/D50) — spread into ITEMS by ../items.js.
-// Ids are append-only (D10); 🟡 all effects/values are balance placeholders.
+// Consumable catalog entries — spread into ITEMS by ../items.js.
+// Ids are append-only; 🟡 all effects/values are balance placeholders.
 
 export const CONSUMABLES = {
    travel_rations: {

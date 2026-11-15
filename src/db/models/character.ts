@@ -15,7 +15,7 @@ import type { RaceId } from '../../game/data/races.js';
 
 // A Character is the in-game entity (player-controlled OR NPC). Replaces the old
 // Profile: stats/resources live here, keyed by its own uuid (an account can own
-// several; NPCs have no account). See CLAUDE.md D12–D16.
+// several; NPCs have no account).
 
 export type ApprovalStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 
@@ -26,7 +26,7 @@ export interface ResourceState {
 
 export interface CharacterIdentity {
    name: string;
-   race: RaceId | null; // chosen during creation (Phase 6B)
+   race: RaceId | null; // chosen during creation
    epithet: string; // e.g. 'Imperator', 'the Tavern Keep'
    gender: string; // picked from a list (male/female) on the creation panel
    bio: string; // a short description (shown in an embed field, so ≤ ~1024 chars)
@@ -41,42 +41,43 @@ export interface CharacterDoc {
    identity: CharacterIdentity;
    locationId: string; // → LocationId (resolved with a fallback at read time)
    resources: Record<ResourceKey, ResourceState>;
-   // Action points have NO cap (D15): they accumulate via the hourly regen $inc.
+   // Action points have NO cap: they accumulate via the hourly regen $inc.
    actionPoints: { current: number; totalEarned: number };
    // Effective attributes = racial base + creation allocation. Stored (not
    // derived on read) and recomputed by characterService whenever race or
    // allocation changes — checks/combat read this map directly.
    attributes: Record<AttributeKey, number>;
-   // The creation point-buy (D25): how many of the CREATION_ATTRIBUTE_POINTS
+   // The creation point-buy: how many of the CREATION_ATTRIBUTE_POINTS
    // landed on each attribute. Kept separate from `attributes` so a race change
    // mid-wizard rebases cleanly instead of corrupting the player's spend.
    attributeAllocation: AttributeAllocation;
-   // Physical frame (R20): stored METRIC (kg/cm). Body-shape and move speed are
+   // Physical frame: stored METRIC (kg/cm). Body-shape and move speed are
    // DERIVED from these (game/character/body.ts), never stored. Age is stored
    // but not yet wired to any stat curve (🟡).
    body: CharacterBody;
-   // Deed traits (courage, cowardice…), grown by choices in encounters. Rising
-   // meters from 0; nothing gates on them yet (Phase 7).
+   // Deed traits (courage, cowardice…), grown by choices in encounters and
+   // conversations. Rising meters from 0; dialogue options and encounters can
+   // gate on them.
    traits: Record<TraitKey, number>;
-   // Skill-tree progression (D34): a SPARSE map of only the nodes the character
+   // Skill-tree progression: a SPARSE map of only the nodes the character
    // has trained (game/character/skills.ts). The tree shape lives in code
    // (game/data/skills.ts); the DB never stores relationships — adding a branch
    // or a tree is zero-migration. Stored as a plain object so the subdoc can
-   // grow (talents/points) without a schema change (D32).
+   // grow (talents/points) without a schema change.
    progression: CharacterProgression;
-   // Currencies are per-character (D12).
+   // Currencies are per-character.
    currencies: Record<CurrencyKey, number>;
-   // Owned item instances (D28); static item data resolves from the catalog
-   // (game/data/items.ts) by itemId at read time (D10). Bounded by
+   // Owned item instances; static item data resolves from the catalog
+   // (game/data/items.ts) by itemId at read time. Bounded by
    // INVENTORY_STACK_LIMIT (enforced in inventoryService, free-tier friendly).
    inventory: ItemInstance[];
    // Worn/wielded gear: equipment slot id → inventory instanceId. Plain object
    // (not a catalog-derived field map) so ADDING a slot needs no migration.
    equipment: Partial<Record<string, string>>;
-   // Standing combat orders (D41): per style-family default style + conditional
+   // Standing combat orders: per style-family default style + conditional
    // switches, read at fight time by combatProfile. Sparse plain object (an
    // absent family fights plain) — adding a family/trigger needs no migration;
-   // reads sanitize via game/combat/plan.ts (D10 rule 3).
+   // reads sanitize via game/combat/plan.ts.
    combatPlan: CombatPlan;
    // Set once the starter kit has been issued (game/data/starterKit.ts).
    // Absent on older docs = not issued yet, so they receive it too.
@@ -100,7 +101,7 @@ const itemInstanceSchema = new Schema({
    quantity: { type: Number, required: true, default: 1 },
    durability: { type: Number },
    acquiredAt: { type: Date, required: true },
-   // Identification veil (R16) — optional, absent = identified (no migration).
+   // Identification veil — optional, absent = identified (no migration).
    identified: { type: Boolean },
    apparentItemId: { type: String },
    descriptorId: { type: String },
@@ -120,7 +121,7 @@ const characterSchema = new Schema({
       avatarUrl: { type: String, default: '' },
    },
    // Indexed: presence ("who is at the plaza?") is an indexed query over this
-   // field — the single source of truth, never duplicated into location docs (D31).
+   // field — the single source of truth, never duplicated into location docs.
    locationId: { type: String, required: true, default: STARTING_LOCATION, index: true },
    resources: fromKeys(Object.keys(RESOURCES), { current: { type: Number, required: true }, max: { type: Number, required: true } }),
    actionPoints: {
@@ -135,7 +136,7 @@ const characterSchema = new Schema({
       age: { type: Number, required: true },
    },
    traits: fromKeys(Object.keys(TRAITS), { type: Number, required: true, default: 0 }),
-   // Sparse skill-tree map (D34) — a plain object keyed by node id, like
+   // Sparse skill-tree map — a plain object keyed by node id, like
    // `equipment`; the tree/relationships live in code, never here.
    progression: { type: Schema.Types.Mixed, default: () => emptyProgression() },
    currencies: fromKeys(Object.keys(CURRENCIES), { type: Number, required: true }),

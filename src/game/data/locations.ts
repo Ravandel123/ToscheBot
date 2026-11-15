@@ -1,10 +1,10 @@
 // In-game places (not Discord channels, though a location MAY map to one via
 // `channelId`). Characters store a `locationId`; the `/play` hub walks the
-// `connectedTo` graph (D21/D30) and the NPC-movement cron (Phase 6C) will too.
+// `connectedTo` graph, and NPC movement will too once it exists.
 // PLACEHOLDER set — expand when the world is designed. The graph is treated as
 // UNDIRECTED: every edge must be listed on both ends (validated by test).
 //
-// The catalog is the STATIC half of the world (D10/D31): what a place is, its
+// The catalog is the STATIC half of the world: what a place is, its
 // roads, climate bias, discoverable features and starting stats. The DYNAMIC
 // half (current weather, running events, what has been discovered, live stats,
 // visits) lives in the LocationState collection — and WHO is standing here is
@@ -32,11 +32,11 @@ export interface LocationDefinition {
    channelId?: string;
    /** Weather-weight overrides for this place (missing kinds use each kind's defaultWeight). */
    climate?: Partial<Record<WeatherId, number>>;
-   /** Discoverable points of interest — hidden until somebody finds them (D31). */
+   /** Discoverable points of interest — hidden until somebody finds them. */
    features?: readonly LocationFeature[];
    /** Starting values for dynamic location stats (missing keys use catalog defaults). */
    baseStats?: Partial<Record<LocationStatKey, number>>;
-   /** What can be gathered here (R16) — ids into the resource-node catalog,
+   /** What can be gathered here — ids into the resource-node catalog,
     *  test-validated like graph edges. Absent = nothing grows/bites here. */
    resourceNodes?: readonly ResourceNodeId[];
 }
@@ -89,7 +89,7 @@ export type LocationId = keyof typeof LOCATIONS;
 
 export const STARTING_LOCATION: LocationId = 'spire';
 
-/** Resolves a stored location id, falling back to the starting location (D10 rule 3). */
+/** Resolves a stored location id, falling back to the starting location. */
 export function resolveLocationId(id: string): LocationId {
    return id in LOCATIONS ? (id as LocationId) : STARTING_LOCATION;
 }
@@ -99,7 +99,7 @@ export function locationName(id: string): string {
    return LOCATIONS[resolveLocationId(id)].name;
 }
 
-/** A location's feature by id, if it exists (unknown ids resolve to undefined — D10 rule 3).
+/** A location's feature by id, if it exists (unknown ids resolve to undefined).
  *  Widened off the `as const` union so optional fields type-check. */
 export function locationFeature(locationId: string, featureId: string): LocationFeature | undefined {
    const location: LocationDefinition = LOCATIONS[resolveLocationId(locationId)];

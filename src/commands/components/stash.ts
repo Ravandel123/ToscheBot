@@ -1,8 +1,7 @@
-import { MessageFlags, type ButtonInteraction, type StringSelectMenuInteraction } from 'discord.js';
+import type { ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { characterService } from '../../db/services/characterService.js';
 import { itemService } from '../../db/services/itemService.js';
-import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { INVENTORY_STACK_LIMIT, itemDisplayName } from '../../game/character/inventory.js';
 import {
    STASH_SORTS,
@@ -14,12 +13,14 @@ import {
 import { ITEM_KINDS, ITEM_KIND_IDS, type ItemKindId } from '../../game/data/items.js';
 import { DEFAULT_CONTAINER, isStorageContainerId, type StorageContainerId } from '../../game/data/containers.js';
 import { busyNote } from './_activities/registry.js';
+import { deferIfFree, ownedCharacter, readyCharacter } from './_characterAction.js';
 import { buildStashCard, buildStashHub, buildStashList, resolveStashDocs, type StashResolvedPage } from './_stashPanel.js';
-import type { InventoryView } from './_inventoryPanel.js';
+import { quantitySuffix } from '../../lib/text.js';
+import type { PanelView } from '../../lib/discord.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { ToscheClient } from '../../client.js';
 
-// Handles every `stash:*` interaction (D33). Same two families as the inventory
+// Handles every `stash:*` interaction. Same two families as the inventory
 // panel:
 //   NAVIGATION (home/cat/list/sort/pick/card) — read-only: fetch a fresh doc +
 //     server-side stash page, repaint. No lock; staleness self-heals (views
@@ -27,10 +28,8 @@ import type { ToscheClient } from '../../client.js';
 //   MUTATION (withdraw) — read-decide-write under the character lock (defer
 //     first, busy re-check inside), so it is safe against the player's own
 //     `/inventory` actions and never double-spends across two open panels.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 const STALE_STASH_NOTE = '👻 That item is no longer in your stash.';
-const BUSY_NOTE = '⏳ Your character is busy right now — try again in a moment.';
 
 export default {
    namespace: 'stash',
@@ -61,12 +60,12 @@ type PanelInteraction = ButtonInteraction | StringSelectMenuInteraction;
 
 // --- View loaders (fetch from the Item collection, then render) ---------------------
 
-async function loadHub(character: CharacterDoc, container: StorageContainerId): Promise<InventoryView> {
+async function loadHub(character: CharacterDoc, container: StorageContainerId): Promise<PanelView> {
    const counts = await itemService.countByKind(character._id, container);
    return buildStashHub(character, container, counts);
 }
 
-async function loadList(character: CharacterDoc, state: StashBrowseState, note?: string): Promise<InventoryView> {
+async function loadList(character: CharacterDoc, state: StashBrowseState, note?: string): Promise<PanelView> {
    const page = await itemService.browseStash(character._id, state.container, state.kind, state.sort, state.page);
    const resolved: StashResolvedPage = {
       items: resolveStashDocs(page.docs),
@@ -77,7 +76,7 @@ async function loadList(character: CharacterDoc, state: StashBrowseState, note?:
    return buildStashList(character, state, resolved, note);
 }
 
-async function loadCard(character: CharacterDoc, state: StashBrowseState, instanceId: string, note?: string): Promise<InventoryView> {
+async function loadCard(character: CharacterDoc, state: StashBrowseState, instanceId: string, note?: string): Promise<PanelView> {
    const doc = await itemService.getStashItem(character._id, state.container, instanceId);
    const resolved = doc ? resolveStashDocs([doc])[0] : undefined;
    if (!resolved)
@@ -89,8 +88,8 @@ async function loadCard(character: CharacterDoc, state: StashBrowseState, instan
 // --- Navigation ---------------------------------------------------------------
 
 /** Read-only repaint: fresh character → view. */
-async function repaint(interaction: PanelInteraction, characterId: string, view: (character: CharacterDoc) => Promise<InventoryView>): Promise<void> {
-   const character = await ownedCharacter(interaction, characterId);
+async function repaint(interaction: PanelInteraction, characterId: string, view: (character: CharacterDoc) => Promise<PanelView>): Promise<void> {
+   const character = await ownedCharacter(interaction, characterId, 'stash');
    if (!character)
       return;
 
@@ -100,30 +99,16 @@ async function repaint(interaction: PanelInteraction, characterId: string, view:
 // --- Withdraw (mutation) -------------------------------------------------------------
 
 async function handleWithdraw(client: ToscheClient, interaction: ButtonInteraction, characterId: string, instanceId: string, state: StashBrowseState): Promise<void> {
-   const character = await ownedCharacter(interaction, characterId);
-   if (!character)
+   if (!await ownedCharacter(interaction, characterId, 'stash') || !await deferIfFree(client, interaction, characterId))
       return;
-
-   if (client.locks.isLocked(characterId)) {
-      await interaction.reply({ content: BUSY_NOTE, ...ephemeral });
-      return;
-   }
-
-   await interaction.deferUpdate();
 
    await client.locks.runExclusive([characterId], async () => {
-      const fresh = await characterService.get(characterId);
-      if (!fresh) {
-         await interaction.editReply({ content: 'Your character vanished. Try `/stash` again.', embeds: [], components: [] });
+      // Gear is frozen mid-adventure — the stash is no exception.
+      const fresh = await readyCharacter(interaction, characterId, {
+         busyView: (session, character) => loadCard(character, state, instanceId, `${busyNote(session)} \`/play\` takes you back to it.`),
+      });
+      if (!fresh)
          return;
-      }
-
-      // Gear is frozen mid-adventure (D28) — the stash is no exception.
-      const session = await activitySessionService.getActiveForParticipant(characterId);
-      if (session) {
-         await interaction.editReply(await loadCard(fresh, state, instanceId, `${busyNote(session)} \`/play\` takes you back to it.`));
-         return;
-      }
 
       const doc = await itemService.getStashItem(characterId, state.container, instanceId);
       const resolved = doc ? resolveStashDocs([doc])[0] : undefined;
@@ -135,9 +120,8 @@ async function handleWithdraw(client: ToscheClient, interaction: ButtonInteracti
       }
 
       const updated = await characterService.get(characterId) ?? fresh;
-      const name = resolved ? itemDisplayName(resolved) : 'it';
-      const quantity = resolved && resolved.instance.quantity > 1 ? ` ×${resolved.instance.quantity}` : '';
-      await interaction.editReply(await loadList(updated, state, `📤 Withdrew **${name}**${quantity}. It rides in your pack now.`));
+      const withdrawn = resolved ? `**${itemDisplayName(resolved)}**${quantitySuffix(resolved.instance.quantity)}` : 'it';
+      await interaction.editReply(await loadList(updated, state, `📤 Withdrew ${withdrawn}. It rides in your pack now.`));
    });
 }
 
@@ -152,16 +136,6 @@ function withdrawBlockNote(reason: 'not-found' | 'unknown-container' | 'inventor
 }
 
 // --- Helpers -----------------------------------------------------------------------
-
-/** Fetches the character and verifies the clicker owns it (panels are personal). */
-async function ownedCharacter(interaction: PanelInteraction, characterId: string): Promise<CharacterDoc | null> {
-   const character = await characterService.get(characterId);
-   if (character?.ownerId === interaction.user.id)
-      return character;
-
-   await interaction.reply({ content: "That isn't your stash.", ...ephemeral });
-   return null;
-}
 
 function containerOf(raw: string | undefined): StorageContainerId {
    return raw && isStorageContainerId(raw) ? raw : DEFAULT_CONTAINER;

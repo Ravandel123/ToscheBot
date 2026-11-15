@@ -1,8 +1,7 @@
-import {
-   MessageFlags,
-   type ButtonInteraction,
-   type ModalSubmitInteraction,
-   type StringSelectMenuInteraction,
+import type {
+   ButtonInteraction,
+   ModalSubmitInteraction,
+   StringSelectMenuInteraction,
 } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { config } from '../../config.js';
@@ -14,22 +13,21 @@ import { creationStep, firstIncompleteStep, type CreationStep } from '../../game
 import { adjustAllocation, allocationFrom, effectiveAttributes, emptyAllocation, type AttributeAllocation } from '../../game/character/attributes.js';
 import { bodyOf, parseBody } from '../../game/character/body.js';
 import { ATTRIBUTES, type AttributeKey } from '../../game/data/attributes.js';
-import { resolveGuildChannel } from '../../lib/discord.js';
 import { readIdentityModal, buildIdentityModal, buildBodyModal, readBodyModal, buildRejectReasonModal } from './_characterModals.js';
 import { buildDecidedDecree, buildDecreeButtons, buildDecreeEmbed } from './_characterDecree.js';
 import { buildCharacterPanel, buildCharacterStepView } from './_characterPanel.js';
 import { buildCharacterSheetView } from '../slash/game/_characterSheet.js';
+import { ephemeral, resolveGuildChannel } from '../../lib/discord.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { RaceId } from '../../game/data/races.js';
 import type { ToscheClient } from '../../client.js';
 
 // Handles every `character:*` interaction:
-//   panel-step / panel-continue / panel-overview → wizard navigation (D20);
+//   panel-step / panel-continue / panel-overview → wizard navigation;
 //   panel-race / panel-gender / panel-edit / panel-save / panel-submit + create
 //     → the individual creation steps (selects, text modal, submit);
 //   approve / reject / reject-reason → the owner's verdict on a petition;
 //   sheet → the Refresh button under a public `/character view` sheet.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
    namespace: 'character',
@@ -82,7 +80,7 @@ async function handleCreateModal(client: ToscheClient, interaction: ModalSubmitI
    await interaction.reply({ ...buildCharacterPanel(character), ...ephemeral });
 }
 
-// --- Wizard navigation (D20) -------------------------------------------------
+// --- Wizard navigation -------------------------------------------------
 
 /** Opens one creation step on the right Discord surface: modal steps show their
  *  modal (the submit repaints the panel), select steps swap the panel to a
@@ -168,7 +166,7 @@ async function handlePanelGender(interaction: StringSelectMenuInteraction, chara
    await interaction.update(buildCharacterPanel({ ...character, identity: { ...character.identity, gender } }));
 }
 
-// --- Attribute point-buy step (D25) ------------------------------------------
+// --- Attribute point-buy step ------------------------------------------
 
 /** Focusing an attribute just repaints the step view — the ± buttons carry the
  *  focused key in their customIds, so no cursor is stored anywhere. */
@@ -443,7 +441,7 @@ async function editDecreeMessage(interaction: ModalSubmitInteraction, messageId:
 }
 
 /** DMs the petitioner with the verdict. Silently tolerates closed DMs and
- *  respects the account's `dmNotifications` setting (D27). */
+ *  respects the account's `dmNotifications` setting. */
 async function notifyPlayer(client: ToscheClient, character: CharacterDoc, decision: 'approved' | 'rejected', reason?: string): Promise<void> {
    if (!character.ownerId)
       return;

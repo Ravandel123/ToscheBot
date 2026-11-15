@@ -1,7 +1,7 @@
 import type { ShieldDefinition } from './types.js';
 
-// Shield catalog entries (D28/D50) — spread into ITEMS by ../items.js.
-// Ids are append-only (D10); 🟡 all numbers are balance placeholders.
+// Shield catalog entries — spread into ITEMS by ../items.js.
+// Ids are append-only; 🟡 all numbers are balance placeholders.
 
 export const SHIELDS = {
    wooden_buckler: {

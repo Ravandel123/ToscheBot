@@ -8,9 +8,9 @@ import { log } from '../lib/log.js';
 // generous; anything longer is treated as a week.
 const MAX_CATCH_UP_HOURS = 168;
 
-// Hourly vitals + Action Points. Bulk-first (D7): one atomic updateMany for
+// Hourly vitals + Action Points. Bulk-first: one atomic updateMany for
 // every free character, one for the mid-activity ones (AP only — vitals pause
-// while busy, D23), then a deferred single update per character whose lock is
+// while busy), then a deferred single update per character whose lock is
 // held right now.
 //
 // The job also runs once at startup. It asks how many clock hours it has not

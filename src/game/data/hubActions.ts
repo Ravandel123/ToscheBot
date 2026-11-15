@@ -1,4 +1,4 @@
-// The location action catalog (D10) — what a character can DO at the place they
+// The location action catalog — what a character can DO at the place they
 // are standing, surfaced as buttons on the `/play` hub. Travel is NOT here: it
 // is the hub's one structurally-distinct action (a destination picker), routed
 // specially.
@@ -6,7 +6,7 @@
 // An entry with a `comingSoon` line is UNBUILT: it stays here as the plan for
 // that location but the hub never shows it. Making it live = remove the line
 // and add its executor to HUB_EXECUTORS in the `play` component. Ids are stable
-// slugs (D10) — they ride in `play:act:<id>` customIds.
+// slugs — they ride in `play:act:<id>` customIds.
 
 import type { LocationCondition } from '../world/conditions.js';
 
@@ -25,7 +25,7 @@ export interface HubAction {
    description: string;
    /** Location ids that offer this action; 'anywhere' = every location. */
    locations: readonly string[] | 'anywhere';
-   /** When the action can be used (D31); omitted = always. Evaluated live —
+   /** When the action can be used; omitted = always. Evaluated live —
     *  when the hub renders AND again when the button is clicked (stale panels). */
    availability?: HubActionAvailability;
    /** In-character line shown when the (not-yet-built) action is used.
@@ -52,7 +52,7 @@ export const HUB_ACTIONS = {
       locations: 'anywhere',
       comingSoon: 'You case the ground and the shadows, but Tosch has not yet mapped what is worth finding here.',
    },
-   // LIVE (S4): opens the NPC picker → a durable dialogue session (D45). The
+   // LIVE: opens the NPC picker → a durable dialogue session. The
    // play router owns the handler case; no comingSoon = live. Offered anywhere —
    // a location with no talkable NPC present degrades to a gentle banner.
    talk: {
@@ -80,7 +80,7 @@ export const HUB_ACTIONS = {
       locations: ['spire'],
       comingSoon: 'The court is not yet hearing petitions — the Imperator is, ah, indisposed.',
    },
-   // LIVE (D60): opens the stall of the merchant NPC who keeps shop here
+   // LIVE: opens the stall of the merchant NPC who keeps shop here
    // (game/data/shops.ts). The same availability is re-checked on every trade.
    market: {
       id: 'market',
@@ -88,7 +88,7 @@ export const HUB_ACTIONS = {
       emoji: '🪙',
       description: 'Buy from the plaza stall, or sell what you carry.',
       locations: ['plaza'],
-      // The owner's canonical example (D31): shops keep daylight hours.
+      // The owner's canonical example: shops keep daylight hours.
       availability: { timeOfDay: ['morning', 'day'] },
    },
    drink: {
@@ -125,7 +125,7 @@ export const HUB_ACTIONS = {
       locations: ['riverbank'],
       comingSoon: 'The fish are here, but the rods have not been strung yet.',
    },
-   // LIVE (S1): the first real gather action — no comingSoon; the play router
+   // LIVE: the first real gather action — no comingSoon; the play router
    // hands it to performForage. Locations must match where a foraging resource
    // node exists (test-validated against the catalogs).
    forage: {
@@ -157,7 +157,7 @@ export function actionsAt(locationId: string): HubAction[] {
    );
 }
 
-/** Resolves a stored/customId action slug, tolerating unknown ids (D10 rule 3). */
+/** Resolves a stored/customId action slug, tolerating unknown ids. */
 export function hubAction(id: string): HubAction | undefined {
    return HUB_ACTIONS[id as HubActionId];
 }

@@ -1,9 +1,9 @@
 import type { CraftingMaterialDefinition } from './types.js';
 
-// Crafting-material catalog entries (D28/D50) — spread into ITEMS by ../items.js.
-// FORAGED materials live in ../foragables.ts instead (they carry the D43
+// Crafting-material catalog entries — spread into ITEMS by ../items.js.
+// FORAGED materials live in ../foragables.ts instead (they carry the
 // profession layer: families, looks, identify difficulty) and are spread into
-// ITEMS alongside these. Ids are append-only (D10); 🟡 numbers are placeholders.
+// ITEMS alongside these. Ids are append-only; 🟡 numbers are placeholders.
 
 export const CRAFTING_MATERIALS = {
    iron_ingot: {

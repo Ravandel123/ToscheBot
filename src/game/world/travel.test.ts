@@ -4,7 +4,7 @@ import { checkTravel, connectionsFrom } from './travel.js';
 
 const ids = Object.keys(LOCATIONS) as LocationId[];
 
-// The catalog is data, but the graph has invariants code relies on (D21):
+// The catalog is data, but the graph has invariants code relies on:
 // dangling or one-way edges would strand characters, so the deploy gate
 // (npm test) enforces them instead of trusting future edits.
 describe('location graph', () => {

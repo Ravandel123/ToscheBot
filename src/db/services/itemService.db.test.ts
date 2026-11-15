@@ -7,7 +7,7 @@ import { useTestDb } from '../../testing/memoryDb.js';
 import { inventoryOf } from '../../game/character/inventory.js';
 import { DEFAULT_CONTAINER } from '../../game/data/containers.js';
 
-// The D33 transfers are cross-collection and deliberately NON-transactional
+// The stash transfers are cross-collection and deliberately NON-transactional
 // (insert-before-remove, favor-duplicate-over-loss). Only a real two-collection
 // DB shows the pack-side $pull, the Item-side insert, and the carry-capacity
 // re-check on withdraw actually cohere.

@@ -1,25 +1,24 @@
-// Discord adapter (marked): the EXECUTION side of a merchant's stall (D60) —
+// Discord adapter (marked): the EXECUTION side of a merchant's stall —
 // opening it from the `/play` hub and carrying out one trade. A trade is a
-// short action (D5 rule 1): both characters locked, everything re-read inside
-// the lock, the trade service does the writes, the panel is repainted. The
+// short action: both characters locked, everything re-read inside the lock,
+// the trade service does the writes, the panel is repainted. The
 // views live in `_marketView.ts`; the trade rules in game/economy/trade.ts and
 // db/services/tradeService.ts.
 import type { MessageComponentInteraction } from 'discord.js';
-import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { characterService } from '../../db/services/characterService.js';
 import { locationStateService } from '../../db/services/locationStateService.js';
 import { tradeService, type TradeFailure, type TradeResult } from '../../db/services/tradeService.js';
-import { canCharacterAct, type ActBlockReason } from '../../game/character/rules.js';
+import type { ActBlockReason } from '../../game/character/rules.js';
 import { displayName } from '../../game/character/identity.js';
 import { hubAction } from '../../game/data/hubActions.js';
 import { resolveLocationId } from '../../game/data/locations.js';
 import { shopAt, type LocatedShop } from '../../game/data/shops.js';
 import { evaluateCondition, worldContext } from '../../game/world/conditions.js';
 import { gameDay } from '../../game/world/time.js';
-import { busyNote } from './_activities/registry.js';
+import { readyCharacter } from './_characterAction.js';
 import { freshHubView } from './_hubView.js';
 import { buildMarketList, type MarketMode } from './_marketView.js';
-import { sessionStepView } from './_playPanel.js';
+import { quantitySuffix } from '../../lib/text.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { ToscheClient } from '../../client.js';
 
@@ -60,21 +59,12 @@ export async function stallFor(character: CharacterDoc): Promise<Stall> {
  * Opens the stall on the hub message. The `interaction` must already be
  * acknowledged with `deferUpdate()`. The day's first visitor triggers the
  * merchant's daily routine (stock laid out, till refilled) under the
- * merchant's lock; after that this is a pure read.
+ * merchant's lock; after that this is a pure read, so the trader is not locked.
  */
-export async function openMarket(client: ToscheClient, interaction: MessageComponentInteraction, character: CharacterDoc): Promise<void> {
-   const session = await activitySessionService.getActiveForParticipant(character._id);
-   const step = session ? sessionStepView(session, busyNote(session)) : null;
-   if (step) {
-      await interaction.editReply(step);
+export async function openMarket(client: ToscheClient, interaction: MessageComponentInteraction, characterId: string): Promise<void> {
+   const character = await readyCharacter(interaction, characterId, { act: { cost: 0, blocked: TRADE_BLOCK_MESSAGE } });
+   if (!character)
       return;
-   }
-
-   const act = canCharacterAct(character, 0);
-   if (!act.ok) {
-      await interaction.editReply(await freshHubView(character, TRADE_BLOCK_MESSAGE[act.reason]));
-      return;
-   }
 
    const stall = await stallFor(character);
    if (!stall.ok) {
@@ -110,24 +100,9 @@ export async function performTrade(
    }
 
    await client.locks.runExclusive([character._id, located.merchantId], async () => {
-      const fresh = await characterService.get(character._id);
-      if (!fresh) {
-         await interaction.editReply({ content: 'Your character vanished mid-bargain. Try again.', embeds: [], components: [] });
+      const fresh = await readyCharacter(interaction, character._id, { act: { cost: 0, blocked: TRADE_BLOCK_MESSAGE } });
+      if (!fresh)
          return;
-      }
-
-      const session = await activitySessionService.getActiveForParticipant(fresh._id);
-      const step = session ? sessionStepView(session, busyNote(session)) : null;
-      if (step) {
-         await interaction.editReply(step);
-         return;
-      }
-
-      const act = canCharacterAct(fresh, 0);
-      if (!act.ok) {
-         await interaction.editReply(await freshHubView(fresh, TRADE_BLOCK_MESSAGE[act.reason]));
-         return;
-      }
 
       const stall = await stallFor(fresh);
       if (!stall.ok) {
@@ -165,8 +140,8 @@ function tradeNote(mode: MarketMode, result: TradeResult, merchant: CharacterDoc
    if (!result.ok)
       return TRADE_FAILURE[result.reason](displayName(merchant));
 
-   const goods = result.quantity > 1 ? `${result.quantity}× ${result.name}` : result.name;
+   const goods = `**${result.name}**${quantitySuffix(result.quantity)}`;
    return mode === 'buy'
-      ? `🛒 You buy **${goods}** for **${result.total}** 🪙.`
-      : `💰 You sell **${goods}** for **${result.total}** 🪙.`;
+      ? `🛒 You buy ${goods} for **${result.total}** 🪙.`
+      : `💰 You sell ${goods} for **${result.total}** 🪙.`;
 }

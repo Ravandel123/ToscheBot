@@ -5,7 +5,7 @@ import { activitySessionService } from './activitySessionService.js';
 import { CharacterLockManager } from '../../core/locks.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// The switch guard (D13/D18) is "one user, one live activity": it must refuse
+// The switch guard is "one user, one live activity": it must refuse
 // while EITHER the current or the target character is busy (in-memory locked OR
 // in a durable session). Proving that needs the real lock manager + the real
 // session collection together.

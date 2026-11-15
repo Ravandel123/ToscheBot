@@ -1,10 +1,11 @@
-import type { ActionRowBuilder, EmbedBuilder, MessageActionRowComponentBuilder } from 'discord.js';
+import type { EmbedBuilder } from 'discord.js';
 import type { ActivitySessionDoc, ActivityType } from '../db/models/activitySession.js';
 import type { CharacterDoc } from '../db/models/character.js';
 import type { ComponentInteraction } from './interactions.js';
 import type { ToscheClient } from '../client.js';
+import type { ComponentRow } from '../lib/discord.js';
 
-// The contract every durable-activity consumer implements (D22). A handler owns
+// The contract every durable-activity consumer implements. A handler owns
 // ONE ActivitySession `type`: it renders the session's current step from its
 // persisted state and reacts to `activity:<action>:<sessionId>` components.
 // Handlers live in `commands/components/_activities/` (loader-invisible) and
@@ -16,7 +17,7 @@ import type { ToscheClient } from '../client.js';
 export interface ActivityView {
    content?: string;
    embeds?: EmbedBuilder[];
-   components?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+   components?: ComponentRow[];
 }
 
 export interface ActivityHandler {

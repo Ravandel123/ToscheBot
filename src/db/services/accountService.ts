@@ -33,7 +33,7 @@ export const accountService = {
       return account?.activeCharacterId ? characterService.get(account.activeCharacterId) : null;
    },
 
-   /** The player's account settings, with defaults for pre-D27 docs / no account. */
+   /** The player's account settings, with defaults for older docs / no account. */
    async getSettings(userId: string): Promise<AccountSettings> {
       const account = await Account.findById(userId).lean<AccountDoc>();
       return accountSettings(account);
@@ -54,10 +54,10 @@ export const accountService = {
    },
 
    /**
-    * Switches the active character, enforcing the restrictions (D13): you may
+    * Switches the active character, enforcing the restrictions: you may
     * only activate your own character, and neither the current nor the target
     * character may be busy — in-memory locked (mid-fight) OR in a durable
-    * activity session (mid-climb, survives restarts — D17/D22). This guard is
+    * activity session (mid-climb, survives restarts). This guard is
     * what enforces "one user, one live activity at a time". A 0-HP or
     * unapproved character CAN be made active (just can't act).
     */

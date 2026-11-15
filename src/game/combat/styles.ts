@@ -1,16 +1,16 @@
 import type { SkillNodeId } from '../data/skills.js';
 
-// Fighting styles (D41, owner-designed) — the data-driven catalog of HOW a
+// Fighting styles (owner-designed) — the data-driven catalog of HOW a
 // character fights, distinct from the skill tree (WHAT they know). A style is a
 // switchable decision (the combat plan, game/combat/plan.ts, flips it mid-fight
 // on conditions), not a skill node — but every style DRAWS ON a node: its path
 // is summed into the style's attack and is the base of its defence, so knowing
 // a style well means both hitting and defending better in it (the owner's rule),
-// and fighting in a style trains that branch (learn-by-doing, D40). No unlock
+// and fighting in a style trains that branch (learn-by-doing). No unlock
 // gate: an untrained style simply rolls at its untrained path — self-gating.
 //
 // Styles are FAMILY-specific (the owner's call: muay thai doesn't help with a
-// sword in hand — and a greatsword ward is not a sidearm ward, D42): the
+// sword in hand — and a greatsword ward is not a sidearm ward): the
 // fighter's family is resolved from what they wield (game/combat/profile.ts) —
 // fists ⇒ unarmed, a weapon ⇒ its GRIP (one_handed / two_handed) — and only
 // that family's styles apply. Ranged is a typed seam (no ranged combat in the
@@ -23,10 +23,10 @@ import type { SkillNodeId } from '../data/skills.js';
 // is a balance placeholder.
 
 /** Which combat family a style belongs to — resolved from the fighter's hands
- *  (weapon grip decides the armed family — D42). */
+ *  (weapon grip decides the armed family). */
 export type StyleFamily = 'unarmed' | 'one_handed' | 'two_handed' | 'ranged';
 
-/** How readily a style presses a landed blow into a follow-up (D42 momentum) —
+/** How readily a style presses a landed blow into a follow-up (momentum) —
  *  shifts the base follow-up chance in the engine (game/combat/duel.ts). */
 export type StyleTempo = 'aggressive' | 'neutral' | 'defensive';
 
@@ -56,7 +56,7 @@ export interface FightingStyle {
    family: StyleFamily;
    /** The skill node this style draws on AND trains (see the header note). */
    node: SkillNodeId;
-   /** How eagerly this style chains a landed blow (D42 momentum) — omitted =
+   /** How eagerly this style chains a landed blow (momentum) — omitted =
     *  neutral. Aggressive styles press the attack; defensive ones reset to guard. */
    tempo?: StyleTempo;
    modifiers?: StyleModifiers;
@@ -95,7 +95,7 @@ export const FIGHTING_STYLES = {
    },
 
    // --- One-handed — the same three archetypes with sidearm flavor; each draws
-   // on its style branch under the one_handed grip (D42). ----------------------
+   // on its style branch under the one_handed grip. ----------------------
    duelist: {
       name: 'Duelist',
       emoji: '🗡️',
@@ -125,7 +125,7 @@ export const FIGHTING_STYLES = {
    },
 
    // --- Two-handed — great-weapon takes on the archetypes, drawing on the
-   // two_handed grip's style branches (D42). -----------------------------------
+   // two_handed grip's style branches. -----------------------------------
    wrath: {
       name: 'Wrath',
       emoji: '⚔️',
@@ -159,7 +159,7 @@ export type FightingStyleId = keyof typeof FIGHTING_STYLES;
 
 export const FIGHTING_STYLE_IDS = Object.keys(FIGHTING_STYLES) as FightingStyleId[];
 
-/** Type guard for an id read off a DB doc / customId (D10 rule 3). */
+/** Type guard for an id read off a DB doc / customId. */
 export function isFightingStyleId(id: string): id is FightingStyleId {
    return id in FIGHTING_STYLES;
 }

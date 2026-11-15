@@ -1,6 +1,6 @@
-// Pure step logic for the 'challenge' travel activity (D21/D22/D26) — no
+// Pure step logic for the 'challenge' travel activity — no
 // Discord, no DB. A challenge interrupts a travel move and exposes several
-// APPROACHES (RPG/'s multi-approach model): each attempt resolves one option —
+// APPROACHES (the multi-approach model, world-travel.md): each attempt resolves one option —
 // usually a d100 roll-under check — and its outcome either completes the
 // journey ('proceed'), ends it at the origin ('turn-back'), or keeps the
 // challenge going ('retry'; failed retries accrue setbacks until the road
@@ -10,7 +10,7 @@
 import type { ChallengeOption, ChallengeOutcome } from '../data/encounters.js';
 
 export interface ChallengeState {
-   /** → EncounterId; resolved gracefully at read time (D10 rule 3). */
+   /** → EncounterId; resolved gracefully at read time. */
    encounterId: string;
    /** The interrupted move: stays at `fromId` unless the challenge proceeds. */
    fromId: string;

@@ -7,7 +7,7 @@ export interface AiMessage {
    content: string;
 }
 
-// Behind an interface (D8) so the persona could later swap providers without
+// Behind an interface so the persona could later swap providers without
 // touching the trigger code. When there's no API key the service is disabled
 // and the bot runs normally.
 export interface AiService {

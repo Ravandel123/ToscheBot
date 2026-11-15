@@ -1,16 +1,17 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type MessageActionRowComponentBuilder } from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { displayName } from '../../game/character/identity.js';
 import { COMBAT_MOVES, HIT_LOCATIONS, FINISH_GIFS, START_GIFS } from '../../game/combat/flavor.js';
 import { fightingStyle, type FightingStyleId } from '../../game/combat/styles.js';
-import { skillNode } from '../../game/data/skills.js';
 import { randomItem } from '../../lib/random.js';
+import { actionRow, type ComponentRow } from '../../lib/discord.js';
+import { levelUpList } from './_format.js';
 import type { BoutMode } from '../../game/combat/bouts.js';
 import type { DuelBlow, DuelResult } from '../../game/combat/duel.js';
 import type { SkillLevelUp } from '../../game/character/skills.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
-// Colocated Discord builders for the serious `/smackdown duel` (D16/combat.md
-// R24). Pure of DB/lock work — the handler (duel.ts) owns the fight loop and the
+// Colocated Discord builders for the serious `/smackdown duel` (combat.md).
+// Pure of DB/lock work — the handler (duel.ts) owns the fight loop and the
 // HP persistence; these just render the consent card and narrate each blow.
 // START/FINISH_GIFS + COMBAT_MOVES/HIT_LOCATIONS are shared with sparring flavor.
 
@@ -38,8 +39,8 @@ export function buildChallengeCard(challenger: CharacterDoc, opponent: Character
       .setFooter({ text: 'Only the challenged may accept or decline.' });
 }
 
-export function buildChallengeButtons(challengerId: string, opponentId: string, modeId: string): ActionRowBuilder<MessageActionRowComponentBuilder> {
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+export function buildChallengeButtons(challengerId: string, opponentId: string, modeId: string): ComponentRow {
+   return actionRow(
       new ButtonBuilder().setCustomId(`duel:accept:${challengerId}:${opponentId}:${modeId}`).setLabel('Accept').setEmoji('⚔️').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`duel:decline:${challengerId}:${opponentId}:${modeId}`).setLabel('Decline').setEmoji('🏳️').setStyle(ButtonStyle.Secondary),
    );
@@ -91,7 +92,7 @@ export function buildStyleIntro(openingStyles: Record<string, FightingStyleId | 
 /** One narrated exchange. Numbers stay backstage where they can; the HP note is
  *  the one figure worth showing so a watcher can feel the fight turning. Style
  *  switches (the combat plan firing), a hampered swing, a pressed follow-up
- *  (momentum, D42), a riposte and a seized initiative all read as extra story
+ *  (momentum), a riposte and a seized initiative all read as extra story
  *  beats on the same line block. */
 export function renderBlow(blow: DuelBlow, names: Record<string, string>): string {
    const attacker = names[blow.attackerId] ?? 'A fighter';
@@ -149,8 +150,7 @@ export function buildOutcomeLine(result: DuelResult, names: Record<string, strin
  *  itself) — only ranked-up nodes are named; a bout that only banked progress
  *  stays quiet. Shared by the duel and the trial. */
 export function buildTrainingLine(name: string, levelUps: readonly SkillLevelUp[]): string {
-   const gains = levelUps.map((up) => `**${skillNode(up.node).name}** rises to **${up.to}**`).join(', ');
-   return `📈 The bout leaves its mark — **${name}**'s ${gains}.`;
+   return `📈 The bout leaves its mark — **${name}**'s ${levelUpList(levelUps)}.`;
 }
 
 // --- Small helpers -------------------------------------------------------------

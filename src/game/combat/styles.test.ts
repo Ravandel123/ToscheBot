@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { FIGHTING_STYLES, FIGHTING_STYLE_IDS, fightingStyle, isFightingStyleId, styleEffect, stylesForFamily, type StyleFamily } from './styles.js';
 import { pathToRoot } from '../data/skills.js';
 
-// The style catalog is static content (D10) — a bad edit (a style drawing on a
+// The style catalog is static content — a bad edit (a style drawing on a
 // node outside its family's tree, a nonsense effect) must fail `npm test`, not
 // surface as a wrong-tree training credit or a broken exchange.
 
-/** The tree node each family's styles must draw under (D42: an armed style's
+/** The tree node each family's styles must draw under (an armed style's
  *  node sits inside its GRIP branch, not loose under the melee root). */
 const FAMILY_ROOT: Record<StyleFamily, string> = {
    unarmed: 'brawling',

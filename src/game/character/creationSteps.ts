@@ -4,7 +4,7 @@ import { bodyOf, bodyShapeName } from './body.js';
 import { RACES } from '../data/races.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
-// The step catalog driving the character-creation wizard (D20). The panel
+// The step catalog driving the character-creation wizard. The panel
 // renders FROM this list (checklist, step picker, Continue target, Submit
 // gate), so adding a creation step is one entry here + one renderer case in
 // `_characterPanel.ts` (select steps) or a modal builder (modal steps).
@@ -56,7 +56,7 @@ export const CREATION_STEPS: readonly CreationStep[] = [
       summary: (c) => GENDER_CHOICES.find((g) => g.value === c.identity.gender)?.label ?? '—',
    },
    {
-      // Physical frame (R20): height/weight/age. Optional — a fresh character
+      // Physical frame: height/weight/age. Optional — a fresh character
       // starts at its race's default frame, so this is always "done"; players
       // open it only to tweak. Body-shape/move speed derive from these.
       id: 'body',
@@ -70,7 +70,7 @@ export const CREATION_STEPS: readonly CreationStep[] = [
       },
    },
    {
-      // The creation point-buy (D25): distribute CREATION_ATTRIBUTE_POINTS on
+      // The creation point-buy: distribute CREATION_ATTRIBUTE_POINTS on
       // top of the racial base, max MAX_POINTS_PER_ATTRIBUTE on any one
       // attribute. Done only when every point is spent.
       id: 'attributes',

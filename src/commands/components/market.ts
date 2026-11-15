@@ -1,11 +1,12 @@
-import { MessageFlags } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { accountService } from '../../db/services/accountService.js';
 import { performTrade, stallFor } from './_marketAction.js';
 import { freshHubView } from './_hubView.js';
 import { buildMarketList, buildTradeCard, marketItem, type MarketMode } from './_marketView.js';
+import { ephemeral } from '../../lib/discord.js';
+import { NO_ACTIVE_CHARACTER } from './_characterAction.js';
 
-// Handles a merchant's stall (namespace `market`, D60). The stall lives on the
+// Handles a merchant's stall (namespace `market`). The stall lives on the
 // player's own ephemeral hub message, so the clicker is always the
 // active-character owner. Nothing in a customId is trusted beyond "which entry
 // did they point at": the stall, its opening hours and the merchant's presence
@@ -14,7 +15,6 @@ import { buildMarketList, buildTradeCard, marketItem, type MarketMode } from './
 //   pick:<mode>:<page>  (select)         → one item's trade card (read-only);
 //   do:<mode>:<page>:<instanceId>:<qty>  → the trade — a mutation: fast-fail if
 //     locked → deferUpdate → both locks → fresh re-read → trade → repaint.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
    namespace: 'market',
@@ -28,7 +28,7 @@ export default {
 
       const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
       if (!character) {
-         await interaction.reply({ content: 'You have no active character. Draft one with `/character create`.', ...ephemeral });
+         await interaction.reply({ content: NO_ACTIVE_CHARACTER, ...ephemeral });
          return;
       }
 

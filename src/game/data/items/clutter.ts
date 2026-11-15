@@ -1,7 +1,7 @@
 import type { ClutterDefinition } from './types.js';
 
-// Clutter catalog entries (D28/D50) — spread into ITEMS by ../items.js.
-// Ids are append-only (D10).
+// Clutter catalog entries — spread into ITEMS by ../items.js.
+// Ids are append-only.
 
 export const CLUTTER = {
    bent_spoon: {

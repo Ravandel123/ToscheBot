@@ -6,7 +6,7 @@ import { ITEM_KINDS } from '../../game/data/items.js';
 import { affordableQuantity, buyPrice, sellPrice } from '../../game/economy/trade.js';
 import type { ShopDefinition } from '../../game/data/shops.js';
 
-// Trading with a merchant NPC (D60). A merchant is an ordinary Character: its
+// Trading with a merchant NPC. A merchant is an ordinary Character: its
 // pack is the stall, its coins are the till. CONTRACT for every function here:
 // the caller holds BOTH characters' locks (`client.locks.runExclusive`), which
 // is what makes the read-decide-write below safe against a second trader.

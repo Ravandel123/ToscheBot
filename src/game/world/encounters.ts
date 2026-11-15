@@ -2,7 +2,7 @@ import { chance, weightedItem } from '../../lib/random.js';
 import { ENCOUNTERS, TRAVEL_ENCOUNTER_CHANCE_PERCENT, type EncounterDefinition, type EncounterId } from '../data/encounters.js';
 import { evaluateCondition, type WorldContext } from './conditions.js';
 
-// Pure encounter rolling (D21/D31). Randomness comes from lib/random, so tests
+// Pure encounter rolling. Randomness comes from lib/random, so tests
 // pin it with vi.spyOn(Math, 'random') like everywhere else.
 
 export interface RolledEncounter {
@@ -20,7 +20,7 @@ export function travelEncounterChance(danger: number): number {
 }
 
 /** Every encounter that may fire when arriving at `destinationId`. With a
- *  context, conditional encounters (D31) are filtered by their criteria;
+ *  context, conditional encounters are filtered by their criteria;
  *  without one, only the location scoping applies. */
 export function eligibleEncounters(destinationId: string, ctx?: WorldContext): RolledEncounter[] {
    return (Object.entries(ENCOUNTERS) as [EncounterId, EncounterDefinition][])

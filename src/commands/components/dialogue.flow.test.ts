@@ -11,7 +11,7 @@ import { NPCS, npcCharacterId } from '../../game/data/npcs.js';
 import { fakeButton, fakeClient } from '../../testing/fakeInteraction.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// Layer-2 flow tests for S4: the whole talk loop (hub click → NPC picker →
+// Layer-2 flow tests for dialogue: the whole talk loop (hub click → NPC picker →
 // dialogue session → option picks → checks/effects → farewell) against the
 // in-memory DB. Randomness is mocked where a check rolls; real Discord
 // behaviour stays a manual smoke test.
@@ -154,7 +154,7 @@ describe('activity dialogue steps', () => {
 
       const character = (await characterService.get(characterId))!;
       expect(character.actionPoints.current).toBe(5 - DIALOGUE_CHECK_AP_COST);
-      // Learn-by-doing (D40): the persuade path banked progress.
+      // Learn-by-doing: the persuade path banked progress.
       expect(character.progression.skills.persuade?.progress ?? 0).toBeGreaterThan(0);
    });
 

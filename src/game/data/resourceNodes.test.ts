@@ -5,7 +5,7 @@ import { LOCATIONS, type LocationDefinition, type LocationId } from './locations
 import { HUB_ACTIONS, hubAction } from './hubActions.js';
 import { SKILL_NODES } from './skills.js';
 
-// Content-integrity checks for the gather layer (R16): the node ids locations
+// Content-integrity checks for the gather layer: the node ids locations
 // reference, the item ids tables yield and the skill nodes checks roll must
 // all resolve — a typo here is a dead button or a crash mid-gather.
 

@@ -1,15 +1,15 @@
 import type { AttributeKey } from './attributes.js';
 
-// Skill TREES (RPG/'s P-skilltree, owner-designed 2026-07-05). A skill is not a
+// Skill TREES (owner-designed, Ruleset/skills.md). A skill is not a
 // flat level — it is a NODE in a tree: a general parent (Smithing) branches into
 // Weaponsmithing / Armoursmithing, which branch into Bladesmithing / Axesmithing…
 // Depth is arbitrary (a tree may be 2 deep or 7 deep); the shape lives entirely
-// here as static content (D10). A character stores only a SPARSE flat map of the
+// here as static content. A character stores only a SPARSE flat map of the
 // nodes they have points in (game/character/skills.ts) — the parent/child links
 // are NEVER duplicated per character, so adding a branch or a whole new tree is
 // one catalog edit with zero migration.
 //
-// How a node feeds a check (the summed model, RPG/ R10):
+// How a node feeds a check (the summed model):
 //   Effective = Σ(weight · attribute)               ← the node's `attributes` blend
 //             + Σ(points on every node root→leaf)    ← the character's trained nodes
 // so forging a sword sums Smithing + Weaponsmithing + Bladesmithing (parents give
@@ -21,7 +21,7 @@ import type { AttributeKey } from './attributes.js';
 // balance placeholder; the SHAPE (trees, per-node blends, per-node growth) is the
 // stable part consumers build on.
 
-// --- Growth (learn-by-doing, RPG/ §7) --------------------------------------
+// --- Growth (learn-by-doing) ---------------------------------------------
 // Each node trains at its own rate: a leaf rises fast, a root crawls, and every
 // rank costs more uses than the last (diminishing returns). A "meaningful use"
 // (a real, contested action — the caller decides) credits +1 use to EVERY node
@@ -60,7 +60,7 @@ export const GROWTH_PROFILES = {
 export type GrowthProfileId = keyof typeof GROWTH_PROFILES;
 
 /** Max points a node reaches through ordinary practice. 🟡 Mastery (>100) via
- *  special sources — commissions, instructors — is a future extension (RPG/ §7). */
+ *  special sources — commissions, instructors — is a future extension. */
 export const SKILL_NODE_CAP = 100;
 
 // --- The tree --------------------------------------------------------------
@@ -123,13 +123,13 @@ export const SKILL_NODES = {
    climbing: { name: 'Climbing', parent: 'athletics', description: 'Scaling walls, trees and sheer ground.' },
 
    // === Perception — Awareness (the design list roots it under Perception; the
-   // travel challenges' spot/search options draw on and train it — D40) ======
+   // travel challenges' spot/search options draw on and train it) ======
    awareness: { name: 'Awareness', parent: null, attributes: { perception: 1 }, description: 'Noticing what others walk past — movement, gaps, glints.' },
    searching: { name: 'Searching', parent: 'awareness', description: 'Deliberate scouring — a way through, a thing lost, a thing hidden.' },
 
-   // === Professions — Foraging (R16; the first gather tree). The root is what
+   // === Professions — Foraging (the first gather tree). The root is what
    // the gather check rolls; Identify is what tells a honeycap from an ashgill
-   // (game/professions/). The R16 table's other leaves (Mushrooms, Herbs,
+   // (game/professions/). The ruleset table's other leaves (Mushrooms, Herbs,
    // Fruit & Forage) join as content when per-family gathering matters. 🟡 blend.
    foraging: { name: 'Foraging', parent: null, attributes: { intelligence: 0.3, perception: 0.3 }, description: 'Knowing where the woods and banks hide what is worth taking.' },
    identify_forage: { name: 'Identify', parent: 'foraging', description: 'Telling herb from weed and supper from poison — before it tells you.' },
@@ -138,7 +138,7 @@ export const SKILL_NODES = {
    // opposed-roll model; no live solo consumer yet — sparring uses the old
    // engine — so the magnitude is free to tune) =============================
    melee: { name: 'Melee', parent: null, attributes: { agility: 0.5 }, description: 'Fighting hand-to-hand with a weapon.' },
-   // Armed STYLE branches (D41/D42) live INSIDE each grip branch (owner's call:
+   // Armed STYLE branches live INSIDE each grip branch (owner's call:
    // one-handed and two-handed fighting are different systems — a sword-and-hand
    // ward is not a greatsword ward). A fighting style (game/combat/styles.ts)
    // draws on its grip's style node — summed into the attack alongside the weapon
@@ -159,7 +159,7 @@ export const SKILL_NODES = {
    halfswording: { name: 'Halfswording', parent: 'two_handed', growth: 'branch', description: 'Gripping blade or haft to bind, hook and wrestle the foe\'s weapon.' },
    iron_ward: { name: 'Iron Ward', parent: 'two_handed', growth: 'branch', description: 'The braced two-handed guard — let the storm break, then answer.' },
    ranged: { name: 'Ranged', parent: null, unused: true, attributes: { dexterity: 0.5 }, description: 'Bows, slings and thrown weapons.' },
-   // The brawling branches double as the unarmed STYLES' nodes (D41): unarmed,
+   // The brawling branches double as the unarmed STYLES' nodes: unarmed,
    // the technique IS the approach, so a style draws its attack and defence
    // straight from its branch (Striker→striking, Grappler→grappling…).
    brawling: { name: 'Brawling', parent: null, attributes: { agility: 0.5 }, description: 'Unarmed fighting — the Smackdown Spire staple.' },
@@ -176,7 +176,7 @@ export const SKILL_NODE_IDS = Object.keys(SKILL_NODES) as SkillNodeId[];
  *  level the skill panel lists. */
 export const SKILL_ROOT_IDS = SKILL_NODE_IDS.filter((id) => SKILL_NODES[id].parent === null);
 
-/** Type guard for an id read off a DB doc / customId (D10 rule 3). */
+/** Type guard for an id read off a DB doc / customId. */
 export function isSkillNodeId(id: string): id is SkillNodeId {
    return id in SKILL_NODES;
 }

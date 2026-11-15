@@ -3,7 +3,7 @@ import { bmi } from '../../lib/units.js';
 import type { AttributeKey } from '../data/attributes.js';
 import type { RaceId } from '../data/races.js';
 
-// Pure body math (R20) — no Discord, no DB. Weight/height/age are STORED metric;
+// Pure body math — no Discord, no DB. Weight/height/age are STORED metric;
 // body-shape and move speed are DERIVED (never stored) so they can't disagree
 // with the numbers. Same "stored, not derived on read" stance as attributes,
 // inverted: here the derivations are cheap and always recomputed.
@@ -29,7 +29,7 @@ export function defaultBody(race: RaceId | null): CharacterBody {
    return { heightCm: midpoint(frame.heightCm), weightKg: midpoint(frame.weightKg), age: DEFAULT_AGE };
 }
 
-/** A complete body for a character, filling any missing field (pre-R20 docs have
+/** A complete body for a character, filling any missing field (older docs have
  *  no `body` subdoc) from the race default. */
 export function bodyOf(character: { body?: Partial<CharacterBody>; identity: { race: RaceId | null } }): CharacterBody {
    const fallback = defaultBody(character.identity.race);
@@ -53,7 +53,7 @@ export function ageBandName(age: number): string {
 }
 
 /**
- * Derived walking move speed (R20): race base + Agility bonus. 🟡 — encumbrance
+ * Derived walking move speed: race base + Agility bonus. 🟡 — encumbrance
  * (pack weight vs carry capacity) and injuries are meant to subtract here too,
  * but there's no consumer yet, so this is display groundwork only.
  */

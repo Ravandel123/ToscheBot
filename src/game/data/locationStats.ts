@@ -1,12 +1,12 @@
 import { LOCATIONS, resolveLocationId } from './locations.js';
 
-// Dynamic location stats catalog (D31): numeric meters a place carries in its
+// Dynamic location stats catalog: numeric meters a place carries in its
 // LocationState doc (danger, prosperity…). ADDING A STAT = one entry here (+
 // optionally per-location starting values in locations.ts `baseStats`) — no
 // migration: missing keys on stored docs fall back through `statValue`.
 // Consumers today: danger biases the travel-encounter chance, both stats color
 // the /play hub. `locationStateService.adjustStat` is the write seam for
-// events/encounter outcomes (🟡 balance deltas wait for Phase 7).
+// events/encounter outcomes (🟡 no outcome moves a stat yet).
 
 export interface LocationStatDefinition {
    name: string;
@@ -57,7 +57,7 @@ export function initialStats(locationId: string): Record<LocationStatKey, number
 }
 
 /** Reads a stat off a stored (possibly older-shaped) stats blob, falling back
- *  to the location's starting value for keys added since (D10 rule 3). */
+ *  to the location's starting value for keys added since. */
 export function statValue(locationId: string, stats: Record<string, number> | undefined, key: LocationStatKey): number {
    const stored = stats?.[key];
    if (typeof stored === 'number' && Number.isFinite(stored))

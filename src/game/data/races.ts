@@ -1,7 +1,7 @@
 import type { AttributeKey } from './attributes.js';
 
 // The seven anthropomorphic races of Dunia (BtWD). `attributeModifiers` are the
-// hardcoded racial bases from RPG/Ruleset.md §4 (mapped onto the owner's P5
+// hardcoded racial bases from Ruleset/character.md (mapped onto the owner's
 // attribute set: Constitution, Fellowship→Charisma): +5 to two, −5 to
 // two — net zero, applied to ATTRIBUTE_BASE. 🟡 Balance values, tunable there.
 

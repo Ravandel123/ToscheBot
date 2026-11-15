@@ -1,7 +1,42 @@
-import type { Guild, GuildBasedChannel, Message } from 'discord.js';
+import {
+   ActionRowBuilder,
+   MessageFlags,
+   type ButtonBuilder,
+   type EmbedBuilder,
+   type Guild,
+   type GuildBasedChannel,
+   type Message,
+   type MessageActionRowComponentBuilder,
+   type RestOrArray,
+} from 'discord.js';
 import type { ToscheClient } from '../client.js';
 
 export const MAX_MESSAGE_LENGTH = 2000;
+
+/** Spread into a reply to make it visible to the clicker only. */
+export const ephemeral = { flags: MessageFlags.Ephemeral } as const;
+
+export type ComponentRow = ActionRowBuilder<MessageActionRowComponentBuilder>;
+
+/** A panel message: embeds and their component rows, spread into reply/update/editReply. */
+export interface PanelView {
+   content?: string;
+   embeds: EmbedBuilder[];
+   components: ComponentRow[];
+}
+
+export function actionRow(...components: RestOrArray<MessageActionRowComponentBuilder>): ComponentRow {
+   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(...components);
+}
+
+/** Lays buttons out in rows of five, Discord's limit per row. */
+export function buttonRows(buttons: readonly ButtonBuilder[]): ComponentRow[] {
+   const rows: ComponentRow[] = [];
+   for (let i = 0; i < buttons.length; i += 5)
+      rows.push(actionRow(...buttons.slice(i, i + 5)));
+
+   return rows;
+}
 
 /**
  * The bot's client, typed. Prefix commands are deliberately message-first

@@ -1,4 +1,4 @@
-import { MessageFlags, type ButtonInteraction, type StringSelectMenuInteraction } from 'discord.js';
+import type { ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { accountService } from '../../db/services/accountService.js';
 import { characterService } from '../../db/services/characterService.js';
@@ -12,13 +12,14 @@ import {
    familyPlanOf,
    isPlanFamily,
    parseTriggerValue,
-   type PanelView,
    type PlanFamily,
 } from './_combatPlanView.js';
+import { ephemeral, type PanelView } from '../../lib/discord.js';
+import { NO_ACTIVE_CHARACTER } from './_characterAction.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
 // Handles every `combatplan:*` interaction from the `/character combat` panel
-// (D41). Ephemeral + personal, so the clicker owns the account — every action
+//. Ephemeral + personal, so the clicker owns the account — every action
 // re-resolves their ACTIVE character (stateless, restart-proof, and a character
 // switch mid-panel simply starts editing the new active one):
 //   simple                        → the simple "how do you fight?" panel;
@@ -33,7 +34,6 @@ import type { CharacterDoc } from '../../db/models/character.js';
 // A plan edit is one atomic $set of the family subtree — no lock needed: a
 // fight snapshots the plan once under ITS lock (combatProfile), so an edit
 // mid-bout affects only the next fight, never a running one.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 export default {
    namespace: 'combatplan',
@@ -45,7 +45,7 @@ export default {
 
       const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
       if (!character) {
-         await interaction.update({ content: 'You have no active character — draft one with `/character create`.', embeds: [], components: [] });
+         await interaction.update({ content: NO_ACTIVE_CHARACTER, embeds: [], components: [] });
          return;
       }
 

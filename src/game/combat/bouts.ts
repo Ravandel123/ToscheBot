@@ -1,7 +1,7 @@
 import type { ItemKindId } from '../data/items.js';
 
-// Bout modes — the data-driven RULESET layer for the Smackdown (D35 combat, D10
-// content-in-code). A "bout mode" is everything that shapes a fight BEFORE the
+// Bout modes — the data-driven RULESET layer for the Smackdown (content
+// in code). A "bout mode" is everything that shapes a fight BEFORE the
 // engine rolls: how gear is treated, where it's fought, who the opponent is.
 // Adding a mode = one catalog entry (test-validated) + wiring nothing new, so
 // the Spire can grow into the big feature the owner wants.
@@ -9,7 +9,7 @@ import type { ItemKindId } from '../data/items.js';
 // Consumed TODAY: `loadout` (gear on/off) + `selectable` (shown in the picker).
 // Everything else is a DESIGNED SEAM — typed and authored, but the mechanics
 // behind it are deferred (marked 🟡/future):
-//   * `arena`      — terrain tags + obstacles (combat.md R25): a sandy pit that
+//   * `arena`      — terrain tags + obstacles (combat.md): a sandy pit that
 //                    hinders footwork, scattered cover. Not read by the engine yet.
 //   * `allowedWeaponKinds` — restrict what may be wielded (an axes-only bout).
 //                    Not enforced yet (the finer "axes only" needs a weapon
@@ -23,19 +23,19 @@ import type { ItemKindId } from '../data/items.js';
 
 /** How a fighter's gear feeds their CombatProfile (game/combat/profile.ts). */
 export type BoutLoadout =
-   /** Fight with whatever is worn/wielded (D28) — armour, weapon and all. */
+   /** Fight with whatever is worn/wielded — armour, weapon and all. */
    | 'as-equipped'
    /** Gear is set aside at the door: no weapon, no armour, no equip modifiers —
     *  pure body. Items are untouched in the pack; they just don't count here. */
    | 'unarmed-unarmored';
 
-/** Terrain a bout is fought on (combat.md R25) — a lookup, not a simulation.
+/** Terrain a bout is fought on (combat.md) — a lookup, not a simulation.
  *  DESIGNED, not consumed: no engine step reads these yet. */
 export type TerrainTag = 'sand' | 'cramped' | 'uneven' | 'slick' | 'open';
 
 export interface BoutArena {
    name: string;
-   /** Tags styles/weapons will check against once R25 lands (sand hinders footwork…). */
+   /** Tags styles/weapons will check against once arenas land (sand hinders footwork…). */
    terrain: readonly TerrainTag[];
    /** Whether scattered obstacles/cover feature in the fight. */
    obstacles: boolean;
@@ -81,7 +81,7 @@ export const BOUT_MODES = {
       opponent: 'player',
    },
    // FUTURE reference (owner's example, #arena) — proves the shape end to end but
-   // stays UN-selectable until the R25 arena + weapon-filter mechanics exist. Flip
+   // stays UN-selectable until the arena + weapon-filter mechanics exist. Flip
    // `selectable` to true then; no other wiring changes.
    sand_axes: {
       name: 'Sands of the Axe',
@@ -106,7 +106,7 @@ export function isBoutModeId(id: string): id is BoutModeId {
 }
 
 /** Resolves a stored/customId bout mode, falling back to the default for an
- *  unknown or now-unselectable id (D10 rule 3 — a renamed mode never crashes). */
+ *  unknown or now-unselectable id (a renamed mode never crashes). */
 export function boutMode(id: string): BoutMode & { id: BoutModeId } {
    const resolved: BoutModeId = isBoutModeId(id) && BOUT_MODES[id].selectable ? id : DEFAULT_BOUT_MODE;
    return { id: resolved, ...BOUT_MODES[resolved] };

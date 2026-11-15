@@ -151,6 +151,21 @@ authored costs are first guesses: giving up at the fallen tree is free (failing 
 free too); backing away from the drowning stranger costs 1 Cowardice. Cutting a conversation
 short costs nothing yet, because NPCs do not remember how they were treated.
 
+**9. Fewer slash commands.** 🟡 Today: 8 player commands, several of them a second door to a
+panel the `/play` hub already opens. Proposal — five commands: `/play` (the whole game),
+`/character` (`create`, `view [user]`), `/profile` (account: character list, switching the
+active one, settings), `/smackdown duel`, `/leaderboard`. Three questions:
+- Remove the duplicates — `/inventory`, `/character skills`, `/character combat`,
+  `/character list`, `/character switch`, `/smackdown trial` — or keep some as shortcuts?
+  (`/smackdown trial` also skips the location rule: the hub offers the arena only at the
+  Spire, the command works anywhere.)
+- Where the stash lives once `/stash` goes: (a) a button in the pack panel, usable anywhere
+  as today, or (b) a place in the world the character has to return to (needs a rule; today
+  no rule says the stash is reachable from anywhere — it just is).
+- Keep `/smackdown duel`, or rename it `/duel`.
+
+Needs `npm run deploy` when built.
+
 ## Known issues
 
 - **Duel engine resolves a whole fight in one function.** Group fights and manual turns
@@ -160,8 +175,6 @@ short costs nothing yet, because NPCs do not remember how they were treated.
 - **Session state has no version.** A deploy that changes an activity's state shape can
   confuse a session in progress. Deploy when nobody is mid-activity, or read old shapes
   tolerantly.
-- **Comments cite decision numbers and old paths** (`RPG/`, old plan step numbers). Fix a
-  file's comments when touching it; do not add new ones.
 - **Both bots answer in `tosche-office`** and on ambient chance when the test bot runs on
   the shared server.
 - **Two players can talk to the same NPC at once.** Fine while dialogue does not change NPC
@@ -177,6 +190,18 @@ short costs nothing yet, because NPCs do not remember how they were treated.
 
 ## Done
 
+- **2026-11-14** — Code clean-up after a review of the whole codebase, behaviour unchanged:
+  the shared steps of every character action in one helper (`_characterAction.ts`, used by
+  travel, forage, talk, trade, the stall, inventory and stash); shared message pieces in
+  `lib/discord.ts`; one narrator for duels and the ladder; shared parts of the challenge and
+  dialogue handlers; comments without decision numbers, old plan phases or `RPG/` paths
+  (the rule is now in `CLAUDE.md`). Fixed on the way: "Back to /play" leads to an unfinished
+  activity like `/play` does; the starter-kit path acknowledges before it waits for the lock;
+  the duel narrator no longer reads names by key order; services decide "did it change?"
+  from `matchedCount`. Quantities read the same everywhere ("Healer's Poultice ×2").
+- **2026-11-14** — `CLAUDE.md` slimmed from 44 KB to 23 KB: the decision log (D1–D60) now
+  lives only in `DECISIONS.md`; `CLAUDE.md` keeps the working rules and gained a "Keeping
+  the code clean" section. Two lint rules enforce the shared row and `ephemeral` helpers.
 - **2026-11-14** — Activities never expire and every one has an in-character exit;
   `h!session` for the owner. Hub shortcuts, the two-level fighting-style panel, Refresh on
   the public sheet, the duel-challenge spam guard. The first shop: the plaza merchant

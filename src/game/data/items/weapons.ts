@@ -1,7 +1,7 @@
 import type { WeaponDefinition } from './types.js';
 
-// Weapon catalog entries (D28/D50) — spread into ITEMS by ../items.js.
-// Ids are append-only once a character doc can hold one (D10). 🟡 All numbers
+// Weapon catalog entries — spread into ITEMS by ../items.js.
+// Ids are append-only once a character doc can hold one. 🟡 All numbers
 // are balance placeholders (types.ts header).
 
 export const WEAPONS = {

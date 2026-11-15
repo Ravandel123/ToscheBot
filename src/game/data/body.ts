@@ -1,11 +1,11 @@
 import type { RaceId } from './races.js';
 
-// Body & condition catalog (R20). A character's frame is described by concrete
+// Body & condition catalog. A character's frame is described by concrete
 // metric numbers (weight/height/age) — the dropped "Size" tier is replaced by
 // values derived from these. All numbers here are 🟡 balance placeholders; the
 // SHAPE (bands, per-race ranges) is the stable part. No consumer applies age or
-// move to a formula yet — they're stored + displayed groundwork (D14 stance:
-// structure now, mechanics when the ruleset locks them).
+// move to a formula yet — they're stored + displayed groundwork (structure
+// now, mechanics when the ruleset locks them).
 
 /** A body-shape band, derived from BMI (weight ÷ height²). Ascending, non-
  *  overlapping — the first band whose `maxBmi` the value is under wins. */

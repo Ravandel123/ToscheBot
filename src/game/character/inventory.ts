@@ -18,9 +18,9 @@ import {
 } from '../data/items.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
-// Pure inventory & equipment rules (D28) — no Discord, no DB. The DB stores
+// Pure inventory & equipment rules — no Discord, no DB. The DB stores
 // ITEM INSTANCES on the character; everything static resolves from the catalog
-// at read time (D10). All mutations are planned here and applied atomically by
+// at read time. All mutations are planned here and applied atomically by
 // inventoryService; the panel renders exclusively from a fresh doc, so a stale
 // button (item dropped from another window) degrades to a friendly error, never
 // a corrupt write.
@@ -28,13 +28,13 @@ import type { CharacterDoc } from '../../db/models/character.js';
 // An owned item. `quality` is per instance (one catalog entry drops at any
 // craftsmanship tier); `durability` exists only for equippable kinds;
 // `quantity` > 1 only for stackable kinds (stack key = itemId + quality).
-// The three identification fields (R16, professions.md) are OPTIONAL — absent
-// on everything but foraged mysteries, so pre-S1 docs need no migration and
+// The three identification fields (professions.md) are OPTIONAL — absent
+// on everything but foraged mysteries, so older docs need no migration and
 // read as identified.
 export interface ItemInstance {
    /** Short unique id within the owning character — rides in customIds. */
    instanceId: string;
-   /** Catalog id; typed loosely because a stored id can outlive a rename (D10 rule 3). */
+   /** Catalog id; typed loosely because a stored id can outlive a rename. */
    itemId: string;
    quality: ItemQualityId;
    quantity: number;
@@ -51,7 +51,7 @@ export interface ItemInstance {
 }
 
 /** The slice of a character the inventory rules read. Fields are optional so
- *  pre-D28 docs (and partial test doubles) read as an empty pack. */
+ *  older docs (and partial test doubles) read as an empty pack. */
 export interface InventoryState {
    inventory?: ItemInstance[];
    equipment?: Partial<Record<string, string>>;
@@ -78,7 +78,7 @@ export function inventoryOf(character: InventoryState): ItemInstance[] {
 }
 
 /** The equipment map with unknown slot ids filtered out (a retired slot
- *  degrades to 'nothing equipped there', D10 rule 3). */
+ *  degrades to 'nothing equipped there'). */
 export function equipmentOf(character: InventoryState): Partial<Record<EquipmentSlotId, string>> {
    const entries = Object.entries(character.equipment ?? {})
       .filter(([slot, instanceId]) => isEquipmentSlotId(slot) && typeof instanceId === 'string');
@@ -87,7 +87,7 @@ export function equipmentOf(character: InventoryState): Partial<Record<Equipment
 }
 
 /** All owned items with their catalog definitions; unknown item ids are
- *  dropped from view (they stay in the doc untouched — D10 rule 3). */
+ *  dropped from view (they stay in the doc untouched). */
 export function resolveInventory(character: InventoryState): ResolvedItem[] {
    return inventoryOf(character).flatMap((instance) => {
       const definition = itemDefinition(instance.itemId);
@@ -109,12 +109,12 @@ export function qualityOf(instance: ItemInstance): ItemQualityId {
    return isItemQualityId(instance.quality) ? instance.quality : DEFAULT_ITEM_QUALITY;
 }
 
-// --- Identification (R16) ---------------------------------------------------------
+// --- Identification ---------------------------------------------------------
 
 export type IdentificationState = 'identified' | 'unidentified' | 'mislabeled';
 
 /** How well the OWNER knows this instance. Absent flag = identified, so every
- *  pre-S1 item (and everything but foraged mysteries) reads as known. */
+ *  older item (and everything but foraged mysteries) reads as known. */
 export function identificationOf(instance: ItemInstance): IdentificationState {
    if (instance.identified !== false)
       return 'identified';
@@ -123,7 +123,7 @@ export function identificationOf(instance: ItemInstance): IdentificationState {
 
 /**
  * The definition the owner BELIEVES this item to be: the apparent one while
- * mislabeled (falling back to the truth if that id went stale — D10 rule 3),
+ * mislabeled (falling back to the truth if that id went stale),
  * the real one otherwise. Name/description/value display MUST go through this
  * so a confident mislabel is indistinguishable from the truth; physical facts
  * (weight, encumbrance) always read the REAL definition.
@@ -146,7 +146,7 @@ export function unidentifiedName(item: ResolvedItem): string {
    return family ? `an unfamiliar ${FORAGE_FAMILIES[family.family].singular}` : 'an unidentified find';
 }
 
-/** The quality display prefix for a definition — per item family (R23): gear
+/** The quality display prefix for a definition — per item family: gear
  *  reads 'Battered/Fine/Masterwork', a foraged find 'Wilted/Choice/Pristine'. */
 function qualityPrefix(itemId: string, quality: ItemQualityId): string {
    return isForagableId(itemId) ? FORAGE_QUALITY_PREFIXES[quality] : ITEM_QUALITIES[quality].prefix;
@@ -169,7 +169,7 @@ export function itemDisplayName(item: ResolvedItem): string {
 
 /** 🪙 per unit, quality-scaled, as the owner PERCEIVES it (an unidentified
  *  find is worth nothing to anyone yet; a mislabel is believed at its false
- *  price). Display-only until the economy layer (D19). */
+ *  price). Display-only until the economy layer. */
 export function itemValue(item: ResolvedItem): number {
    if (identificationOf(item.instance) === 'unidentified')
       return 0;
@@ -202,7 +202,7 @@ export function carriedWeightKg(character: InventoryState): number {
 }
 
 /** 🟡 Placeholder capacity: a character can lug their Strength in kilograms.
- *  The Phase 7 ruleset owns the real encumbrance formula (RPG/ §3 carry). */
+ *  The real encumbrance formula is an open question in items-equipment.md. */
 export function carryCapacityKg(character: Pick<CharacterDoc, 'attributes'>): number {
    return character.attributes.strength;
 }
@@ -212,7 +212,7 @@ export function carryCapacityKg(character: Pick<CharacterDoc, 'attributes'>): nu
 /** The existing stack a grant of (itemId, quality) merges into, if any. Only
  *  fully IDENTIFIED instances are merge targets — every mystery (unidentified
  *  or mislabeled) keeps its own entry, or a wrong label would silently launder
- *  into a true stack (R16). */
+ *  into a true stack. */
 export function findStack(character: InventoryState, itemId: string, quality: ItemQualityId): ItemInstance | null {
    const definition = itemDefinition(itemId);
    if (!definition || !ITEM_KINDS[definition.kind].stackable)
@@ -243,7 +243,7 @@ export function canAddItems(character: EquipSubject, itemId: string, definition:
    return { ok: true, stackWith };
 }
 
-/** An unidentified/mislabeled grant's identity-veil (R16): the look it shows,
+/** An unidentified/mislabeled grant's identity-veil: the look it shows,
  *  and optionally the wrong item the owner confidently believes it is. */
 export interface MysteryFields {
    descriptorId: string;
@@ -269,7 +269,7 @@ export function createItemInstance(itemId: string, definition: ItemDefinition, q
 // 8 hex chars of a v4 uuid — short enough for customIds, unique enough within
 // one character's ≤ INVENTORY_STACK_LIMIT entries (collisions are re-rolled).
 /** A short instance handle not present in `existingIds` (re-rolled on collision).
- *  Reused for pack instances AND for a withdrawn item's fresh pack id (D33). */
+ *  Reused for pack instances AND for a withdrawn item's fresh pack id. */
 export function mintInstanceId(existingIds: ReadonlySet<string>): string {
    let instanceId = shortInstanceId();
    while (existingIds.has(instanceId))
@@ -300,7 +300,7 @@ export function equippedItems(character: InventoryState): { slot: EquipmentSlotI
    });
 }
 
-/** 🟡 Total Armor Value of everything worn (Soak math comes with Phase 7). */
+/** 🟡 Total Armor Value of everything worn — part of Soak in a fight. */
 export function totalEquippedArmor(character: InventoryState): number {
    return equippedItems(character).reduce((sum, { item }) => {
       const def = item.definition;

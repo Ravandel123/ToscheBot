@@ -1,7 +1,7 @@
 import { createCanvas } from '@napi-rs/canvas';
 import { defaultFontFamily } from './fonts.js';
 
-// Programmatic casino-chip renderer (gambling-salon toolkit, D46/images.md):
+// Programmatic casino-chip renderer (gambling-salon toolkit, images.md):
 // drawn like the cards — no art assets, replaceable via the asset catalog
 // later. Not cached: the label is an arbitrary string (bet amounts), so a
 // cache would grow unbounded; a chip is cheap to draw.

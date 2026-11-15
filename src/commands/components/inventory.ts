@@ -1,9 +1,8 @@
-import { MessageFlags, type ButtonInteraction, type StringSelectMenuInteraction } from 'discord.js';
+import type { ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { characterService } from '../../db/services/characterService.js';
 import { inventoryService } from '../../db/services/inventoryService.js';
 import { itemService } from '../../db/services/itemService.js';
-import { activitySessionService } from '../../db/services/activitySessionService.js';
 import { DEFAULT_CONTAINER, STORAGE_CONTAINERS } from '../../game/data/containers.js';
 import { ATTRIBUTES } from '../../game/data/attributes.js';
 import { RESOURCES, type ResourceKey } from '../../game/data/resources.js';
@@ -11,7 +10,6 @@ import { checkSubject } from '../../game/character/modifiers.js';
 import { effectDefinition } from '../../game/data/effects.js';
 import { isEquipmentSlotId, type EquipmentSlotId } from '../../game/data/equipmentSlots.js';
 import { isEquippable, type ConsumableDefinition } from '../../game/data/items.js';
-import { skillNode } from '../../game/data/skills.js';
 import { checkTrainingWeight } from '../../game/checks.js';
 import { EXAMINE_AP_COST, examineInstance } from '../../game/professions/identify.js';
 import {
@@ -27,11 +25,15 @@ import {
    type InventorySortId,
 } from '../../game/character/inventory.js';
 import { busyNote } from './_activities/registry.js';
-import { buildDropConfirm, buildInventoryHub, buildInventoryList, buildItemDetail, buildSlotChooser, stateForItem, type InventoryView } from './_inventoryPanel.js';
+import { deferIfFree, ownedCharacter, readyCharacter } from './_characterAction.js';
+import { levelUpList } from './_format.js';
+import { buildDropConfirm, buildInventoryHub, buildInventoryList, buildItemDetail, buildSlotChooser, stateForItem } from './_inventoryPanel.js';
+import { quantitySuffix } from '../../lib/text.js';
+import type { PanelView } from '../../lib/discord.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { ToscheClient } from '../../client.js';
 
-// Handles every `inventory:*` interaction (D28). Two families:
+// Handles every `inventory:*` interaction. Two families:
 //   NAVIGATION (home/cat/equipped/list/pick/sort/detail/drop) — read-only:
 //     fetch a fresh doc, repaint. No lock needed; staleness self-heals because
 //     nothing renders from the message, only from the DB.
@@ -40,10 +42,8 @@ import type { ToscheClient } from '../../client.js';
 //     a busy re-check inside. This is what makes two open panels safe: whoever
 //     commits second finds the item gone/moved and gets a friendly note, never
 //     a double-spend (the user-story race: drop in window B, equip in window A).
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 const STALE_ITEM_NOTE = '👻 That item is no longer in your pack.';
-const BUSY_NOTE = '⏳ Your character is busy right now — try again in a moment.';
 
 export default {
    namespace: 'inventory',
@@ -89,8 +89,8 @@ type PanelInteraction = ButtonInteraction | StringSelectMenuInteraction;
 // --- Navigation ---------------------------------------------------------------
 
 /** Read-only repaint: fresh doc → view. The shared path of every nav action. */
-async function repaint(interaction: PanelInteraction, characterId: string, view: (character: CharacterDoc) => InventoryView): Promise<void> {
-   const character = await ownedCharacter(interaction, characterId);
+async function repaint(interaction: PanelInteraction, characterId: string, view: (character: CharacterDoc) => PanelView): Promise<void> {
+   const character = await ownedCharacter(interaction, characterId, 'inventory');
    if (!character)
       return;
 
@@ -98,11 +98,11 @@ async function repaint(interaction: PanelInteraction, characterId: string, view:
 }
 
 /** Detail of an instance, or the list with a 'gone' note when it vanished. */
-function detailOrList(character: CharacterDoc, instanceId: string, state: BrowseState, note?: string): InventoryView {
+function detailOrList(character: CharacterDoc, instanceId: string, state: BrowseState, note?: string): PanelView {
    return buildItemDetail(character, instanceId, state, note) ?? listFallback(character, state);
 }
 
-function listFallback(character: CharacterDoc, state: BrowseState): InventoryView {
+function listFallback(character: CharacterDoc, state: BrowseState): PanelView {
    return buildInventoryList(character, state, STALE_ITEM_NOTE);
 }
 
@@ -110,8 +110,8 @@ function listFallback(character: CharacterDoc, state: BrowseState): InventoryVie
 
 async function handleEquip(client: ToscheClient, interaction: ButtonInteraction, characterId: string, instanceId: string, state: BrowseState): Promise<void> {
    // Multi-slot items (a dagger fits either hand) detour to a slot chooser —
-   // that's pure navigation; the real write happens in `equipto`.
-   const character = await ownedCharacter(interaction, characterId);
+   // that's pure navigation; the real write happens in `equipsel`.
+   const character = await ownedCharacter(interaction, characterId, 'inventory');
    if (!character)
       return;
 
@@ -133,7 +133,7 @@ async function handleEquipTo(client: ToscheClient, interaction: PanelInteraction
 }
 
 /** Validates + applies an equip against the FRESH doc and describes the outcome. */
-async function equipResult(fresh: CharacterDoc, instanceId: string, slot: EquipmentSlotId | null, state: BrowseState): Promise<InventoryView> {
+async function equipResult(fresh: CharacterDoc, instanceId: string, slot: EquipmentSlotId | null, state: BrowseState): Promise<PanelView> {
    if (!slot)
       return detailOrList(fresh, instanceId, state, STALE_ITEM_NOTE);
 
@@ -196,12 +196,12 @@ async function handleUse(client: ToscheClient, interaction: ButtonInteraction, c
 }
 
 /**
- * Examine a foraged find (R16): a uniform 1-AP identify re-check. Every
+ * Examine a foraged find: a uniform 1-AP identify re-check. Every
  * outcome — truth revealed, wrong label kept, NEW wrong label — replies with
  * the same confident voice and no roll, so the player can never tell a
  * correct identification from a convincing mistake (that ambiguity is the
  * mechanic; see game/professions/identify.ts). A rolled attempt trains the
- * Identify path (D40); the already-known shortcut rolls nothing and trains
+ * Identify path; the already-known shortcut rolls nothing and trains
  * nothing, but still costs the AP (a free confirm would leak settledness).
  */
 async function handleExamine(client: ToscheClient, interaction: ButtonInteraction, characterId: string, instanceId: string, state: BrowseState): Promise<void> {
@@ -221,7 +221,7 @@ async function handleExamine(client: ToscheClient, interaction: ButtonInteractio
       else if (result.kind === 'fooled')
          await inventoryService.applyIdentification(fresh._id, instanceId, { apply: 'mislabel', apparentItemId: result.apparentItemId });
 
-      // A rolled attempt trains, right or wrong (the house rule, D40).
+      // A rolled attempt trains, right or wrong (the house rule).
       const levelUps = 'target' in result
          ? await characterService.creditSkillUse(fresh._id, ['identify_forage'], checkTrainingWeight(result.target))
          : [];
@@ -230,7 +230,7 @@ async function handleExamine(client: ToscheClient, interaction: ButtonInteractio
       const shown = findItem(updated, shownInstanceId);
       const note = [
          examineNote(result, shown ? itemDisplayName(shown) : 'it'),
-         levelUps.length > 0 ? `📈 ${levelUps.map((up) => `**${skillNode(up.node).name}** rises to **${up.to}**`).join(', ')}.` : '',
+         levelUps.length > 0 ? `📈 ${levelUpList(levelUps)}.` : '',
       ].filter(Boolean).join('\n');
 
       return detailOrList(updated, shownInstanceId, state, note);
@@ -249,11 +249,11 @@ function examineNote(result: ReturnType<typeof examineInstance>, shownName: stri
    if (result.kind === 'unshaken')
       return `🔍 **${shownName}**, as you thought.`;
 
-   // 'revealed' and 'fooled' share one voice on purpose (the R16 gamble).
+   // 'revealed' and 'fooled' share one voice on purpose (the identify gamble).
    return `🔍 Ah — of course. **${shownName}**.`;
 }
 
-/** Stows a whole pack entry into the character's stash (D33). The item leaves
+/** Stows a whole pack entry into the character's stash. The item leaves
  *  the pack, so we land back on the category list with a note; open `/stash` to
  *  retrieve it. Deposit targets the single container for now (DEFAULT_CONTAINER);
  *  a container chooser joins here when a second one lands. */
@@ -267,10 +267,9 @@ async function handleStore(client: ToscheClient, interaction: ButtonInteraction,
       }
 
       const updated = await characterService.get(fresh._id) ?? fresh;
-      const name = item ? itemDisplayName(item) : 'it';
-      const quantity = item && item.instance.quantity > 1 ? ` ×${item.instance.quantity}` : '';
+      const stored = item ? `**${itemDisplayName(item)}**${quantitySuffix(item.instance.quantity)}` : 'it';
       const container = STORAGE_CONTAINERS[DEFAULT_CONTAINER];
-      return buildInventoryList(updated, state, `${container.emoji} Stored **${name}**${quantity} in your **${container.name}**. Fetch it with \`/stash\`.`);
+      return buildInventoryList(updated, state, `${container.emoji} Stored ${stored} in your **${container.name}**. Fetch it with \`/stash\`.`);
    });
 }
 
@@ -283,17 +282,14 @@ async function handleDropConfirmed(client: ToscheClient, interaction: ButtonInte
 
       const updated = await characterService.get(fresh._id) ?? fresh;
       const name = item ? itemDisplayName(item) : 'it';
-      const quantity = result.removed.quantity > 1 ? ` ×${result.removed.quantity}` : '';
-      return buildInventoryList(updated, state, `🗑️ Dropped **${name}**${quantity}. The road keeps what it is given.`);
+      return buildInventoryList(updated, state, `🗑️ Dropped **${name}**${quantitySuffix(result.removed.quantity)}. The road keeps what it is given.`);
    });
 }
 
 /**
- * The shared mutation path: ownership pre-check → refuse while in-memory
- * locked (mid-fight — don't queue a panel click behind a whole match) →
- * deferUpdate (the lock wait + DB writes may pass the 3 s ack window) →
- * under the lock: re-read, refuse while in a durable activity (gear is frozen
- * mid-adventure, D22-style busy), then run and repaint via editReply.
+ * The shared mutation path: ownership → acknowledge unless the character is
+ * locked → under the lock: re-read, refuse while it has an unfinished
+ * activity (gear is frozen mid-adventure), then run and repaint.
  */
 async function mutate(
    client: ToscheClient,
@@ -301,47 +297,21 @@ async function mutate(
    characterId: string,
    instanceId: string,
    state: BrowseState,
-   run: (fresh: CharacterDoc) => Promise<InventoryView>,
+   run: (fresh: CharacterDoc) => Promise<PanelView>,
 ): Promise<void> {
-   const character = await ownedCharacter(interaction, characterId);
-   if (!character)
+   if (!await ownedCharacter(interaction, characterId, 'inventory') || !await deferIfFree(client, interaction, characterId))
       return;
-
-   if (client.locks.isLocked(characterId)) {
-      await interaction.reply({ content: BUSY_NOTE, ...ephemeral });
-      return;
-   }
-
-   await interaction.deferUpdate();
 
    await client.locks.runExclusive([characterId], async () => {
-      const fresh = await characterService.get(characterId);
-      if (!fresh) {
-         await interaction.editReply({ content: 'Your character vanished. Try `/inventory` again.', embeds: [], components: [] });
-         return;
-      }
-
-      const session = await activitySessionService.getActiveForParticipant(characterId);
-      if (session) {
-         await interaction.editReply(detailOrList(fresh, instanceId, state, `${busyNote(session)} \`/play\` takes you back to it.`));
-         return;
-      }
-
-      await interaction.editReply(await run(fresh));
+      const fresh = await readyCharacter(interaction, characterId, {
+         busyView: (session, character) => detailOrList(character, instanceId, state, `${busyNote(session)} \`/play\` takes you back to it.`),
+      });
+      if (fresh)
+         await interaction.editReply(await run(fresh));
    });
 }
 
 // --- Helpers -----------------------------------------------------------------------
-
-/** Fetches the character and verifies the clicker owns it (panels are personal). */
-async function ownedCharacter(interaction: PanelInteraction, characterId: string): Promise<CharacterDoc | null> {
-   const character = await characterService.get(characterId);
-   if (character?.ownerId === interaction.user.id)
-      return character;
-
-   await interaction.reply({ content: "That isn't your inventory.", ...ephemeral });
-   return null;
-}
 
 function describeEffects(definition: ConsumableDefinition): string {
    const parts = Object.entries(definition.effects)

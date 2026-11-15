@@ -1,7 +1,8 @@
-import { type ChatInputCommandInteraction, MessageFlags } from 'discord.js';
+import type { ChatInputCommandInteraction } from 'discord.js';
 import { defineEvent } from '../types/events.js';
 import { config } from '../config.js';
 import { log } from '../lib/log.js';
+import { ephemeral } from '../lib/discord.js';
 import type { ComponentInteraction } from '../types/interactions.js';
 import type { ToscheClient } from '../client.js';
 
@@ -45,7 +46,7 @@ async function handleComponent(client: ToscheClient, interaction: ComponentInter
    } catch (error) {
       log.error(`Component handler '${namespace}' failed:`, error);
 
-      const reply = { content: 'Something went wrong on my end. The scribes have been notified.', flags: MessageFlags.Ephemeral } as const;
+      const reply = { content: 'Something went wrong on my end. The scribes have been notified.', ...ephemeral } as const;
 
       try {
          if (interaction.replied || interaction.deferred)
@@ -64,14 +65,14 @@ async function handleChatInput(client: ToscheClient, interaction: ChatInputComma
    if (!command) {
       // Registered on Discord but missing in code — stale registration; rerun `npm run deploy`.
       log.warn(`Received unknown slash command '${interaction.commandName}'.`);
-      await interaction.reply({ content: 'I do not know that order anymore.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: 'I do not know that order anymore.', ...ephemeral });
       return;
    }
 
    const isOwner = interaction.user.id === config.ownerId;
 
    if (command.ownerOnly && !isOwner) {
-      await interaction.reply({ content: 'Only the Imperator gives me orders, yes-yes.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: 'Only the Imperator gives me orders, yes-yes.', ...ephemeral });
       return;
    }
 
@@ -80,7 +81,7 @@ async function handleChatInput(client: ToscheClient, interaction: ChatInputComma
       : client.cooldowns.use(`s:${interaction.commandName}`, interaction.user.id, command.cooldownSeconds ?? 0);
 
    if (remaining > 0) {
-      await interaction.reply({ content: `Patience! Try again in ${remaining.toFixed(1)}s.`, flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: `Patience! Try again in ${remaining.toFixed(1)}s.`, ...ephemeral });
       return;
    }
 
@@ -89,7 +90,7 @@ async function handleChatInput(client: ToscheClient, interaction: ChatInputComma
    } catch (error) {
       log.error(`Slash command '${interaction.commandName}' failed:`, error);
 
-      const reply = { content: 'Something went wrong on my end. The scribes have been notified.', flags: MessageFlags.Ephemeral } as const;
+      const reply = { content: 'Something went wrong on my end. The scribes have been notified.', ...ephemeral } as const;
 
       try {
          if (interaction.deferred || interaction.replied)

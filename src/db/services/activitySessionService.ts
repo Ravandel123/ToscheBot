@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { ActivitySession, type ActivitySessionDoc, type ActivityType } from '../models/activitySession.js';
 
-// The activity-agnostic durability layer (D17). Specific activities (duel,
+// The activity-agnostic durability layer. Specific activities (duel,
 // exploration) own the `state` shape and the game logic; this service only knows
-// how to persist steps crash-safely. Sessions never expire (D58). No mechanics here.
+// how to persist steps crash-safely. Sessions never expire. No mechanics here.
 export const activitySessionService = {
    /** Opens a new active session for the (sorted) participants. */
    async create(type: ActivityType, participantIds: string[], initialState: Record<string, unknown> = {}): Promise<ActivitySessionDoc> {
@@ -30,7 +30,7 @@ export const activitySessionService = {
    },
 
    /** Every character id busy in ANY active session — the durable busy set the
-    *  regen job splits on (D23). One round trip. */
+    *  regen job splits on. One round trip. */
    async activeParticipantIds(): Promise<string[]> {
       const ids: unknown[] = await ActivitySession.distinct('participantIds', { status: 'active' });
       return ids.filter((id): id is string => typeof id === 'string');
@@ -44,7 +44,7 @@ export const activitySessionService = {
    /**
     * Advances one step IFF the session is still at `expectedStep` and active —
     * optimistic concurrency that makes a step idempotent against double-clicks and
-    * crash-replay (D6/D17). Returns the updated doc, or null if the guard failed
+    * crash-replay. Returns the updated doc, or null if the guard failed
     * (someone/something already advanced it; the duplicate is safely ignored).
     */
    async advance(id: string, expectedStep: number, state: Record<string, unknown>): Promise<ActivitySessionDoc | null> {

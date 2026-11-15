@@ -1,6 +1,6 @@
 // Rebuilds the alpha roster after a DB wipe: replays each player's creation
 // inputs from seed-data.ts through the NORMAL domain services (in seed.ts), so
-// the resulting documents always match the current schema (CLAUDE.md D38).
+// the resulting documents always match the current schema (the seed maintenance rule in CLAUDE.md).
 // Idempotent — an already-existing owner+name pair is skipped, so rerun freely
 // after adding entries. Run with: npm run seed (optionally `ENV_FILE=.env.production
 // npm run seed` to target the live DB — see the confirmation guard below).

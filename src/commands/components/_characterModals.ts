@@ -62,7 +62,7 @@ export function readIdentityModal(interaction: ModalSubmitInteraction): Editable
    };
 }
 
-/** Body (frame) modal — the creation step's height/weight/age fields (R20). All
+/** Body (frame) modal — the creation step's height/weight/age fields. All
  *  metric; the panel prefills current values (a fresh draft has race defaults).
  *  The caller owns the `customId` (`character:panel-save-body:<id>`). */
 export function buildBodyModal(opts: { customId: string; prefill: CharacterBody }): ModalBuilder {

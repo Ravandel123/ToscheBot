@@ -16,7 +16,7 @@ export const settings = {
       // Where arrivals and departures are announced (welcomes & farewells).
       gate: 'main-gate',
       // Public game log: noteworthy character actions (travel, cleared obstacles,
-      // future duels…) are posted here so everyone can follow the game (D24).
+      // future duels…) are posted here so everyone can follow the game.
       chronicle: 'chronicle',
    },
 

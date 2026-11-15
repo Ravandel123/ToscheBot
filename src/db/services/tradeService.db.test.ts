@@ -10,7 +10,7 @@ import { NPCS, npcCharacterId } from '../../game/data/npcs.js';
 import { SHOPS } from '../../game/data/shops.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// The trade writes span two character documents (D60) — only a real database
+// The trade writes span two character documents — only a real database
 // proves that goods and coins end up where they should, and nowhere twice.
 useTestDb();
 

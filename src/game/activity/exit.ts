@@ -1,4 +1,4 @@
-// The way OUT of a durable activity (D58). Solo sessions never expire, so every
+// The way OUT of a durable activity. Solo sessions never expire, so every
 // step must offer one — and it is never a generic "Cancel": each activity
 // authors its own in-character exit (the climber lets go and drops, the talker
 // insults the other side and the talk is cut off, the fighter yields).

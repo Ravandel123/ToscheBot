@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { log } from '../../lib/log.js';
 import type { Point } from './composite.js';
 
-// Catalog of repo-committed art under assets/images/ (D46: anything the bot's
+// Catalog of repo-committed art under assets/images/ (anything the bot's
 // own renderer draws ON ships with the code — the render path never depends
-// on a network fetch). D10 applied to files: stable ids here, resolved to
+// on a network fetch). Content-in-code applied to files: stable ids here, resolved to
 // paths at render time, so stored docs never hold filenames and re-pointing
 // art is a catalog edit. `anchors` are named points in the image's own pixel
 // space (a map's locations, a board's squares) so game code places overlays

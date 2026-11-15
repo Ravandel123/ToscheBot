@@ -1,5 +1,5 @@
 // Discord adapter (marked): the free-text modals behind the `/profile` panel's
-// "Set country" / "Set timezone" buttons (R19). A single text field each; the
+// "Set country" / "Set timezone" buttons. A single text field each; the
 // submit routes to `profile:set-<field>`, which validates + saves and repaints
 // the panel in place. Underscore prefix → loader skips it.
 import { LabelBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';

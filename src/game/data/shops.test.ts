@@ -5,7 +5,7 @@ import { actionsAt, hubAction } from './hubActions.js';
 import { ITEM_KINDS, itemDefinition } from './items.js';
 import { INVENTORY_STACK_LIMIT } from '../character/inventory.js';
 
-// Content-integrity checks for the shop catalog (D60): a shop that points at
+// Content-integrity checks for the shop catalog: a shop that points at
 // the wrong NPC, a hub action that is not offered where the merchant stands or
 // a stock list that cannot fit a pack would only show up mid-trade otherwise.
 const shops = Object.entries(SHOPS) as [string, ShopDefinition][];

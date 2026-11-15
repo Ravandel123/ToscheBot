@@ -1,4 +1,4 @@
-import { MessageFlags, type ButtonInteraction, type SendableChannels } from 'discord.js';
+import type { ButtonInteraction, SendableChannels } from 'discord.js';
 import type { ComponentHandler } from '../../types/interactions.js';
 import { settings } from '../../settings.js';
 import { accountService } from '../../db/services/accountService.js';
@@ -12,27 +12,25 @@ import { LADDER_LENGTH, championProfile, trialTarget, type SpireChampion, type T
 import { canCharacterAct } from '../../game/character/rules.js';
 import { displayName } from '../../game/character/identity.js';
 import { postChronicle } from '../../game/chronicle.js';
-import { buildStyleIntro, buildTrainingLine, renderBlow } from './_duelView.js';
+import { buildTrainingLine } from './_duelView.js';
+import { announce, MessageClaims, narrateBout } from './_boutNarration.js';
 import { buildTrialBrowser, buildTrialOpening, buildTrialResult, buildTrialSentOff } from './_trialView.js';
-import { resolveGuildChannel } from '../../lib/discord.js';
-import { sleep } from '../../lib/async.js';
+import { ephemeral, resolveGuildChannel } from '../../lib/discord.js';
+import { NO_ACTIVE_CHARACTER } from './_characterAction.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { ToscheClient } from '../../client.js';
 
-// The PvE Spire ladder interface (`/smackdown trial`, D37). The slash command
-// opens an ephemeral browser (`_trialView`); this handler owns its two actions:
+// The PvE Spire ladder interface (`/smackdown trial` and the arena hub
+// action). Both open an ephemeral browser (`_trialView`); this handler owns
+// its two actions:
 //   - `show`  — scroll to another champion (stateless: the index rides the id);
 //   - `fight` — commit to the bout, which narrates in the Spire channel on the
-//     REAL Health/Soak engine and persists ONLY the player's Health (the champion
-//     is a code stat block, D37). Mirrors `duel.ts`'s ack-then-run choreography.
-const ephemeral = { flags: MessageFlags.Ephemeral } as const;
-const INTRO_DELAY_MS = 1500;
-const ROUND_DELAY_MS = 1300;
+//     REAL Health/Soak engine and persists ONLY the player's Health (the
+//     champion is a code stat block). Mirrors `duel.ts`'s ack-then-run order.
 const SPIRE_MISSING = 'The Spire is missing. Set `channels.smackdownSpire` in settings to a real channel.';
 
-// First-click-wins per panel: two near-simultaneous Fight clicks are two
-// interactions that can both pass the lock check before either acquires it.
-const startingFights = new Set<string>();
+// One fight per panel at a time.
+const startingFights = new MessageClaims();
 
 export default {
    namespace: 'trial',
@@ -51,7 +49,7 @@ export default {
 async function showChampion(interaction: ButtonInteraction, index: number): Promise<void> {
    const character = await accountService.getActiveCharacter(interaction.user.id, interaction.user.displayName);
    if (!character) {
-      await interaction.update({ content: 'You have no active character.', embeds: [], components: [] });
+      await interaction.update({ content: NO_ACTIVE_CHARACTER, embeds: [], components: [] });
       return;
    }
 
@@ -90,11 +88,10 @@ async function fightChampion(client: ToscheClient, interaction: ButtonInteractio
       return;
    }
 
-   if (startingFights.has(interaction.message.id)) {
+   if (!startingFights.claim(interaction.message.id)) {
       await interaction.reply({ content: 'You are already heading to the Spire.', ...ephemeral });
       return;
    }
-   startingFights.add(interaction.message.id);
 
    try {
       // Pre-lock resolve for a friendly refusal; the fight re-resolves under the
@@ -112,7 +109,7 @@ async function fightChampion(client: ToscheClient, interaction: ButtonInteractio
 
       await runTrialFight(client, spire, character._id, championId);
    } finally {
-      startingFights.delete(interaction.message.id);
+      startingFights.release(interaction.message.id);
    }
 }
 
@@ -158,21 +155,7 @@ async function runTrialFight(client: ToscheClient, spire: SendableChannels, char
       const playerHp = result.finalHealth[player.characterId];
       const ladderCleared = won && !isRematch && rung + 1 >= LADDER_LENGTH;
 
-      await announce(spire, buildTrialOpening(player.name, champ, isRematch));
-      await sleep(INTRO_DELAY_MS);
-
-      // A champion (or a player with a combat plan) opens in a named style (D41).
-      const styleIntro = buildStyleIntro(result.openingStyles, names);
-      if (styleIntro) {
-         await announce(spire, styleIntro);
-         await sleep(ROUND_DELAY_MS);
-      }
-
-      for (const blow of result.blows) {
-         await announce(spire, renderBlow(blow, names));
-         await sleep(ROUND_DELAY_MS);
-      }
-
+      await narrateBout(spire, buildTrialOpening(player.name, champ, isRematch), result, names);
       if (levelUps.length > 0)
          await announce(spire, buildTrainingLine(player.name, levelUps));
 
@@ -214,9 +197,4 @@ function chronicleTrialLine(name: string, championName: string, won: boolean, is
       return `🏟️ **${name}** won a friendly rematch against **${championName}** at the Spire.`;
 
    return `🏟️ **${name}** bested **${championName}** and climbed to rung ${rung + 1}/${LADDER_LENGTH} of the Spire ladder.`;
-}
-
-/** Channel line that never pings (chronicle-style). */
-async function announce(channel: SendableChannels, content: string): Promise<void> {
-   await channel.send({ content, allowedMentions: { parse: [] } });
 }

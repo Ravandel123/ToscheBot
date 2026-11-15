@@ -11,18 +11,18 @@ import {
 import { ITEMS, ITEM_IDS, ITEM_KINDS, ITEM_KIND_IDS, itemDefinition, type ItemDefinition, type ItemKindId } from '../data/items.js';
 import { DEFAULT_CONTAINER, isStorageContainerId, type StorageContainerId } from '../data/containers.js';
 
-// Pure stash rules (D33) — no Discord, no DB. The stash is the character's
+// Pure stash rules — no Discord, no DB. The stash is the character's
 // owned-but-not-carried items, living in their OWN `Item` collection (one doc
 // per instance/stack) rather than embedded on the character, because a hoard is
-// UNBOUNDED (D32) and must never tax a hot-path character read. This module owns
+// UNBOUNDED and must never tax a hot-path character read. This module owns
 // the browse-state that rides in customIds and the pure withdraw-eligibility
 // check; itemService owns the (paginated, server-side) reads and the lock-held
 // transfers. Whole entries move as a unit — partial-stack transfers are deferred
-// (same scope call as partial-stack drops, D28).
+// (same scope call as partial-stack drops).
 
 // The stash pages server-side, so its sorts must be expressible as a Mongo sort
 // on a STORED field. `acquiredAt` is the only one that qualifies without
-// denormalizing catalog data (names/values are resolved from code, D10) — the
+// denormalizing catalog data (names/values are resolved from code) — the
 // pack keeps the richer name/weight/value sorts. `direction` feeds `.sort()`.
 export interface StashSortDefinition {
    name: string;
@@ -42,7 +42,7 @@ export const DEFAULT_STASH_SORT: StashSortId = 'newest';
 export const STASH_PAGE_SIZE = INVENTORY_PAGE_SIZE;
 
 /** Category + sort + page WITHIN a container, packed as 'home_chest.weapon.newest.0'
- *  to ride in customIds (D33). Mirrors the pack's BrowseState with a container axis. */
+ *  to ride in customIds. Mirrors the pack's BrowseState with a container axis. */
 export interface StashBrowseState {
    container: StorageContainerId;
    kind: ItemKindId;
@@ -83,7 +83,7 @@ export type WithdrawFitCheck =
    | { ok: false; reason: 'inventory-full' | 'too-heavy' };
 
 /** Whether a withdrawn entry fits back into the pack. A withdrawn stack lands as
- *  ONE new entry (no auto-merge — that keeps the transfer idempotent, D33), so
+ *  ONE new entry (no auto-merge — that keeps the transfer idempotent), so
  *  it always costs one slot against INVENTORY_STACK_LIMIT plus its full weight. */
 export function canWithdrawInto(character: EquipSubject, definition: ItemDefinition, quantity: number): WithdrawFitCheck {
    if (inventoryOf(character).length + 1 > INVENTORY_STACK_LIMIT)
@@ -98,7 +98,7 @@ export function canWithdrawInto(character: EquipSubject, definition: ItemDefinit
 // --- Resolving a stored stash instance to a display item --------------------------
 
 /** Pairs a stored stash instance with its catalog definition, dropping unknown
- *  item ids from view (they stay in the collection untouched — D10 rule 3). This
+ *  item ids from view (they stay in the collection untouched). This
  *  is what lets the stash panel reuse the `/inventory` item renderers verbatim. */
 export function resolveStashInstance(instance: ItemInstance): ResolvedItem | null {
    const definition = itemDefinition(instance.itemId);
@@ -106,7 +106,7 @@ export function resolveStashInstance(instance: ItemInstance): ResolvedItem | nul
 }
 
 /** Total entries of a container split by catalog kind — computed from a
- *  server-side itemId→count roll-up, so the whole stash never loads (D33). */
+ *  server-side itemId→count roll-up, so the whole stash never loads. */
 export function tallyKinds(itemIdCounts: Iterable<{ itemId: string; count: number }>): Record<ItemKindId, number> {
    const counts = Object.fromEntries(ITEM_KIND_IDS.map((kind) => [kind, 0])) as Record<ItemKindId, number>;
 

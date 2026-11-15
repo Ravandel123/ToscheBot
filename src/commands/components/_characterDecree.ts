@@ -1,9 +1,10 @@
 // Discord adapter (marked): builds the approval-petition embed + buttons that go
 // to the owner-only Imperial Decrees channel, and the "decided" version shown
 // after the verdict. Pure presentation — no DB, no side effects.
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { RACES } from '../../game/data/races.js';
 import { displayName, isHttpUrl } from '../../game/character/identity.js';
+import { actionRow, type ComponentRow } from '../../lib/discord.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 
 const PENDING_COLOR = 0xB8860B; // dark goldenrod — an awaiting decree
@@ -40,8 +41,8 @@ export function buildDecreeEmbed(character: CharacterDoc): EmbedBuilder {
    return embed;
 }
 
-export function buildDecreeButtons(characterId: string): ActionRowBuilder<ButtonBuilder> {
-   return new ActionRowBuilder<ButtonBuilder>().addComponents(
+export function buildDecreeButtons(characterId: string): ComponentRow {
+   return actionRow(
       new ButtonBuilder().setCustomId(`character:approve:${characterId}`).setLabel('Approve').setStyle(ButtonStyle.Success).setEmoji('✅'),
       new ButtonBuilder().setCustomId(`character:reject:${characterId}`).setLabel('Reject').setStyle(ButtonStyle.Danger).setEmoji('❌'),
    );

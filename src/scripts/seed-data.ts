@@ -9,7 +9,7 @@ import type { GENDER_CHOICES } from '../game/character/identity.js';
 // else (resources, currencies, progression, inventory…) is derived from the
 // current catalogs at seed time, exactly like a fresh `/character create`.
 //
-// MAINTENANCE RULE (for future sessions — see CLAUDE.md D38): because the seed
+// MAINTENANCE RULE (the seed maintenance rule in CLAUDE.md): because the seed
 // derives instead of copying, most schema/catalog changes need NO edit here.
 // You MUST extend `SeedCharacter` + `seed-characters.ts` in the same commit
 // whenever the CREATION INPUT shape changes: a new required wizard step, a

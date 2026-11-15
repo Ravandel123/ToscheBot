@@ -4,16 +4,16 @@ import { fightingStyle, styleEffect, type FightingStyleId, type StyleFamily, typ
 import { activePlanStyle, type FamilyPlan } from './plan.js';
 import type { SkillNodeId } from '../data/skills.js';
 
-// The REAL combat engine (Ruleset/combat.md R12/R24) — pure, no Discord, no DB:
+// The REAL combat engine (Ruleset/combat.md) — pure, no Discord, no DB:
 // it deals only in the numbers profile.ts derives, so it stays unit-testable
 // (inject `rng`). This is the serious, HP-persisting model behind `/smackdown
 // duel`; the old d20 engine.ts stays as the throwaway for-fun sparring resolver.
 //
 // v1 is DELIBERATELY thin (owner's instruction): opposed d100, one shared Health
-// pool, Soak, auto-resolve. Fighting styles + the combat plan are LIVE (D41):
+// pool, Soak, auto-resolve. Fighting styles + the combat plan are LIVE:
 // each exchange re-evaluates both fighters' plans (default style + conditional
 // switches), applies the active style's modifiers to the opposed targets and
-// runs its effects (hamper, riposte). MOMENTUM is live too (D42, the owner's
+// runs its effects (hamper, riposte). MOMENTUM is live too (the owner's
 // realism ask): initiative is not alternating but FLOWS — a connecting blow
 // gives the attacker a CHANCE to press on and swing again (never a certainty),
 // a miss hands it over, and a decisive defence (≥ SEIZE_MARGIN SL) seizes it
@@ -52,7 +52,7 @@ export interface CombatProfile {
     *  reset between duels; damage is written back after the fight). */
    health: number;
    /** d100 % to land a blow with NO style (skill-tree Effective + attributes,
-    *  clamped [5,95]) — the pre-D41 behavior, and every style's fallback base. */
+    *  clamped [5,95]) — the styleless behavior, and every style's fallback base. */
    attackTarget: number;
    /** The skill node plain (style-less) blows draw on AND train (learn-by-doing
     *  — the whole path root→leaf is credited after the bout). Not read by the
@@ -70,14 +70,14 @@ export interface CombatProfile {
    /** AgilityBonus + PerceptionBonus — decides who strikes first. */
    initiative: number;
    /** Which style catalog applies to this fighter (weapon in hand ⇒ melee;
-    *  fists ⇒ unarmed) — styles from another family never fire (D41). */
+    *  fists ⇒ unarmed) — styles from another family never fire. */
    family: StyleFamily;
    /** Per-style base targets, derived from each style's skill node (the owner's
     *  rule: knowing your style well = attacking AND defending better in it).
     *  A style absent here falls back to attackTarget/defenseTarget. */
    styleTargets?: Partial<Record<FightingStyleId, StyleTargets>>;
    /** Standing orders for this family (default style + conditional switches).
-    *  Absent or empty → fights plain, exactly like pre-D41 combat. */
+    *  Absent or empty → fights plain, exactly like a fight without styles. */
    plan?: FamilyPlan;
 }
 
@@ -105,7 +105,7 @@ export interface DuelBlow {
    /** The opposed margin on a hit (0 on a miss) — drives damage (combat.md). */
    netSuccessLevels: number;
    defenderHealthAfter: number;
-   /** True once the defender's Health hit 0 (Downed — combat.md R8). */
+   /** True once the defender's Health hit 0 (Downed — combat.md). */
    defenderDowned: boolean;
    /** Styles in effect this exchange (null = fighting plain). */
    attackerStyle: FightingStyleId | null;
@@ -115,7 +115,7 @@ export interface DuelBlow {
    /** The attacker swung fouled by the foe's previous controlling hit (hamper). */
    hampered: boolean;
    /** A follow-up swing in a press — the attacker kept the initiative off a
-    *  connecting blow and swings again, at a mounting penalty (D42 momentum). */
+    *  connecting blow and swings again, at a mounting penalty (momentum). */
    pressed: boolean;
    /** The defender stopped this swing decisively (≥ SEIZE_MARGIN SL) and takes
     *  the initiative with a story beat — the riposte styles' counter window. */
@@ -136,7 +136,7 @@ export interface DuelResult {
    /** Each fighter's style at the opening bell (narration). */
    openingStyles: Record<string, FightingStyleId | null>;
    /** The distinct styles each fighter actually fought in, in order of first
-    *  use (null = a plain stretch) — drives post-fight training (D40/D41). */
+    *  use (null = a plain stretch) — drives post-fight training. */
    stylesUsed: Record<string, (FightingStyleId | null)[]>;
 }
 
@@ -148,7 +148,7 @@ export type Rng = (min: number, max: number) => number;
 // remaining Health. Kept modest so a bout never floods the channel. 🟡 tunable.
 export const MAX_ROUNDS = 24;
 
-// --- Momentum (D42) --------------------------------------------------------
+// --- Momentum --------------------------------------------------------
 // Initiative FLOWS instead of strictly alternating: a landed blow gives the
 // attacker a CHANCE to press the advantage and swing again; a miss (or a failed
 // press) always hands the initiative over. The chance (followUpChance below) is
@@ -176,7 +176,7 @@ export const FOLLOW_UP_TEMPO: Record<StyleTempo, number> = { aggressive: 15, neu
 
 /**
  * The % chance a landed blow lets the attacker keep the initiative and swing
- * again (D42). Rises with how decisively the blow connected (`netSuccessLevels`)
+ * again. Rises with how decisively the blow connected (`netSuccessLevels`)
  * and the attacker's style tempo; falls with each follow-up already taken
  * (`priorPresses`). Clamped [0, FOLLOW_UP_MAX] — a chain is never guaranteed. Pure.
  */
@@ -192,10 +192,10 @@ export function followUpChance(netSuccessLevels: number, style: FightingStyleId 
 export const SEIZE_MARGIN = 2;
 
 /**
- * Auto-resolves a whole duel in one pass (combat.md R24: v1 is auto-resolve,
+ * Auto-resolves a whole duel in one pass (combat.md: v1 is auto-resolve,
  * manual turn-by-turn is a later layer that reuses this same profile/round math).
  * First strike to the higher Initiative; from there momentum decides who swings
- * (D42: a landed blow may press on, a miss passes the turn) — the proven
+ * (a landed blow may press on, a miss passes the turn) — the proven
  * sparring narration shape, now on real d100/Health/Soak.
  */
 export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = randomInt): DuelResult {
@@ -212,7 +212,7 @@ export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = rando
       : b.initiative > a.initiative ? b
          : (rng(0, 1) === 0 ? a : b);
    let defender = attacker.characterId === a.characterId ? b : a;
-   // Consecutive follow-up swings by the current initiative holder (D42).
+   // Consecutive follow-up swings by the current initiative holder.
    let press = 0;
 
    for (let round = 1; round <= MAX_ROUNDS && health[a.characterId] > 0 && health[b.characterId] > 0; round++) {
@@ -253,7 +253,7 @@ export function resolveDuel(a: CombatProfile, b: CombatProfile, rng: Rng = rando
             : undefined,
       });
 
-      // Momentum (D42): a connecting blow gives a decaying, style-shaded CHANCE
+      // Momentum: a connecting blow gives a decaying, style-shaded CHANCE
       // to press on and swing again; a miss — or a failed press roll — hands the
       // initiative over and resets the flurry.
       if (blow.record.hit && rng(1, 100) <= followUpChance(blow.record.netSuccessLevels, currentStyle[attacker.characterId], press)) {
@@ -310,7 +310,7 @@ function styleBases(profile: CombatProfile, style: FightingStyleId | null): Styl
    return { attack: profile.attackTarget, defense: profile.defenseTarget };
 }
 
-/** Styles shift targets, but the roll-under floor/cap still holds (R1). */
+/** Styles shift targets, but the roll-under floor/cap still holds. */
 function clampTarget(target: number): number {
    return Math.max(CHECK_MIN_TARGET, Math.min(CHECK_MAX_TARGET, Math.round(target)));
 }
@@ -320,14 +320,14 @@ interface ExchangeOutcome {
    /** Counter damage the defender dealt back (0 = none). */
    riposteDamage: number;
    /** How decisively the defence won (defender SL − attacker SL; 0 on a hit) —
-    *  the loop reads it against SEIZE_MARGIN (D42). */
+    *  the loop reads it against SEIZE_MARGIN. */
    defenseMargin: number;
 }
 
 /** One opposed exchange. Both roll their own d100 test under their active
  *  style's targets/modifiers; the higher Success Level connects (a target
  *  tiebreak favours the sharper fighter, else the defender). `pressPenalty`
- *  is the attacker's overextension debt from pressing the initiative (D42). */
+ *  is the attacker's overextension debt from pressing the initiative. */
 function exchange(
    attacker: CombatProfile,
    defender: CombatProfile,
@@ -405,7 +405,7 @@ function computeDamage(attacker: CombatProfile, defender: CombatProfile, attacke
    // SEAM (combat.md): armour × weapon-type multiplier applied to raw damage —
    //   damage = Math.round(damage * typeMultiplier(attacker.damageType, defender.armourType));
    damage -= defender.soak;
-   // SEAM (combat.md R21): criticals/fumbles on doubles, and the hit-location
+   // SEAM (combat.md): criticals/fumbles on doubles, and the hit-location
    // trauma tally → concentrated-damage critical injury, adjust here.
 
    // A connecting hit always bites for at least 1 (the anti-Soak-stalemate rule).

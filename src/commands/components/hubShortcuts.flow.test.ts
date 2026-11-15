@@ -3,11 +3,13 @@ import characterHandler from './character.js';
 import playHandler from './play.js';
 import { freshHubView } from './_hubView.js';
 import { accountService } from '../../db/services/accountService.js';
+import { activitySessionService } from '../../db/services/activitySessionService.js';
+import { initialChallengeState } from '../../game/activity/challenge.js';
 import { characterService } from '../../db/services/characterService.js';
 import { fakeButton, fakeClient } from '../../testing/fakeInteraction.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// D59: `/play` is the one command a player needs — the hub carries shortcuts
+// `/play` is the one command a player needs — the hub carries shortcuts
 // to the pack, the skills and the fighting style — and the public character
 // sheet can be repainted by anyone with its Refresh button.
 vi.mock('../../config.js', () => ({ config: { ownerId: 'the-owner' } }));
@@ -47,6 +49,18 @@ describe('hub shortcuts', () => {
       const back = fakeButton('play:hub', USER);
       await playHandler.handle(client, back.interaction);
       expect(JSON.stringify(back.captured.updates.at(-1))).toContain(`play:open:${panel}`);
+   });
+
+   it('leads back to an unfinished activity instead of the hub, as /play does', async () => {
+      const characterId = await activeCharacter();
+      await activitySessionService.create('challenge', [characterId], { ...initialChallengeState('fallen_tree', 'plaza', 'riverbank', {}) });
+
+      const back = fakeButton('play:hub', USER);
+      await playHandler.handle(fakeClient(), back.interaction);
+
+      const view = JSON.stringify(back.captured.updates.at(-1));
+      expect(view).toContain('Unfinished business');
+      expect(view).not.toContain('play:open:inventory');
    });
 });
 

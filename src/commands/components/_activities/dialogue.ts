@@ -1,5 +1,5 @@
-// Discord adapter (marked): the 'dialogue' activity handler (R14/D45) — a
-// conversation with an NPC, run on the challenge handler's proven shape:
+// Discord adapter (marked): the 'dialogue' activity handler — a conversation
+// with an NPC, run on the challenge handler's shape:
 //   * each pick = one step-guarded `advance` (idempotent against double-clicks
 //     and crash-replay); the outcome line + roll summary ride IN the state so
 //     repaints are stable;
@@ -8,13 +8,13 @@
 //     trait/skill writes ride the winning pick itself), THEN delete the
 //     session; a crash in between leaves a farewell view with a "Part ways"
 //     finalize re-entry.
-// Rolled options charge DIALOGUE_CHECK_AP_COST and train their node's path
-// (D40); checkless lines are free. The NPC is not a participant — see
+// Rolled options charge DIALOGUE_CHECK_AP_COST and train their node's path;
+// checkless lines are free. The NPC is not a participant — see
 // game/activity/dialogue.ts for the two v1 shape decisions.
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type ButtonInteraction, type MessageActionRowComponentBuilder } from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder, type ButtonInteraction } from 'discord.js';
 import { activitySessionService } from '../../../db/services/activitySessionService.js';
+import { hubAfter, optionRows, repaintSession, rollSummary, takeExit, trainFromCheck } from './shared.js';
 import { characterService } from '../../../db/services/characterService.js';
-import { freshHubView } from '../_hubView.js';
 import {
    appliedDialogueOutcome,
    availableDialogueOptions,
@@ -27,17 +27,15 @@ import {
    DIALOGUE_CHECK_AP_COST,
    fillDialogueLine,
    pickDialogueOption,
-   type AvailableDialogueOption,
    type DialogueState,
 } from '../../../game/activity/dialogue.js';
 import { canCharacterAct } from '../../../game/character/rules.js';
 import { checkSubject } from '../../../game/character/modifiers.js';
 import { npcDefinition } from '../../../game/data/npcs.js';
-import { skillNode } from '../../../game/data/skills.js';
-import { checkTarget, checkTrainingWeight, rollAgainst } from '../../../game/checks.js';
+import { checkTarget, rollAgainst } from '../../../game/checks.js';
 import { randomItem } from '../../../lib/random.js';
 import { log } from '../../../lib/log.js';
-import type { SkillLevelUp } from '../../../game/character/skills.js';
+import { actionRow } from '../../../lib/discord.js';
 import type { ActivityExit } from '../../../game/activity/exit.js';
 import type { ActivityHandler, ActivityView } from '../../../types/activities.js';
 import type { ActivitySessionDoc } from '../../../db/models/activitySession.js';
@@ -45,20 +43,24 @@ import type { CharacterDoc } from '../../../db/models/character.js';
 
 const DIALOGUE_COLOR = 0x8A6D9B; // tavern-candle violet
 
-/** For a session whose dialogue id no longer resolves (D10 rule 3). */
+/** For a session whose dialogue id no longer resolves. */
 const FALLBACK_EXIT: ActivityExit = { label: 'Take your leave', emoji: '🚶', lines: ['You take your leave.'] };
+
+const ENDED_LINE = 'This conversation has already ended.';
+
+function render(session: ActivitySessionDoc): ActivityView {
+   const state = dialogueStateFrom(session.state);
+
+   return dialogueProgress(state) === 'ongoing'
+      ? nodeView(session, state)
+      // Crash-recovery window: the ending pick was persisted but the cleanup
+      // may not have run. Offer to finish it.
+      : farewellView(session, state);
+}
 
 export default {
    type: 'dialogue',
-   render(session) {
-      const state = dialogueStateFrom(session.state);
-
-      return dialogueProgress(state) === 'ongoing'
-         ? nodeView(session, state)
-         // Crash-recovery window: the ending pick was persisted but the cleanup
-         // may not have run. Offer to finish it.
-         : farewellView(session, state);
-   },
+   render,
    title(session) {
       return `A conversation with ${npcName(dialogueStateFrom(session.state).npcCharacterId)}`;
    },
@@ -88,8 +90,8 @@ async function handleOption(
    const option = node?.options.find((candidate) => candidate.id === optionId);
    if (!node || !option) {
       // A stale button (a picked one-shot, or a renamed dialogue/node id) —
-      // repaint whatever is authoritative now (D10 rule 3).
-      await repaintCurrent(interaction, session._id);
+      // repaint whatever is authoritative now.
+      await repaintSession(interaction, session._id, render, ENDED_LINE);
       return;
    }
 
@@ -97,7 +99,7 @@ async function handleOption(
    // button came from a stale panel — never trust the customId alone.
    const spent = state.spentOptionKeys.includes(dialogueOptionKey(state.nodeId, option.id));
    if (spent || !dialogueGateCheck(option, state).ok) {
-      await repaintCurrent(interaction, session._id);
+      await repaintSession(interaction, session._id, render, ENDED_LINE);
       return;
    }
 
@@ -111,21 +113,21 @@ async function handleOption(
    }
 
    // Roll against the target computed (and shown) when the session opened;
-   // fall back to a fresh computation for hand-edited blobs (D26/D28 pattern).
+   // fall back to a fresh computation for a state that lacks it.
    const check = option.check
       ? rollAgainst(state.optionTargets[dialogueOptionKey(state.nodeId, option.id)] ?? checkTarget(checkSubject(actor), option.check))
       : null;
    const success = check?.success ?? true;
    const outcome = appliedDialogueOutcome(option, success);
    const spoken = outcome.lines ? randomItem(outcome.lines) : '';
-   const line = [spoken, check ? `(🎲 ${check.roll} vs **${check.target}%** — ${check.success ? 'success' : 'failure'})` : '']
+   const line = [spoken, check ? rollSummary(check) : '']
       .filter(Boolean).join(' ');
 
    const next = pickDialogueOption(state, state.nodeId, option, success, line);
    const advanced = await activitySessionService.advance(session._id, session.step, { ...next });
    if (!advanced) {
       // Stale click (double-click or replay) — repaint whatever is authoritative now.
-      await repaintCurrent(interaction, session._id);
+      await repaintSession(interaction, session._id, render, ENDED_LINE);
       return;
    }
 
@@ -138,14 +140,7 @@ async function handleOption(
    if (outcome.effects?.traits)
       await characterService.applyTraitDeltas(actor._id, outcome.effects.traits);
 
-   // Learn-by-doing (D40): a ROLLED check trains its skill path, success or
-   // failure alike, weighted by how hard the attempt was for this character.
-   let trainingNote = '';
-   if (check && option.check?.node) {
-      const levelUps = await characterService.creditSkillUse(actor._id, [option.check.node], checkTrainingWeight(check.target));
-      if (levelUps.length > 0)
-         trainingNote = trainingLine(levelUps);
-   }
+   const trainingNote = await trainFromCheck(actor._id, option.check, check, 'The exchange taught you something');
 
    if (dialogueProgress(next) === 'ongoing') {
       await interaction.update(nodeView(advanced, next, trainingNote));
@@ -157,8 +152,8 @@ async function handleOption(
 }
 
 /** The idempotent completion tail: delete the session → repaint the HUB where
- *  the character stands, with the parting line as the banner (D30). A mundane
- *  chat is nobody's news — no chronicle (D24 reserves it for the noteworthy). */
+ *  the character stands, with the parting line as the banner. A mundane chat
+ *  is nobody's news — no chronicle. */
 async function finalize(
    interaction: ButtonInteraction,
    session: ActivitySessionDoc,
@@ -168,20 +163,18 @@ async function finalize(
 ): Promise<void> {
    await activitySessionService.complete(session._id);
 
-   const survivor = await characterService.get(actor._id);
    const banner = [
       `💬 You part ways with **${npcName(state.npcCharacterId)}**.`,
       state.lastLine ? `_${state.lastLine}_` : '',
       trainingNote,
    ].filter(Boolean).join('\n');
 
-   await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
+   await interaction.update(await hubAfter(actor._id, banner));
 }
 
-/** Cutting the talk short by the dialogue's exit (D58) — the rude way out, next
- *  to the polite goodbyes each node offers. Nothing to refund: starting a
- *  conversation is free and rolled lines were charged as they happened. The
- *  session is removed first, so the exit's consequences apply exactly once. */
+/** Cutting the talk short by the dialogue's exit — the rude way out, next to
+ *  the polite goodbyes each node offers. Nothing to refund: starting a
+ *  conversation is free and rolled lines were charged as they happened. */
 async function handleLeave(
    interaction: ButtonInteraction,
    session: ActivitySessionDoc,
@@ -196,24 +189,8 @@ async function handleLeave(
    }
 
    const exit = dialogueOf(state)?.exit ?? FALLBACK_EXIT;
-   if (await activitySessionService.abandon(session._id) && exit.traits)
-      await characterService.applyTraitDeltas(actor._id, exit.traits);
-
-   const survivor = await characterService.get(actor._id);
-   const banner = `${exit.emoji} ${fillDialogueLine(randomItem(exit.lines), state.npcCharacterId)}`;
-   await interaction.update(survivor ? await freshHubView(survivor, banner) : { content: banner, embeds: [], components: [] });
-}
-
-async function repaintCurrent(interaction: ButtonInteraction, sessionId: string): Promise<void> {
-   const fresh = await activitySessionService.get(sessionId);
-
-   if (fresh?.status !== 'active') {
-      await interaction.update({ content: 'This conversation has already ended.', embeds: [], components: [] });
-      return;
-   }
-
-   const state = dialogueStateFrom(fresh.state);
-   await interaction.update(dialogueProgress(state) === 'ongoing' ? nodeView(fresh, state) : farewellView(fresh, state));
+   await takeExit(session, actor._id, exit);
+   await interaction.update(await hubAfter(actor._id, `${exit.emoji} ${fillDialogueLine(randomItem(exit.lines), state.npcCharacterId)}`));
 }
 
 // --- Views --------------------------------------------------------------------
@@ -221,13 +198,13 @@ async function repaintCurrent(interaction: ButtonInteraction, sessionId: string)
 function nodeView(session: ActivitySessionDoc, state: DialogueState, note = ''): ActivityView {
    const node = dialogueNodeOf(state);
 
-   // A retired dialogue/node id (D10 rule 3): the talk gracefully trails off.
+   // A retired dialogue/node id: the talk gracefully trails off.
    if (!node) {
       const embed = new EmbedBuilder()
          .setColor(DIALOGUE_COLOR)
          .setTitle(`💬 ${npcTitle(state.npcCharacterId)}`)
          .setDescription(`**${npcName(state.npcCharacterId)}** seems to have lost the thread of the conversation.`);
-      return { embeds: [embed], components: [leaveRow(session._id, FALLBACK_EXIT)] };
+      return { embeds: [embed], components: optionRows(session._id, [], 'leave', FALLBACK_EXIT) };
    }
 
    const options = availableDialogueOptions(state.nodeId, node, state);
@@ -252,7 +229,9 @@ function nodeView(session: ActivitySessionDoc, state: DialogueState, note = ''):
          optionLines.length > 0 ? `\n${optionLines.join('\n')}` : '',
       ].filter(Boolean).join('\n'));
 
-   return { embeds: [embed], components: optionRows(session._id, options, dialogueOf(state)?.exit ?? FALLBACK_EXIT) };
+   // Locked options are listed in the embed (with why) but get no button.
+   const open = options.filter(({ ok }) => ok).map(({ option }) => option);
+   return { embeds: [embed], components: optionRows(session._id, open, 'leave', dialogueOf(state)?.exit ?? FALLBACK_EXIT) };
 }
 
 function farewellView(session: ActivitySessionDoc, state: DialogueState): ActivityView {
@@ -264,43 +243,14 @@ function farewellView(session: ActivitySessionDoc, state: DialogueState): Activi
          `The conversation with **${npcName(state.npcCharacterId)}** has run its course.`,
       ].filter(Boolean).join('\n'));
 
-   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const row = actionRow(
       new ButtonBuilder().setCustomId(`activity:finalize:${session._id}`).setLabel('Part ways').setEmoji('👋').setStyle(ButtonStyle.Primary),
    );
 
    return { embeds: [embed], components: [row] };
 }
 
-/** One button per available line + the dialogue's exit, chunked into ≤5-wide
- *  rows. Locked options are listed in the embed (with why) but get no button. */
-function optionRows(sessionId: string, options: readonly AvailableDialogueOption[], exit: ActivityExit): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
-   const buttons = [
-      ...options.filter(({ ok }) => ok).map(({ option }) =>
-         new ButtonBuilder().setCustomId(`activity:opt:${sessionId}:${option.id}`).setLabel(option.label).setEmoji(option.emoji).setStyle(ButtonStyle.Primary),
-      ),
-      new ButtonBuilder().setCustomId(`activity:leave:${sessionId}`).setLabel(exit.label).setEmoji(exit.emoji).setStyle(ButtonStyle.Secondary),
-   ];
-
-   const rows: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
-   for (let i = 0; i < buttons.length; i += 5)
-      rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(buttons.slice(i, i + 5)));
-
-   return rows;
-}
-
-function leaveRow(sessionId: string, exit: ActivityExit): ActionRowBuilder<MessageActionRowComponentBuilder> {
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`activity:leave:${sessionId}`).setLabel(exit.label).setEmoji(exit.emoji).setStyle(ButtonStyle.Secondary),
-   );
-}
-
-/** Second-person "you improved" note (the challenge handler's sibling). */
-function trainingLine(levelUps: readonly SkillLevelUp[]): string {
-   const gains = levelUps.map((up) => `**${skillNode(up.node).name}** rises to **${up.to}**`).join(', ');
-   return `📈 The exchange taught you something — ${gains}.`;
-}
-
-/** Roster name with a graceful unknown-id fallback (D10 rule 3). */
+/** Roster name with a graceful unknown-id fallback. */
 function npcName(npcCharacterId: string): string {
    return npcDefinition(npcCharacterId)?.name ?? 'the stranger';
 }

@@ -6,7 +6,7 @@ import type { TraitKey } from '../data/traits.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { LocationStateDoc } from '../../db/models/locationState.js';
 
-// The one condition language of the world (D31): hub actions, encounters and
+// The one condition language of the world: hub actions, encounters and
 // location events all gate on the same typed `LocationCondition`, evaluated by
 // the same function — so "the market closes at night", "this encounter only
 // fires in fog" and "bards' night only starts in the evening" are all one
@@ -23,7 +23,7 @@ export interface LocationCondition {
    duringEvent?: string;
    /** Only after this feature of the location has been discovered. */
    requiresDiscovery?: string;
-   /** Only for characters whose deed traits reach these values (D26's first gate). */
+   /** Only for characters whose deed traits reach these values (the first trait gate). */
    minTraits?: Partial<Record<TraitKey, number>>;
 }
 

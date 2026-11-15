@@ -1,7 +1,7 @@
 import { NPCS, npcCharacterId, type NpcId } from './npcs.js';
 import type { ItemId, ItemQualityId } from './items.js';
 
-// The shop catalog (D60). A shop is NOT a separate thing in the world: it is an
+// The shop catalog. A shop is NOT a separate thing in the world: it is an
 // NPC — a real Character document — whose own pack is the stall and whose own
 // coins are the till. This catalog only says how that NPC starts each game day:
 // the stock it lays out and the coins it brings. Everything else is the NPC's

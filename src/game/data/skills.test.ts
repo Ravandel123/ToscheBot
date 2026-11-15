@@ -10,7 +10,7 @@ import {
 } from './skills.js';
 import { ATTRIBUTE_KEYS } from './attributes.js';
 
-// The tree is static content (D10) — a bad edit (dangling parent, a cycle, a
+// The tree is static content — a bad edit (dangling parent, a cycle, a
 // node with no governing attribute anywhere up its path) must fail `npm test`,
 // not surface as a runtime NaN or a hang.
 

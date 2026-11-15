@@ -4,14 +4,7 @@
 // Navigation is *stateless*: the current chapter+page are encoded in the button
 // customIds, so the browser survives restarts and never "closes" (an improvement
 // over the old 1-hour collector). Underscore prefix → the loader skips it.
-import {
-   ActionRowBuilder,
-   ButtonBuilder,
-   ButtonStyle,
-   EmbedBuilder,
-   StringSelectMenuBuilder,
-   type MessageActionRowComponentBuilder,
-} from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 import {
    COMIC,
    COMIC_CHAPTER_IDS,
@@ -22,17 +15,13 @@ import {
    resolveChapterId,
    type ComicChapterId,
 } from '../../fun/comic.js';
+import { actionRow, type ComponentRow, type PanelView } from '../../lib/discord.js';
 
 const COMIC_COLOR = 0x8A6D3B; // muted sepia — fits BtWD's tone
 const MAX_PAGE_OPTIONS = 25; // Discord's hard cap on select options
 
-export interface ComicMessage {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
-
 /** Builds the full browser message for a (chapter, page). Both are resolved/clamped, so callers can pass raw input. */
-export function buildComicMessage(chapterInput: string, pageInput: number): ComicMessage {
+export function buildComicMessage(chapterInput: string, pageInput: number): PanelView {
    const chapter = resolveChapterId(chapterInput);
    const page = clampPage(chapter, pageInput);
    const last = lastPageIndex(chapter);
@@ -50,10 +39,10 @@ export function buildComicMessage(chapterInput: string, pageInput: number): Comi
    };
 }
 
-function navRow(chapter: ComicChapterId, page: number, last: number): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function navRow(chapter: ComicChapterId, page: number, last: number): ComponentRow {
    const show = (target: number): string => `comic:show:${chapter}:${target}`;
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   return actionRow(
       new ButtonBuilder().setCustomId(show(0)).setEmoji('⏮️').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
       new ButtonBuilder().setCustomId(show(Math.max(0, page - 1))).setEmoji('⬅️').setStyle(ButtonStyle.Primary).setDisabled(page === 0),
       new ButtonBuilder().setCustomId('comic:random').setEmoji('🎲').setStyle(ButtonStyle.Danger),
@@ -80,6 +69,6 @@ function pageMenu(chapter: ComicChapterId, page: number): StringSelectMenuBuilde
    return new StringSelectMenuBuilder().setCustomId(`comic:page:${chapter}`).setPlaceholder('Jump to a page').addOptions(options);
 }
 
-function selectRow(menu: StringSelectMenuBuilder): ActionRowBuilder<MessageActionRowComponentBuilder> {
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(menu);
+function selectRow(menu: StringSelectMenuBuilder): ComponentRow {
+   return actionRow(menu);
 }

@@ -1,11 +1,9 @@
 import {
-   ActionRowBuilder,
    ButtonBuilder,
    ButtonStyle,
    EmbedBuilder,
    StringSelectMenuBuilder,
    StringSelectMenuOptionBuilder,
-   type MessageActionRowComponentBuilder,
 } from 'discord.js';
 import { displayName } from '../../game/character/identity.js';
 import { skillSum } from '../../game/character/skills.js';
@@ -15,9 +13,10 @@ import { describeTrigger, sanitizeFamilyPlan, MAX_PLAN_RULES, type FamilyPlan, t
 import { truncate } from '../../lib/text.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import { backToPlayButton } from './_backToPlay.js';
+import { actionRow, type ComponentRow, type PanelView } from '../../lib/discord.js';
 
-// Colocated Discord builders for the `/character combat` panel (D41), in two
-// levels (D59 — a tester found the full editor overwhelming):
+// Colocated Discord builders for the `/character combat` panel, in two
+// levels (a tester found the full editor overwhelming):
 //   * the SIMPLE panel — one question, "how do you fight?", for the weapon
 //     currently in hand. This is what the command and the hub open;
 //   * the TACTICS panel — the full editor: a default style per family plus
@@ -30,7 +29,7 @@ import { backToPlayButton } from './_backToPlay.js';
 
 const PANEL_COLOR = 0x8B2B2B; // matches the duel views — this feeds the same fights
 
-/** The families a player can plan for (D42: armed splits by grip). Ranged joins
+/** The families a player can plan for (armed splits by grip). Ranged joins
  *  when ranged combat exists. Three families = 3 select rows + 2 button rows —
  *  exactly Discord's 5-row cap; a fourth family needs a paged panel. */
 export const PLAN_FAMILIES = ['unarmed', 'one_handed', 'two_handed'] as const;
@@ -55,12 +54,7 @@ const TRIGGER_OPTIONS: { kind: PlanTriggerKind; values: number[]; label: (value:
    { kind: 'round-at-least', values: [3, 5, 10], label: (value) => `From round ${value} on` },
 ];
 
-export interface PanelView {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
-
-/** The sanitized stored plan for one family (D10 rule 3 — a renamed style never
+/** The sanitized stored plan for one family (a renamed style never
  *  renders, let alone fights). Shared by the view and the handler. */
 export function familyPlanOf(character: CharacterDoc, family: PlanFamily): FamilyPlan {
    return sanitizeFamilyPlan(character.combatPlan?.[family], family);
@@ -98,7 +92,7 @@ export function buildFightingStylePanel(character: CharacterDoc): PanelView {
       .setPlaceholder('How do you fight?')
       .addOptions(styleOptions(character, family, plan.style, true));
 
-   const buttons = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const buttons = actionRow(
       new ButtonBuilder().setCustomId('combatplan:show').setLabel('Tactics…').setEmoji('🧠').setStyle(ButtonStyle.Secondary),
       backToPlayButton(),
    );
@@ -128,7 +122,7 @@ export function buildCombatPlanPanel(character: CharacterDoc): PanelView {
 
    // One row of add-rule buttons + one of clear buttons (a combined per-family
    // pair would overflow Discord's 5 components per row at three families).
-   const addRuleRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const addRuleRow = actionRow(
       ...PLAN_FAMILIES.map((family) =>
          new ButtonBuilder()
             .setCustomId(`combatplan:newrule:${family}`)
@@ -138,7 +132,7 @@ export function buildCombatPlanPanel(character: CharacterDoc): PanelView {
             .setDisabled(familyPlanOf(character, family).rules.length >= MAX_PLAN_RULES),
       ),
    );
-   const clearRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   const clearRow = actionRow(
       ...PLAN_FAMILIES.map((family) =>
          new ButtonBuilder()
             .setCustomId(`combatplan:clearrules:${family}`)
@@ -228,7 +222,7 @@ function trainedPoints(character: CharacterDoc, styleId: FightingStyleId): numbe
    return skillSum(character.progression?.skills ?? {}, [fightingStyle(styleId).node]);
 }
 
-function styleSelectRow(character: CharacterDoc, family: PlanFamily): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function styleSelectRow(character: CharacterDoc, family: PlanFamily): ComponentRow {
    const plan = familyPlanOf(character, family);
 
    const select = new StringSelectMenuBuilder()
@@ -269,12 +263,12 @@ function ruleBuilderEmbed(character: CharacterDoc, family: PlanFamily, prompt: s
       .setDescription(`${prompt}\n\n${planLines(character, familyPlanOf(character, family))}`);
 }
 
-function selectRow(select: StringSelectMenuBuilder): ActionRowBuilder<MessageActionRowComponentBuilder> {
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select);
+function selectRow(select: StringSelectMenuBuilder): ComponentRow {
+   return actionRow(select);
 }
 
-function cancelRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+function cancelRow(): ComponentRow {
+   return actionRow(
       new ButtonBuilder().setCustomId('combatplan:show').setLabel('Back').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
    );
 }

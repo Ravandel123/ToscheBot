@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { activitySessionService } from './activitySessionService.js';
 import { useTestDb } from '../../testing/memoryDb.js';
 
-// The step guard is the whole point of the durability layer (D17): it must make
+// The step guard is the whole point of the durability layer: it must make
 // a repeated `advance` at the same step a no-op (double-click / crash-replay
 // safety). Only a real optimistic update proves that — mocks can't.
 useTestDb();

@@ -11,7 +11,7 @@ reasons and the open questions live in that file, not here. Status marks: see
 `actionPoints: {current, totalEarned}`, no cap. `regenAll`/`regenAllBusy`/`regen` (the hourly
 `resource-regen` job) `$inc` both fields — and AP accrues **even while a character is busy** in
 an active `ActivitySession` (unlike the vitals, which pause — flavor-progression.md doesn't
-cover this, it's a resource-regen rule: see root `CLAUDE.md`'s D23). Spend is atomic
+cover this, it's a resource-regen rule: see `DECISIONS.md` D23). Spend is atomic
 (`current >= cost` filter-guarded, so it can never go negative under concurrency).
 `AP_REGEN_PER_HOUR = 1` and `TRAVEL_AP_COST = 0` are both 🟡 placeholders — the spend
 *plumbing* is real, the *prices* aren't decided.
@@ -78,7 +78,7 @@ by the shared `conditions` language). Two kinds:
   normally (`patrol_gossip`, `dropped_ribbon`, and the conditional `soaked_traveler` /
   `grateful_beggar`).
 - **`activity`** — interrupts the move with a durable **`challenge`** `ActivitySession`
-  (root `CLAUDE.md`'s D17/D22 durability infrastructure — session-per-step, crash-safe,
+  (`DECISIONS.md` D17/D22 durability infrastructure — session-per-step, crash-safe,
   restart-proof buttons) exposing several `options`, each either a d100 `CheckDefinition`
   (combat.md) with `success`/`failure` outcomes, or a check-free choice. An outcome
   (`ChallengeOutcome`) is `result` (`proceed` completes the journey / `turn-back` ends it at
@@ -91,7 +91,7 @@ by the shared `conditions` language). Two kinds:
   Per-option check targets are computed once, at session creation, and **stored in the session
   state** — so a repainted panel's shown odds and the actually-rolled odds can never disagree.
   The generic `activity` component router + the `_activities/` handler registry (root
-  `CLAUDE.md` D22) dispatch `challenge` sessions; `game/activity/challenge.ts` holds the pure,
+  `DECISIONS.md` D22) dispatch `challenge` sessions; `game/activity/challenge.ts` holds the pure,
   tested step-reducer. Every ending (arrival, forced retreat, the encounter's exit) re-renders
   the `/play` hub at wherever the character ends up.
 - **The exit (D58)** — every `ActivityEncounter` carries a required `exit: ActivityExit`

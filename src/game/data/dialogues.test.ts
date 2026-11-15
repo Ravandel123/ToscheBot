@@ -11,7 +11,7 @@ import {
 } from './dialogues.js';
 import { NPCS, npcCharacterId, type NpcDefinition, type NpcId } from './npcs.js';
 
-// Graph-integrity checks for the dialogue catalog (D45), in the spirit of the
+// Graph-integrity checks for the dialogue catalog, in the spirit of the
 // location-edge tests: a dangling `next`, an unreachable node, a rolled option
 // without a failure route or a bad NPC assignment fails `npm test` here — not
 // mid-conversation on the live bot.

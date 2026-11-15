@@ -1,4 +1,4 @@
-// The game world's clock (D31). Deltrada's day runs on the OWNER's wall clock,
+// The game world's clock. Deltrada's day runs on the OWNER's wall clock,
 // not the host's TZ setting (Sparkedhost may run UTC): night in Poland is night
 // in Deltrada, so "the market is closed at night" matches when players are
 // actually up. Fixed UTC offset on purpose — a one-hour DST drift is invisible

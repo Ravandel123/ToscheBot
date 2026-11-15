@@ -4,15 +4,7 @@
 // shared discovery announcer. Split from _playPanel.ts so the challenge
 // activity can re-render the hub on arrival without importing the travel
 // execution (which would cycle through the activity registry).
-import {
-   ActionRowBuilder,
-   ButtonBuilder,
-   ButtonStyle,
-   EmbedBuilder,
-   StringSelectMenuBuilder,
-   type Client,
-   type MessageActionRowComponentBuilder,
-} from 'discord.js';
+import { ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder, type Client } from 'discord.js';
 import { characterService } from '../../db/services/characterService.js';
 import { locationStateService } from '../../db/services/locationStateService.js';
 import { displayName, STATUS_LABEL } from '../../game/character/identity.js';
@@ -24,16 +16,12 @@ import { WEATHER } from '../../game/data/weather.js';
 import { TIMES_OF_DAY } from '../../game/world/time.js';
 import { availableHubActions, worldContext, type AvailableHubAction, type WorldContext } from '../../game/world/conditions.js';
 import { connectionsFrom } from '../../game/world/travel.js';
+import { actionRow, buttonRows, type ComponentRow, type PanelView } from '../../lib/discord.js';
 import type { CharacterDoc } from '../../db/models/character.js';
 import type { LocationStateDoc } from '../../db/models/locationState.js';
 
 const HUB_COLOR = 0x3F5E7A; // campaign-map blue
 const PRESENCE_NAME_CAP = 10;
-
-export interface HubView {
-   embeds: EmbedBuilder[];
-   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
-}
 
 /** One character present at a location (the projection `atLocation` returns). */
 type PresentCharacter = Pick<CharacterDoc, '_id' | 'ownerId' | 'identity'>;
@@ -59,7 +47,7 @@ export async function loadHubContext(locationId: string, character: CharacterDoc
 
 /** Loads the context and builds the hub for wherever the character stands NOW —
  *  the one-call repaint used by travel, refusals and activity endings. */
-export async function freshHubView(character: CharacterDoc, banner?: string): Promise<HubView & { content: string }> {
+export async function freshHubView(character: CharacterDoc, banner?: string): Promise<PanelView & { content: string }> {
    const hub = await loadHubContext(resolveLocationId(character.locationId), character);
    return { content: '', ...buildHubView(character, hub, banner) };
 }
@@ -67,7 +55,7 @@ export async function freshHubView(character: CharacterDoc, banner?: string): Pr
 /** The hub board for a character at its current location: conditions, company,
  *  where it can go and what it can do here. Pure — no DB (context is loaded).
  *  `banner` shows a one-off line at the top (e.g. an arrival). */
-export function buildHubView(character: CharacterDoc, hub: HubContext, banner?: string): HubView {
+export function buildHubView(character: CharacterDoc, hub: HubContext, banner?: string): PanelView {
    const locationId = resolveLocationId(character.locationId);
    const location = LOCATIONS[locationId];
    const approved = character.approvalStatus === 'approved';
@@ -153,8 +141,8 @@ function actionLine({ action, ok, reason }: AvailableHubAction): string {
       : `🔒 **${action.label}** — ${reason}.`;
 }
 
-function hubComponents(locationId: LocationId, actions: AvailableHubAction[]): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
-   const rows: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
+function hubComponents(locationId: LocationId, actions: AvailableHubAction[]): ComponentRow[] {
+   const rows: ComponentRow[] = [];
 
    const destinations = connectionsFrom(locationId);
    if (destinations.length > 0) {
@@ -169,32 +157,29 @@ function hubComponents(locationId: LocationId, actions: AvailableHubAction[]): A
                emoji: '🧭',
             })),
          );
-      rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select));
+      rows.push(actionRow(select));
    }
 
-   // One button per local action (closed ones stay visible but disabled),
-   // chunked into ≤5-wide rows (Discord limit).
-   const buttons = actions.map(({ action, ok }) =>
+   // One button per local action (closed ones stay visible but disabled).
+   rows.push(...buttonRows(actions.map(({ action, ok }) =>
       new ButtonBuilder()
          .setCustomId(`play:act:${action.id}`)
          .setLabel(action.label)
          .setEmoji(action.emoji)
          .setStyle(ButtonStyle.Secondary)
          .setDisabled(!ok),
-   );
-   for (let i = 0; i < buttons.length; i += 5)
-      rows.push(new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(buttons.slice(i, i + 5)));
+   )));
 
    // The character's own panels, one click away — `/play` is the one command
-   // a player has to know (D59). Always the last row; Discord allows five.
+   // a player has to know. Always the last row; Discord allows five.
    return [...rows.slice(0, 4), shortcutRow()];
 }
 
-function shortcutRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
+function shortcutRow(): ComponentRow {
    const shortcut = (panel: string, label: string, emoji: string): ButtonBuilder =>
       new ButtonBuilder().setCustomId(`play:open:${panel}`).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Primary);
 
-   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+   return actionRow(
       shortcut('inventory', 'Pack', '🎒'),
       shortcut('skills', 'Skills', '📜'),
       shortcut('style', 'Fighting style', '⚔️'),
